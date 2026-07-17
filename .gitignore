@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+*.egg-info
+
+# Env
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# Flutter (app/ will grow into a real Flutter project later)
+app/.dart_tool/
+app/build/
+app/.flutter-plugin-dependencies
+
+# IDE
+.vscode/
+.idea/
