@@ -1,4 +1,4 @@
-package com.example.runners_jeju
+package com.runnersjeju.runners_jeju
 
 import io.flutter.embedding.android.FlutterActivity
 
