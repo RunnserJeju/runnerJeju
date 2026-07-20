@@ -29,7 +29,7 @@ class GeoPoint {
     'lat': latitude,
     'lng': longitude,
     if (altitude != null) 'altitude': altitude,
-    if (recordedAt != null) 'recorded_at': recordedAt!.toIso8601String(),
+    if (recordedAt != null) 'recorded_at': recordedAt!.toUtc().toIso8601String(),
   };
 
   @override

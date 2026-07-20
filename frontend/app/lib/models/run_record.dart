@@ -54,8 +54,10 @@ class RunRecord {
 
   Map<String, dynamic> toJson() => {
     if (courseId != null) 'course_id': courseId,
-    'started_at': startedAt.toIso8601String(),
-    'ended_at': endedAt.toIso8601String(),
+    // 서버에는 항상 UTC로 보낸다. 로컬 시각을 그대로 보내면 오프셋이 빠져서
+    // 서버가 UTC로 오해한다. 표시할 때 Formatters가 toLocal()로 되돌린다.
+    'started_at': startedAt.toUtc().toIso8601String(),
+    'ended_at': endedAt.toUtc().toIso8601String(),
     'distance_meters': distanceMeters,
     'duration_sec': duration.inSeconds,
     'path': path.map((e) => e.toJson()).toList(),

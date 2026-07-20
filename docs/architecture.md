@@ -60,7 +60,36 @@ GET  /verifications/{id}                           →  RunVerification
 
 ### 스탬프와의 관계
 
-완주 스탬프는 검증 결과에 종속된다. 현재는 검증이 동기로 끝나므로 `POST /runs` 응답의 `earned_stamp_id`로 스탬프를 바로 받을 수 있다. **검증이 비동기가 되면 스탬프 발급도 비동기가 된다** — 그 시점에는 `earned_stamp_id`가 null로 오고, 검증 완료 후에 스탬프가 생긴다. 화면은 이미 "검증이 끝나면 스탬프가 발급돼요" 문구로 그 경우를 처리한다.
+완주 스탬프는 **검증에서만 발급된다.** `POST /runs`는 기록을 저장할 뿐 검증도 스탬프 발급도 하지 않는다(응답의 `earned_stamp_id`는 항상 null이다. 필드를 남긴 건 나중에 동기 발급 경로가 생길 여지를 두기 위해서다).
+
+스탬프 발급 경로를 검증 한 곳으로 모은 이유는, 검증이 비동기가 되어도 **"스탬프는 검증 결과로 생긴다"는 규칙이 그대로 유지되기 때문이다.** 만약 `POST /runs`에서도 스탬프를 줬다면, 검증 서버를 분리하는 순간 그 경로만 따로 고쳐야 한다.
+
+그래서 `VerificationOut`에 `earned_stamp_id`가 있고, 앱은 검증이 `matched`로 돌아왔을 때 그 id로 스탬프를 조회해 결과 화면에 띄운다. 검증이 오래 걸려 `pending`으로 오면 스탬프는 나중에 스탬프 탭에서 확인하게 되며, 화면은 이미 "검증이 끝나면 스탬프가 발급돼요" 문구로 그 경우를 처리한다.
+
+같은 코스를 여러 번 완주해도 스탬프는 하나만 유지된다 (`stamps` 테이블의 `(user_id, course_id)` unique 제약).
+
+## 서버 구조
+
+```
+server/app/
+  main.py           앱 조립, 라우터 등록
+  db.py             엔진 / 세션 / Base
+  models.py         SQLAlchemy ORM (courses, runs, verifications, stamps)
+  schemas.py        Pydantic — 필드명이 곧 앱과의 계약
+  verification.py   검증 연산 (순수 함수, 분리 대상)
+  deps.py           요청 단위 의존성 (현재는 개발용 사용자 고정)
+  routers/          엔드포인트
+```
+
+`schemas.py`의 필드 이름은 Flutter의 `fromJson`/`toJson` 키와 1:1이다. **한쪽만 바꾸면 앱이 조용히 깨진다.** 특히 `VerificationStatus`는 Dart enum 이름을 그대로 쓰기 때문에 `inProgress`가 camelCase다.
+
+`verification.py`는 DB 세션도 FastAPI도 ORM도 import하지 않는다. 검증 서버로 분리할 때 **이 파일을 그대로 옮기면 되도록** 순수 함수만 담았다.
+
+### 아직 정리되지 않은 것
+
+- **인증이 없다.** 클라이언트에 로그인 화면이 없어서 "내 기록"의 주체를 특정할 수 없다. 지금은 `deps.py`의 `DEV_USER_ID` 한 명이 모든 요청을 보낸 것으로 취급한다. 인증을 붙일 때 `current_user_id`만 교체하면 라우터는 그대로 둘 수 있다.
+- **마이그레이션이 없다.** 기동 시 `Base.metadata.create_all`로 테이블을 만든다. 컬럼 변경은 반영되지 않으므로, 스키마가 굳으면 Alembic으로 옮겨야 한다.
+- **경로를 PostGIS가 아니라 JSONB에 저장한다.** 지금 앱이 쓰는 API에는 공간 질의가 없고, 경로는 그리기와 순서 비교에만 쓰여서 JSONB로 충분하다. "내 주변 코스 검색" 같은 질의가 실제로 필요해지면 그때 `geography(LineString, 4326)` 컬럼을 추가하는 편이 낫다.
 
 ## 지도
 

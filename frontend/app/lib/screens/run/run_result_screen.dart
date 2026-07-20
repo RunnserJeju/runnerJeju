@@ -94,6 +94,11 @@ class _RunResultScreenState extends State<RunResultScreen> {
         _verification = verification;
         _verifying = false;
       });
+
+      // 스탬프는 검증이 matched일 때만 발급된다.
+      if (verification.earnedStampId != null) {
+        await _loadStamp(verification.earnedStampId!);
+      }
     } catch (e) {
       if (!mounted) return;
 
