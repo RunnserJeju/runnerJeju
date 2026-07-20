@@ -1,20 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
-import 'screens/connection_test_screen.dart';
+import 'config/app_config.dart';
+import 'screens/app_shell.dart';
+import 'theme/app_theme.dart';
 
 void main() {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 키가 없으면 지도 위젯이 안내 화면으로 대체되므로 앱 자체는 계속 뜬다.
+  if (AppConfig.hasKakaoMapKey) {
+    AuthRepository.initialize(appKey: AppConfig.kakaoMapKey);
+  }
+
+  runApp(const RunnersJejuApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class RunnersJejuApp extends StatelessWidget {
+  const RunnersJejuApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Runner Jeju',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple)),
-      home: const ConnectionTestScreen(),
+      title: 'Runners Jeju',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      home: const AppShell(),
     );
   }
 }
