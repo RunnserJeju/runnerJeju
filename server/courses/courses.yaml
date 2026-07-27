@@ -1,0 +1,26 @@
+# 코스 명단.
+#
+# GPX에는 좌표와 이름만 들어 있다. 지역·난이도·소개글처럼 코스를 서비스에
+# 노출하는 데 필요한 나머지 정보는 여기서 관리한다.
+#
+# 이 파일은 DB에 직접 쓰지 않는다. tools/push_courses.py가 읽어서 업로드 API로
+# 올린다. DB로 들어가는 쓰기 경로를 API 하나로 유지하기 위해서다.
+#
+#   .\scripts\dev.ps1 seed              # 전부 업로드
+#   .\scripts\dev.ps1 seed --dry-run    # 파싱 결과만 확인
+#
+# slug는 코스의 영구 식별자다. 한 번 정하면 바꾸지 않는다 — slug를 바꾸면
+# 같은 코스가 새 코스로 등록되고, 기존 코스에 달린 완주 스탬프와 끊긴다.
+
+courses:
+  - slug: sagye-coastal
+    file: sagye-coastal.gpx
+    name: 사계해안도로
+    region: 안덕면
+    difficulty: easy
+    description: |
+      산방산과 형제섬을 곁에 두고 달리는 해안 코스.
+      고도 변화가 거의 없어 첫 러닝으로 좋다.
+    # 거리·고도·순환 여부는 GPX에서 계산하므로 여기 적지 않는다.
+    # estimated_duration_sec는 선택 — 적지 않으면 앱에서 '--:--'로 표시된다.
+    estimated_duration_sec: 2400

@@ -9,6 +9,32 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    # api가 마이그레이션부터 실행하므로, DB가 "떴다"가 아니라 "쿼리를 받을 수 있다"를
+    # 확인해야 한다. 컨테이너 시작만 기다리면 첫 alembic이 연결 거부로 죽는다.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U runner -d runner_jeju"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  api:
+    build:
+      context: ../server
+    environment:
+      # 컨테이너끼리는 서비스명으로 붙는다. localhost가 아니다.
+      DATABASE_URL: postgresql+psycopg://runner:runner@db:5432/runner_jeju
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # 개발 편의: 호스트 소스를 그대로 보고 코드 저장 시 리로드한다.
+    # 이미지를 그대로 쓰려면(운영과 같은 조건) 아래 volumes와 command를 지우면 된다.
+    volumes:
+      - ../server:/app
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 volumes:
   db_data:
