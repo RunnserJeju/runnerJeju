@@ -35,6 +35,23 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- 카카오 로그인: 네이티브 앱 키. 카카오 개발자 콘솔에서 발급받은 값으로 바꿔야 한다. -->
+        <meta-data
+            android:name="com.kakao.sdk.AppKey"
+            android:value="b996f6761bcc8585602205c0912bc007" />
+
+        <!-- 카카오톡 앱에서 로그인 후 이 앱으로 돌아올 때 쓰는 리다이렉트 액티비티. -->
+        <activity
+            android:name="com.kakao.sdk.flutter.AuthCodeCustomTabsActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:host="oauth" android:scheme="kakaob996f6761bcc8585602205c0912bc007"/>
+            </intent-filter>
+        </activity>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

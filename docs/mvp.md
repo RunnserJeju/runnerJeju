@@ -18,7 +18,7 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 
 ### 포함
 
-- Auth: 카카오 로그인만
+- Auth: 카카오 로그인, 애플 로그인
 - Course: 목록/상세 조회 API
 - Running Record: 시작/일시정지/종료, 경로 저장
 - Course Verification: 스텁 (항상 통과)
@@ -28,7 +28,7 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 
 - 협력업체(Partner) — 지도 제휴 업체, 혜택, 셀프 등록
 - 커뮤니티, 포인트/리워드, 알림/공지사항, 테마 큐레이션
-- 소셜 로그인 확장 (Apple, Google)
+- 소셜 로그인 확장 (Google)
 - 이용약관/개인정보처리방침 등 법적 문서
 
 ## 도메인별 기능 쪼개기
@@ -38,15 +38,29 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 ### Auth/User
 
 - [ ] 카카오 로그인 (SDK → access token 서버 전달)
-- [ ] 서버에서 카카오 토큰 검증
+- [ ] 애플 로그인 (Sign in with Apple, iOS)
+- [ ] 서버에서 카카오/애플 토큰 검증
 - [ ] 최초 로그인 시 자동 회원가입 (upsert)
-- [ ] JWT access token 발급 (유효기간 12~24시간)
+- [ ] JWT access token 발급 (유효기간 1시간)
+- [ ] refresh token 발급 및 저장 (유효기간 30일)
+- [ ] refresh token으로 access token 재발급 API
 - [ ] 인증 필요한 API 토큰 검증 (dependency)
-- [ ] 로그아웃
+- [ ] 로그아웃 (refresh token 폐기)
+- [ ] 회원 탈퇴 (계정 삭제) API
 
 **보류 / 검토 필요**
-- refresh token 미도입 — access token 유효기간을 길게 잡아 대체
-- 회원 탈퇴 — MVP 제외
+- refresh token rotation 여부 — 미정
+- 애플 로그인 — iOS 배포 확정. 소셜 로그인 제공 시 애플 로그인 동반 요구(가이드라인 4.8)라 필수로 전환
+- 회원 탈퇴 — iOS 배포 확정으로 앱스토어 심사 가이드라인(5.1.1v) 상 필수로 전환
+
+**배포 준비 (개발 외)**
+- [ ] 카카오 개발자 계정 생성 + 앱 등록
+- [ ] 카카오 플랫폼 등록 (Android 키 해시, iOS 번들ID, Web 도메인)
+- [ ] 개인정보처리방침 문서 작성 + 호스팅 (URL 확보)
+- [ ] 서비스(홈페이지) URL 준비
+- [ ] Android 릴리즈 키스토어 생성 + 릴리즈 키 해시 카카오 콘솔 등록
+- [ ] Apple Developer Program 가입 ($99/년)
+- [ ] 카카오 로그인 실 서비스 전환
 
 ### Course
 

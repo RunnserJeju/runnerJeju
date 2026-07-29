@@ -20,6 +20,28 @@ class GeoPointSchema(BaseModel):
     recorded_at: datetime | None = None
 
 
+# --- 인증 ----------------------------------------------------------------
+
+
+class KakaoLoginRequest(BaseModel):
+    """카카오 SDK 로그인으로 받은 accessToken을 그대로 전달받는다."""
+
+    access_token: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenPair(BaseModel):
+    access_token: str
+    refresh_token: str
+
+
+class AccessTokenOut(BaseModel):
+    access_token: str
+
+
 # --- 코스 ---------------------------------------------------------------
 
 

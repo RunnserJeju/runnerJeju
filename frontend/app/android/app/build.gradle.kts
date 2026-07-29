@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.runnersjeju.runners_jeju"
-    compileSdk = flutter.compileSdkVersion
+    // webview_flutter_android(카카오 로그인 SDK가 끌어옴)가 36 이상을 요구해서 flutter 기본값(35)을 올려둔다.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

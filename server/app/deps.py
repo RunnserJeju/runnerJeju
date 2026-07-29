@@ -1,16 +1,33 @@
-"""요청 단위 의존성.
+"""요청 단위 의존성."""
 
-인증이 아직 없다. 클라이언트에도 로그인 화면이 없어서 "내 기록", "내 스탬프"의
-주체를 특정할 방법이 지금은 없다. 그래서 모든 요청을 고정된 개발용 사용자 한 명이
-보낸 것으로 취급한다.
+import jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-인증을 붙일 때는 current_user_id만 실제 토큰 검증으로 교체하면 되고,
-라우터 코드는 그대로 둘 수 있다.
-"""
+from app.security import decode_token
 
-DEV_USER_ID = "dev-user"
+_bearer = HTTPBearer(auto_error=False)
 
 
-def current_user_id() -> str:
-    """현재 요청자의 사용자 id. 인증 도입 전까지는 항상 개발용 사용자."""
-    return DEV_USER_ID
+def current_user_id(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    """현재 요청자의 사용자 id. `Authorization: Bearer <access token>` 헤더가 필요하다."""
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="로그인이 필요해요."
+        )
+
+    try:
+        payload = decode_token(credentials.credentials)
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰이에요."
+        )
+
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰이에요."
+        )
+
+    return payload["sub"]

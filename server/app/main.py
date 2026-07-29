@@ -1,10 +1,11 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.db import Base, engine
-from app.routers import courses, runs, stamps, verifications
+from app.routers import auth, courses, runs, stamps, verifications
 
 # models를 import해야 Base.metadata에 테이블이 등록된다.
 from app import models  # noqa: F401
@@ -21,6 +22,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Runner Jeju API", lifespan=lifespan)
 
+# 로컬 개발 단계: Flutter web(dev server)에서 오는 요청을 허용한다.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
 app.include_router(courses.router)
 app.include_router(runs.router)
 app.include_router(verifications.router)
