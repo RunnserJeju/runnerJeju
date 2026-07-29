@@ -23,9 +23,17 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
+# launch.json은 개인 값(카카오 키, LAN IP)이 들어가서 제외하고,
+# .sample 템플릿만 커밋한다.
+.vscode/*
+!.vscode/*.sample
+
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
+
+# 개인 서명 정보 — 각자 로컬에서 Signing.xcconfig.sample을 복사해서 만든다.
+ios/Flutter/Signing.xcconfig
 .dart_tool/
 .flutter-plugins-dependencies
 .pub-cache/

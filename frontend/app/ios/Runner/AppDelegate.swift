@@ -1,7 +1,9 @@
 import Flutter
 import UIKit
-import kakao_flutter_sdk_user
 
+// 카카오 로그인의 URL 콜백 처리는 kakao_flutter_sdk_common 플러그인이
+// registrar.addApplicationDelegate(...)로 스스로 등록해서 처리한다.
+// 여기서 따로 open url을 가로챌 필요가 없다.
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
@@ -9,18 +11,6 @@ import kakao_flutter_sdk_user
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-  }
-
-  // 카카오톡 앱에서 로그인 후 이 앱(URL Scheme)으로 돌아올 때 호출된다.
-  override func application(
-    _ app: UIApplication,
-    open url: URL,
-    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-  ) -> Bool {
-    if AuthApi.isKakaoTalkLoginUrl(url) {
-      return AuthController.handleOpenUrl(url: url)
-    }
-    return super.application(app, open: url, options: options)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {

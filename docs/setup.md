@@ -91,3 +91,28 @@ uv run uvicorn app.main:app --reload --port 8000
 ```
 
 `alembic upgrade head`를 빠뜨리면 위의 스키마 가드가 기동을 막는다.
+
+## 카카오 로그인 로컬 개발 (Flutter)
+
+네이티브 앱 키, API 서버 주소는 dart-define으로 넘긴다:
+
+```powershell
+flutter run --dart-define=KAKAO_NATIVE_APP_KEY=<네이티브 앱 키> --dart-define=API_BASE_URL=http://<맥/PC의 LAN IP>:8000
+```
+
+VSCode에서 매번 치기 귀찮으면 `frontend/app/.vscode/launch.json.sample`을
+`launch.json`으로 복사해서 값만 채우면 된다(이 파일은 개인 값이 들어가서 git에 안 올라간다).
+
+### 각자 새로 세팅할 때 카카오 콘솔에 등록해야 하는 것
+
+- **Android**: 본인 PC의 디버그 키 해시를 콘솔 플랫폼 설정에 추가로 등록해야 한다
+  (키 해시는 PC마다 다르다 — 이미 등록된 다른 사람 키 해시로는 로그인이 안 된다).
+  ```powershell
+  keytool -exportcert -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android | openssl sha1 -binary | openssl base64
+  ```
+- **iOS 서명**: `frontend/app/ios/Flutter/Signing.xcconfig.sample`을
+  `Signing.xcconfig`로 복사하고 본인 Apple ID Team ID로 채운다. **Xcode의
+  Signing & Capabilities 화면에서 직접 Team을 선택하지 말 것** — Xcode가 그 값을
+  `project.pbxproj`에 다시 박아버려서 다른 사람 로컬 세팅과 충돌한다.
+- Android SDK 36 / Xcode가 처음 세팅된 PC라면 라이선스 동의, 플랫폼 다운로드가
+  추가로 필요할 수 있다(`flutter doctor`가 알려준다).

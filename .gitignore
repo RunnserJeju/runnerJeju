@@ -18,5 +18,4 @@ app/build/
 app/.flutter-plugin-dependencies
 
 # IDE
-.vscode/
 .idea/

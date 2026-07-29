@@ -1,0 +1,6 @@
+// 이 파일을 Signing.xcconfig로 복사하고 본인의 Apple ID Team ID로 채운다.
+// Signing.xcconfig는 개인 서명 정보라 git에 안 올라간다(.gitignore 참고).
+//
+// Team ID는 Xcode > Settings > Accounts에서 확인하거나,
+// Runner 타겟 > Signing & Capabilities에서 Team을 한 번 선택하면 자동으로 채워진다.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
