@@ -1,20 +1,26 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import gpx
 from app.db import get_db
 from app.deps import current_user_id
 from app.models import Course, Stamp
-from app.schemas import CourseCreate, CourseSummary
+from app.schemas import CourseCreate, CourseSummary, Difficulty
 
 router = APIRouter(tags=["courses"])
+
+# 업로드 가능한 GPX 최대 크기. 6.2km 코스가 36KB이므로 넉넉하다.
+# 제한이 없으면 거대한 파일 하나로 워커 메모리를 채울 수 있다.
+MAX_GPX_BYTES = 5 * 1024 * 1024
 
 
 def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) -> dict:
     return {
         "id": course.id,
+        "slug": course.slug,
         "name": course.name,
         "description": course.description,
         "region": course.region,
@@ -24,6 +30,7 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "elevation_gain_meters": course.elevation_gain_meters,
         "thumbnail_url": course.thumbnail_url,
         "path": course.path or [],
+        "is_loop": course.is_loop,
         "completed_count": completed_count,
         "is_completed_by_me": is_completed_by_me,
     }
@@ -56,6 +63,19 @@ def _my_completed_course_ids(
     ).scalars()
 
     return set(rows)
+
+
+def _unique_slug(db: Session, base: str) -> str:
+    """base가 이미 쓰이고 있으면 뒤에 숫자를 붙여 비어 있는 slug를 찾는다."""
+    base = base or "course"
+    candidate = base
+    suffix = 2
+
+    while db.execute(select(Course.id).where(Course.slug == candidate)).first():
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+
+    return candidate
 
 
 @router.get("/courses", response_model=list[CourseSummary])
@@ -112,6 +132,9 @@ def create_course(
         )
 
     course = Course(
+        # 앱은 slug를 모른다(달린 경로를 그대로 올리는 화면이라 코스 식별자 개념이 없다).
+        # 이름에서 만들어 붙이되, 겹치면 뒤에 숫자를 붙여 유니크를 지킨다.
+        slug=_unique_slug(db, gpx.slugify(payload.name)),
         name=payload.name,
         description=payload.description,
         region=payload.region,
@@ -127,3 +150,77 @@ def create_course(
 
     # 방금 만든 코스라 완주자는 아직 없다.
     return _to_summary(course, 0, False)
+
+
+@router.put("/courses/gpx", response_model=CourseSummary)
+def upsert_course_from_gpx(
+    response: Response,
+    file: UploadFile = File(..., description="GPX 파일"),
+    slug: str = Form(..., description="코스의 안정적인 식별자. 재업로드 시 이 값으로 찾는다"),
+    name: str | None = Form(default=None, description="생략하면 GPX의 <name>을 쓴다"),
+    description: str | None = Form(default=None),
+    region: str | None = Form(default=None),
+    difficulty: Difficulty = Form(default="normal"),
+    estimated_duration_sec: int | None = Form(default=None),
+    thumbnail_url: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+    user_id: str = Depends(current_user_id),
+):
+    """GPX로 코스를 등록하거나 갱신한다.
+
+    POST가 아니라 PUT인 이유는 이 연산이 멱등이기 때문이다. 같은 slug로 같은 파일을
+    몇 번을 올려도 코스는 하나이고 결과도 같다. 재업로드가 새 코스를 만들면
+    stamps.course_id가 가리키던 완주 스탬프가 고아가 되므로 갱신이어야 한다.
+
+    거리와 고도는 폼으로 받지 않고 GPX에서 계산한다. 파일과 어긋난 값이 들어오는
+    경로를 아예 만들지 않기 위해서다.
+    """
+    content = file.file.read(MAX_GPX_BYTES + 1)
+    if len(content) > MAX_GPX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"GPX 파일이 너무 커요. {MAX_GPX_BYTES // (1024 * 1024)}MB 이하여야 해요.",
+        )
+    if not content:
+        raise HTTPException(status_code=422, detail="빈 파일이에요.")
+
+    try:
+        parsed = gpx.parse(content)
+    except gpx.GpxParseError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    resolved_name = name or parsed.name
+    if not resolved_name:
+        raise HTTPException(
+            status_code=422,
+            detail="코스 이름이 없어요. GPX에 <name>이 없다면 name 필드로 넘겨주세요.",
+        )
+
+    course = db.execute(select(Course).where(Course.slug == slug)).scalar_one_or_none()
+    is_new = course is None
+
+    if course is None:
+        course = Course(slug=slug, created_by=user_id)
+        db.add(course)
+
+    course.name = resolved_name
+    course.description = description
+    course.region = region
+    course.difficulty = difficulty
+    course.estimated_duration_sec = estimated_duration_sec
+    course.thumbnail_url = thumbnail_url
+
+    course.path = [point.to_json() for point in parsed.points]
+    course.distance_meters = parsed.distance_meters
+    course.elevation_gain_meters = parsed.elevation_gain_meters
+    course.is_loop = parsed.is_loop
+
+    db.commit()
+    db.refresh(course)
+
+    response.status_code = 201 if is_new else 200
+
+    counts = _completed_counts(db, [course.id])
+    mine = _my_completed_course_ids(db, user_id, [course.id])
+
+    return _to_summary(course, counts.get(course.id, 0), course.id in mine)

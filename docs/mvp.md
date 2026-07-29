@@ -64,15 +64,22 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 
 ### Course
 
-- [ ] courses 테이블 (이름, 난이도, 거리, 고도, 설명, 경로, 시작점 — 경로는 geometry(LineString))
-- [ ] 코스 목록 조회 API
-- [ ] 코스 상세 조회 API
+- [x] courses 테이블 (이름, 난이도, 거리, 고도, 설명, 경로 — 경로는 JSONB, 이유는 architecture.md)
+- [x] 코스 목록 조회 API
+- [x] 코스 상세 조회 API
 - [ ] User에 role 컬럼 추가 (user/admin)
-- [ ] 코스 등록 API (admin 전용)
+- [x] 코스 등록 API (`PUT /courses/gpx`) — **admin 제한은 아직 없음**
+
+**결정됨**
+- 코스 등록 입력 방식 — **GPX 업로드**로 확정. 관리자가 경로 플래너에서 그려
+  내보낸 GPX를 `server/courses/`에 두고 `courses.yaml`에 메타데이터를 적으면
+  `push_courses.py`가 업로드 API로 올린다. 자세한 내용은 architecture.md의
+  "코스 데이터 파이프라인".
 
 **보류 / 검토 필요**
-- 코스 등록 입력 방식 — GPX 제공 여부 문의 필요 (업로드 vs 관리자 GPS 기록)
 - 관리자 신청 셀프서비스 플로우 — 나중 단계
+- `PUT /courses/gpx`에 admin 권한 제한 — 인증이 없어서 지금은 누구나 호출할 수 있다.
+  `deps.current_user_id`를 실제 토큰 검증으로 바꿀 때 함께 막아야 한다.
 
 ### Running Record
 

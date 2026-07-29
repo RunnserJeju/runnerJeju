@@ -4,19 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.db import Base, engine
+from app import schema_guard
+from app.db import engine
 from app.routers import auth, courses, runs, stamps, verifications
-
-# models를 import해야 Base.metadata에 테이블이 등록된다.
-from app import models  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 초기 개발 단계라 기동 시 테이블을 만든다.
-    # 스키마가 굳으면 Alembic 마이그레이션으로 옮겨야 한다 —
-    # create_all은 기존 테이블의 컬럼 변경을 반영하지 못한다.
-    Base.metadata.create_all(engine)
+    # 스키마는 Alembic이 관리한다(예전의 create_all은 컬럼 변경을 반영하지 못해
+    # 모델과 DB가 조용히 어긋났다). 도커 엔트리포인트가 기동 전에 upgrade를
+    # 실행하지만, 그 경로를 우회해 띄웠을 때를 대비해 여기서 한 번 더 확인한다.
+    schema_guard.verify(engine)
     yield
 
 

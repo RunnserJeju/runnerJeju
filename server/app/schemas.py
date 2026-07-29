@@ -60,6 +60,7 @@ class CourseSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    slug: str
     name: str
     description: str | None
     region: str | None
@@ -69,6 +70,7 @@ class CourseSummary(BaseModel):
     elevation_gain_meters: float | None
     thumbnail_url: str | None
     path: list[GeoPointSchema]
+    is_loop: bool
     completed_count: int
     is_completed_by_me: bool
 

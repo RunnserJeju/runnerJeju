@@ -1,7 +1,16 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,6 +68,16 @@ class Course(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+
+    # 코스의 안정적인 식별자. 같은 GPX를 다시 올렸을 때 새 코스를 만들지 않고
+    # 기존 코스를 갱신하는 기준이다.
+    #
+    # id(uuid)를 기준으로 삼을 수 없는 이유: 업로드하는 쪽은 uuid를 모른다.
+    # 이름을 기준으로 삼을 수도 없다 — 코스명이 바뀌면 같은 코스가 둘로 갈라진다.
+    # 그리고 코스를 지웠다 다시 만들면 stamps.course_id가 가리키던 완주 스탬프가
+    # 고아가 되므로, 재업로드는 반드시 갱신이어야 한다.
+    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(String(2000), default=None)
     region: Mapped[str | None] = mapped_column(String(100), default=None, index=True)
@@ -73,9 +92,16 @@ class Course(Base):
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
+    # 출발점과 도착점이 같은 순환 코스인지. 검증에서 "완주했는가"를 판정할 때
+    # 순환 코스는 도착점 도달만으로는 판단할 수 없다(출발선에 서 있어도 도착점에 있다).
+    is_loop: Mapped[bool] = mapped_column(Boolean, default=False)
+
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     stamps: Mapped[list["Stamp"]] = relationship(back_populates="course")
