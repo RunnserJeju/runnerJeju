@@ -31,6 +31,13 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // 코드 축소는 아직 켜지 않았지만, 켜는 시점에 카카오맵 keep 규칙이
+            // 빠져 릴리즈에서만 지도가 죽는 일이 없도록 미리 연결해둔다.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

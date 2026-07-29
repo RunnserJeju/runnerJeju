@@ -7,18 +7,16 @@
       "type": "dart",
       "program": "lib/main.dart",
       "args": [
-        "--dart-define=API_BASE_URL=http://<본인 PC의 LAN IP>:8000",
-        "--dart-define=KAKAO_NATIVE_APP_KEY=<카카오 네이티브 앱 키>"
+        "--dart-define=API_BASE_URL=http://<본인 PC의 LAN IP>:8000"
       ]
     },
     {
-      "name": "runners_jeju (Chrome/로컬 서버)",
+      "name": "runners_jeju (Chrome/로컬 서버 · 지도 안 뜸)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
       "args": [
-        "--dart-define=API_BASE_URL=http://localhost:8000",
-        "--dart-define=KAKAO_NATIVE_APP_KEY=<카카오 네이티브 앱 키>"
+        "--dart-define=API_BASE_URL=http://localhost:8000"
       ]
     }
   ]

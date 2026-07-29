@@ -69,7 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 56),
               if (!AppConfig.hasKakaoNativeAppKey)
                 Text(
-                  '카카오 로그인 키가 설정되지 않았어요.\n--dart-define=KAKAO_NATIVE_APP_KEY=... 로 실행해 주세요.',
+                  '카카오 로그인 키가 비어 있어요.\nconfig/app_config.dart의 kakaoNativeAppKey를 확인해 주세요.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                 )

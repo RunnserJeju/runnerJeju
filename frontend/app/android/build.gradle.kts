@@ -15,7 +15,7 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 
-    // kakao_map_plugin(0.4.0)이 자체 compileSdk를 35로 고정해둬서 webview_flutter_android(36 요구)와
+    // kakao_map_sdk(1.2.6)가 자체 compileSdk를 34로 고정해둬서 webview_flutter_android(36 요구)와
     // 충돌한다. 플러그인이 올라올 때까지 여기서 강제로 맞춘다. :app은 이미 36으로 직접 설정돼 있어서 제외.
     if (project.name != "app") {
         afterEvaluate {

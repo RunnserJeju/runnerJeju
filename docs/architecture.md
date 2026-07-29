@@ -161,17 +161,36 @@ GPS 기록이라면 초당 1점이라 수천 점이 쌓이고 Douglas-Peucker �
 
 ## 지도
 
-카카오맵은 `kakao_map_plugin`(WebView 기반)을 쓴다. JavaScript 앱 키가 필요하고, `--dart-define=KAKAO_MAP_KEY=...`로 주입한다 (`config/app_config.dart`).
+카카오맵은 `kakao_map_sdk`(네이티브 Kakao Maps SDK v2 래퍼)를 쓴다. **네이티브 앱 키**가 필요하다.
 
-키 없이 빌드해도 **앱은 뜬다.** `RunMapView`가 지도 대신 안내 화면으로 대체되므로, 지도와 무관한 화면은 키 없이도 개발할 수 있다.
+로그인과 지도가 **키 하나를 공유한다.** 카카오는 앱당 네이티브 앱 키를 하나만 발급하고 Android/iOS가 같은 값을 쓰기 때문이다. 플랫폼별로 다른 것은 키가 아니라 콘솔 등록 정보다 — Android는 패키지명 + 키 해시, iOS는 번들 ID.
+
+### 키를 저장소에 두는 이유
+
+네이티브 앱 키는 앱 바이너리에 담겨 배포되므로 숨길 수 있는 값이 아니다. 게다가 로그인 리다이렉트 스킴이 `kakao<앱키>` 형태라 `AndroidManifest.xml`에 리터럴로 있어야만 동작한다 — 런타임 주입이 불가능한 자리다. 그래서 dart-define으로 넘기지 않고 저장소에 둔다.
+
+값은 두 곳에 있고 **같아야 한다**: manifest(원본)와 `config/app_config.dart`의 `kakaoNativeAppKey`. 한쪽만 바꾸면 SDK 초기화와 리다이렉트가 서로 다른 앱을 가리켜 로그인이 조용히 깨진다.
+
+비밀로 다뤄야 하는 것은 **REST API 키**와 Admin 키다. 이쪽은 도메인 제한도 없고 서버 대 서버 호출에 그대로 쓰이므로 저장소에 넣지 않는다. (현재 서버는 REST API 키를 쓰지 않는다. 사용자 액세스 토큰으로 `kapi.kakao.com/v2/user/me`만 부른다.)
+
+### WebView 방식에서 옮겨온 이유
+
+이전에는 `kakao_map_plugin`(카카오맵 JS SDK를 WebView로 감싼 래퍼)을 썼다. 두 가지가 걸렸다.
+
+- **키 정책**: 앱 전용 서비스인데도 JavaScript 키와 `http://localhost` 웹 도메인 등록을 요구한다. WebView의 origin이 그렇게 잡히기 때문이다.
+- **렌더링 비용**: 러닝 중에는 위치가 갱신될 때마다 경로선을 다시 그린다. 매 갱신을 JS 브릿지 너머로 넘기는 것보다 네이티브 렌더링이 유리하다.
+
+### 오버레이는 객체 참조로 다룬다
+
+`kakao_map_plugin`은 `polylineId` 같은 문자열 ID로 오버레이를 덮어썼지만, `kakao_map_sdk`는 `addRoute`/`addPolygonShape`가 돌려주는 **객체를 들고 있다가** `changePoint`/`changePosition`으로 제자리 갱신한다.
+
+이 호출이 전부 비동기라서 `_RunMapViewState`는 갱신을 직렬화한다. 러닝 중 위치 갱신이 몰리면 이전 호출이 끝나기 전에 다음 호출이 들어오는데, 그대로 두면 두 호출이 모두 "아직 선이 없다"고 판단해 **같은 경로를 두 번 그린다.** 진행 중에 들어온 요청은 플래그로 모아뒀다가 마지막 상태로 한 번만 다시 그린다.
 
 ### 웹은 지원하지 않는다
 
-`kakao_map_plugin`은 `webview_flutter` 래퍼이고, 패키지의 `plugin.platforms`에 android/ios만 등록되어 있다(`kakao_map_plugin_web.dart`는 `getPlatformVersion` 스텁뿐이다). `KakaoMap` 위젯은 무조건 `WebViewController`를 만드는데 `webview_flutter`에는 웹 구현체가 없다.
+앱 전용 서비스다. `kakao_map_sdk`에 실험적 웹 지원이 있지만 별도의 JavaScript 키와 `web/index.html`의 SDK 스크립트가 필요하고, 쓰지 않는다.
 
 그래서 **`flutter run -d chrome`에서는 지도만 깨진다.** 브라우저는 코스 목록·스탬프 같은 지도 없는 화면을 빠르게 확인하는 용도로만 쓰고, 지도 확인은 안드로이드 에뮬레이터나 실기기에서 한다.
-
-웹을 지원해야 한다면 `RunMapView`를 조건부 import로 쪼개고 웹용은 카카오 JS SDK를 `HtmlElementView` + `dart:js_interop`으로 직접 붙여야 한다. 나머지 화면은 `RunMapView`의 공개 API(`coursePath` / `runPath` / `currentPosition`)만 보므로 손대지 않아도 된다.
 
 ## 위치 수집
 

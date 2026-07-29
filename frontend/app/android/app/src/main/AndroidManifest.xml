@@ -36,7 +36,16 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- 카카오 로그인: 네이티브 앱 키. 카카오 개발자 콘솔에서 발급받은 값으로 바꿔야 한다. -->
+        <!-- 카카오 네이티브 앱 키. 앱에 담겨 배포되는 값이라 숨기지 않는다 —
+             보호는 콘솔에 등록한 패키지명 + 키 해시가 담당한다.
+
+             주의: 이 meta-data는 현재 아무도 읽지 않는 것으로 보인다. 네이티브
+             Android SDK 설정 가이드에서 온 잔재이고, kakao_flutter_sdk_common은
+             com.kakao.sdk.AppKey 상수를 선언만 해두고 참조하지 않는다. 실제로
+             SDK가 쓰는 값은 lib/config/app_config.dart의 kakaoNativeAppKey다.
+             로그인 동작을 확인한 뒤 이 블록은 제거해도 된다.
+
+             manifest에서 키가 실제로 쓰이는 곳은 아래 리다이렉트 스킴이다. -->
         <meta-data
             android:name="com.kakao.sdk.AppKey"
             android:value="b996f6761bcc8585602205c0912bc007" />
