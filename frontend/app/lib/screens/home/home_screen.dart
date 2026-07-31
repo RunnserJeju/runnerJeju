@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(title: const Text('오늘도 달려볼까요')),
+      appBar: AppBar(title: const Text('Runners Jeju')),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(

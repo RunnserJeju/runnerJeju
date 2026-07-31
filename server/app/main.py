@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Runner Jeju API", lifespan=lifespan)
+app = FastAPI(title="Runners Jeju API", lifespan=lifespan)
 
 # 로컬 개발 단계: Flutter web(dev server)에서 오는 요청을 허용한다.
 app.add_middleware(

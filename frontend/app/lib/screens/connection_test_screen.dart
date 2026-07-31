@@ -30,7 +30,7 @@ class _ConnectionTestScreenState extends State<ConnectionTestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Runner Jeju')),
+      appBar: AppBar(title: const Text('Runners Jeju')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
