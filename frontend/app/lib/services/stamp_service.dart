@@ -1,4 +1,5 @@
 import '../api/stamp_api.dart';
+import '../exceptions/app_exception.dart';
 import '../models/run_stamp.dart';
 
 /// 비즈니스 로직 계층: 완주 스탬프 조회.
@@ -26,10 +27,12 @@ class StampService {
   }
 }
 
-class StampException implements Exception {
+class StampException implements AppException {
   StampException(this.message, [this.cause]);
 
+  @override
   final String message;
+  @override
   final Object? cause;
 
   @override

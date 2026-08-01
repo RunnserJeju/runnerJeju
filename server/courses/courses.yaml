@@ -3,8 +3,9 @@
 # GPX에는 좌표와 이름만 들어 있다. 지역·난이도·소개글처럼 코스를 서비스에
 # 노출하는 데 필요한 나머지 정보는 여기서 관리한다.
 #
-# 이 파일은 DB에 직접 쓰지 않는다. tools/push_courses.py가 읽어서 업로드 API로
-# 올린다. DB로 들어가는 쓰기 경로를 API 하나로 유지하기 위해서다.
+# 이 파일은 tools/push_courses.py가 읽어서 DB에 올린다. API(HTTP)는 거치지
+# 않지만, PUT /courses/gpx가 쓰는 것과 같은 함수(upsert_course_from_gpx_bytes)를
+# 그대로 호출하므로 검증 규칙은 여전히 한 곳에만 있다.
 #
 #   .\scripts\dev.ps1 seed              # 전부 업로드
 #   .\scripts\dev.ps1 seed --dry-run    # 파싱 결과만 확인
@@ -21,6 +22,17 @@ courses:
     description: |
       산방산과 형제섬을 곁에 두고 달리는 해안 코스.
       고도 변화가 거의 없어 첫 러닝으로 좋다.
+    # 거리·고도·순환 여부는 GPX에서 계산하므로 여기 적지 않는다.
+    # estimated_duration_sec는 선택 — 적지 않으면 앱에서 '--:--'로 표시된다.
+    estimated_duration_sec: 2400
+
+  - slug: dangdangrun
+    file: dangdangrun.gpx
+    name: 댕댕런
+    region: 제주시
+    difficulty: easy
+    description: |
+      원도심을 달리며 그리는 강아지 모양 댕댕런 
     # 거리·고도·순환 여부는 GPX에서 계산하므로 여기 적지 않는다.
     # estimated_duration_sec는 선택 — 적지 않으면 앱에서 '--:--'로 표시된다.
     estimated_duration_sec: 2400

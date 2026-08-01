@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 
@@ -18,17 +20,25 @@ class AuthService {
   Future<void> loginWithKakao() async {
     OAuthToken kakaoToken;
 
-    if (await isKakaoTalkInstalled()) {
-      try {
-        kakaoToken = await UserApi.instance.loginWithKakaoTalk();
-      } on PlatformException catch (e) {
-        if (e.code == 'CANCELED') {
-          throw AuthException('로그인이 취소됐어요.');
+    try {
+      if (await isKakaoTalkInstalled()) {
+        try {
+          kakaoToken = await UserApi.instance.loginWithKakaoTalk();
+        } on PlatformException catch (e) {
+          if (e.code == 'CANCELED') {
+            throw AuthException('로그인이 취소됐어요.');
+          }
+          kakaoToken = await UserApi.instance.loginWithKakaoAccount();
         }
+      } else {
         kakaoToken = await UserApi.instance.loginWithKakaoAccount();
       }
-    } else {
-      kakaoToken = await UserApi.instance.loginWithKakaoAccount();
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      // 이 구간은 카카오 SDK가 카카오 서버와 직접 통신하는 단계라 우리 백엔드 로그에는
+      // 아무것도 남지 않는다. 키 해시 미등록(KOE101) 같은 원인이 여기서 잡힌다.
+      throw AuthException('카카오 로그인에 실패했어요.', e);
     }
 
     try {
@@ -38,7 +48,7 @@ class AuthService {
         refreshToken: tokens.refreshToken,
       );
     } catch (e) {
-      throw AuthException('로그인에 실패했어요. 잠시 후 다시 시도해 주세요.', e);
+      throw AuthException('서버 로그인에 실패했어요.', e);
     }
   }
 
@@ -56,11 +66,27 @@ class AuthService {
 }
 
 class AuthException implements Exception {
-  AuthException(this.message, [this.cause]);
+  AuthException(this.message, [this.cause]) {
+    if (cause != null) {
+      debugPrint('AuthException: $message ← ${_describe(cause!)}');
+    }
+  }
 
   final String message;
   final Object? cause;
 
+  static String _describe(Object cause) {
+    if (cause is PlatformException) {
+      return 'PlatformException(code: ${cause.code}, message: ${cause.message}, details: ${cause.details})';
+    }
+    if (cause is DioException) {
+      return 'DioException(status: ${cause.response?.statusCode}, '
+          'body: ${cause.response?.data}, message: ${cause.message})';
+    }
+    return cause.toString();
+  }
+
+  /// 화면에는 이 값을 보여준다 — 원인까지 포함해서 디버깅 중엔 바로 확인할 수 있다.
   @override
-  String toString() => message;
+  String toString() => cause == null ? message : '$message\n(${_describe(cause!)})';
 }

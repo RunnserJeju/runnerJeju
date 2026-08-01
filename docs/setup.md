@@ -38,7 +38,7 @@ API 문서는 http://localhost:8000/docs 에 있다.
 | `.\scripts\dev.ps1 rebuild` | 이미지 새로 빌드 후 재생성 (의존성 변경 시) |
 | `.\scripts\dev.ps1 migrate` | 스키마를 head까지 올리기 |
 | `.\scripts\dev.ps1 revision "메시지"` | 마이그레이션 자동 생성 |
-| `.\scripts\dev.ps1 seed` | `server/courses/`의 GPX를 API로 업로드 |
+| `.\scripts\dev.ps1 seed` | `server/courses/`의 GPX를 DB에 직접 업로드 (API 안 거침, 로그인 불필요) |
 | `.\scripts\dev.ps1 test` | pytest |
 | `.\scripts\dev.ps1 psql` | DB 셸 |
 | `.\scripts\dev.ps1 shell` | API 컨테이너 셸 |

@@ -1,4 +1,5 @@
 import '../api/run_api.dart';
+import '../exceptions/app_exception.dart';
 import '../models/run_record.dart';
 
 /// 비즈니스 로직 계층: 러닝 기록 업로드/조회.
@@ -25,10 +26,12 @@ class RunService {
   }
 }
 
-class RunException implements Exception {
+class RunException implements AppException {
   RunException(this.message, [this.cause]);
 
+  @override
   final String message;
+  @override
   final Object? cause;
 
   @override

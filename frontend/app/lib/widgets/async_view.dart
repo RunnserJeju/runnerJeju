@@ -1,4 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
+import '../exceptions/app_exception.dart';
+import '../screens/auth/login_screen.dart';
+import '../services/service_locator.dart';
 
 /// 서버 데이터를 그리는 화면의 로딩/에러/빈 상태를 한 곳에서 처리한다.
 ///
@@ -33,6 +38,15 @@ class AsyncView<T> extends StatelessWidget {
     }
 
     if (snapshot.hasError) {
+      if (_isUnauthorized(snapshot.error)) {
+        return _StateMessage(
+          icon: Icons.lock_outline_rounded,
+          title: '로그인 후 이용해주세요',
+          actionLabel: '로그인하기',
+          onAction: () => _goToLogin(context),
+        );
+      }
+
       return _StateMessage(
         icon: Icons.wifi_off_rounded,
         title: '불러오지 못했어요',
@@ -65,6 +79,20 @@ class AsyncView<T> extends StatelessWidget {
 
     return builder(context, data);
   }
+}
+
+bool _isUnauthorized(Object? error) {
+  final cause = error is AppException ? error.cause : null;
+  return cause is DioException && cause.response?.statusCode == 401;
+}
+
+Future<void> _goToLogin(BuildContext context) async {
+  await Services.instance.tokenStorage.clear();
+  if (!context.mounted) return;
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const LoginScreen()),
+    (route) => false,
+  );
 }
 
 class _StateMessage extends StatelessWidget {

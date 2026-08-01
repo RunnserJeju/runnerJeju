@@ -81,5 +81,12 @@
 		<string>kakaokompassauth</string>
 		<string>kakaolink</string>
 	</array>
+	<!-- 개발용 로컬 API 서버(HTTP)를 iOS ATS가 차단하지 않도록 loopback만 예외 처리한다.
+	     Android는 AndroidManifest.xml의 usesCleartextTraffic="true"로 이미 허용되어 있다. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

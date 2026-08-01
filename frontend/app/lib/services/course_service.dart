@@ -1,4 +1,5 @@
 import '../api/course_api.dart';
+import '../exceptions/app_exception.dart';
 import '../models/geo_point.dart';
 import '../models/run_record.dart';
 import '../models/running_course.dart';
@@ -72,12 +73,35 @@ class CourseService {
       throw CourseException('코스 등록에 실패했어요.', e);
     }
   }
+
+  /// GPX 파일을 코스로 등록한다 (관리자용 수동 업로드).
+  Future<RunningCourse> uploadGpxFile({
+    required List<int> bytes,
+    required String filename,
+    required String name,
+  }) async {
+    if (bytes.isEmpty) {
+      throw CourseException('GPX 파일이 비어 있어요.');
+    }
+
+    try {
+      return await _courseApi.uploadGpx(
+        bytes: bytes,
+        filename: filename,
+        name: name,
+      );
+    } catch (e) {
+      throw CourseException('GPX 업로드에 실패했어요.', e);
+    }
+  }
 }
 
-class CourseException implements Exception {
+class CourseException implements AppException {
   CourseException(this.message, [this.cause]);
 
+  @override
   final String message;
+  @override
   final Object? cause;
 
   @override

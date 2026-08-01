@@ -152,11 +152,82 @@ def create_course(
     return _to_summary(course, 0, False)
 
 
+class CourseUploadError(Exception):
+    """GPX 업로드 검증 실패. HTTP 라우터와 tools/push_courses.py가 각자 방식으로 처리한다."""
+
+
+def upsert_course_from_gpx_bytes(
+    db: Session,
+    content: bytes,
+    *,
+    slug: str | None,
+    name: str | None,
+    description: str | None,
+    region: str | None,
+    difficulty: str,
+    estimated_duration_sec: int | None,
+    thumbnail_url: str | None,
+    created_by: str | None,
+) -> tuple[Course, bool]:
+    """GPX 바이트를 파싱해 코스를 등록/갱신한다. (course, is_new)를 돌려준다.
+
+    `PUT /courses/gpx`(HTTP)와 `tools/push_courses.py`(DB 직접 접근)가 공유하는
+    단일 진입점이다. 검증 규칙이 한 곳에만 있어야, 스크립트가 API를 거치지 않고
+    DB에 바로 써도 규칙이 두 벌로 갈라지지 않는다.
+
+    slug를 생략하면(예: 앱 내 즉석 업로드) 재업로드 개념이 없으니 이름에서
+    매번 새 slug를 만든다 — 그래서 항상 새 코스가 생긴다.
+    """
+    if not content:
+        raise CourseUploadError("빈 파일이에요.")
+
+    try:
+        parsed = gpx.parse(content)
+    except gpx.GpxParseError as exc:
+        raise CourseUploadError(str(exc)) from exc
+
+    resolved_name = name or parsed.name
+    if not resolved_name:
+        raise CourseUploadError(
+            "코스 이름이 없어요. GPX에 <name>이 없다면 name 필드로 넘겨주세요."
+        )
+
+    if slug is None:
+        slug = _unique_slug(db, gpx.slugify(resolved_name))
+
+    course = db.execute(select(Course).where(Course.slug == slug)).scalar_one_or_none()
+    is_new = course is None
+
+    if course is None:
+        course = Course(slug=slug, created_by=created_by)
+        db.add(course)
+
+    course.name = resolved_name
+    course.description = description
+    course.region = region
+    course.difficulty = difficulty
+    course.estimated_duration_sec = estimated_duration_sec
+    course.thumbnail_url = thumbnail_url
+
+    course.path = [point.to_json() for point in parsed.points]
+    course.distance_meters = parsed.distance_meters
+    course.elevation_gain_meters = parsed.elevation_gain_meters
+    course.is_loop = parsed.is_loop
+
+    db.commit()
+    db.refresh(course)
+
+    return course, is_new
+
+
 @router.put("/courses/gpx", response_model=CourseSummary)
 def upsert_course_from_gpx(
     response: Response,
     file: UploadFile = File(..., description="GPX 파일"),
-    slug: str = Form(..., description="코스의 안정적인 식별자. 재업로드 시 이 값으로 찾는다"),
+    slug: str | None = Form(
+        default=None,
+        description="코스의 안정적인 식별자. 재업로드 시 이 값으로 찾는다. 생략하면 이름에서 자동 생성한다(항상 새 코스)",
+    ),
     name: str | None = Form(default=None, description="생략하면 GPX의 <name>을 쓴다"),
     description: str | None = Form(default=None),
     region: str | None = Form(default=None),
@@ -181,42 +252,22 @@ def upsert_course_from_gpx(
             status_code=413,
             detail=f"GPX 파일이 너무 커요. {MAX_GPX_BYTES // (1024 * 1024)}MB 이하여야 해요.",
         )
-    if not content:
-        raise HTTPException(status_code=422, detail="빈 파일이에요.")
 
     try:
-        parsed = gpx.parse(content)
-    except gpx.GpxParseError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    resolved_name = name or parsed.name
-    if not resolved_name:
-        raise HTTPException(
-            status_code=422,
-            detail="코스 이름이 없어요. GPX에 <name>이 없다면 name 필드로 넘겨주세요.",
+        course, is_new = upsert_course_from_gpx_bytes(
+            db,
+            content,
+            slug=slug,
+            name=name,
+            description=description,
+            region=region,
+            difficulty=difficulty,
+            estimated_duration_sec=estimated_duration_sec,
+            thumbnail_url=thumbnail_url,
+            created_by=user_id,
         )
-
-    course = db.execute(select(Course).where(Course.slug == slug)).scalar_one_or_none()
-    is_new = course is None
-
-    if course is None:
-        course = Course(slug=slug, created_by=user_id)
-        db.add(course)
-
-    course.name = resolved_name
-    course.description = description
-    course.region = region
-    course.difficulty = difficulty
-    course.estimated_duration_sec = estimated_duration_sec
-    course.thumbnail_url = thumbnail_url
-
-    course.path = [point.to_json() for point in parsed.points]
-    course.distance_meters = parsed.distance_meters
-    course.elevation_gain_meters = parsed.elevation_gain_meters
-    course.is_loop = parsed.is_loop
-
-    db.commit()
-    db.refresh(course)
+    except CourseUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     response.status_code = 201 if is_new else 200
 

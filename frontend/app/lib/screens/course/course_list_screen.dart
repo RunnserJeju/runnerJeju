@@ -5,6 +5,7 @@ import '../../services/service_locator.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/course_card.dart';
 import 'course_detail_screen.dart';
+import 'gpx_upload_screen.dart';
 
 /// 코스 탐색: 서버에서 코스 목록을 받아 보여준다.
 class CourseListScreen extends StatefulWidget {
@@ -48,7 +49,18 @@ class _CourseListScreenState extends State<CourseListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(title: const Text('코스')),
+      appBar: AppBar(
+        title: const Text('코스'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.upload_file_rounded),
+            tooltip: 'GPX로 코스 등록',
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const GpxUploadScreen()))
+                .then((_) => _reload()),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

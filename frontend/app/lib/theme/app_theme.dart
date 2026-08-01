@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 class AppColors {
   const AppColors._();
 
-  /// 달리기 중 강조에 쓰는 형광 계열 포인트 컬러.
-  static const Color accent = Color(0xFFD7FF3E);
+  /// 강조가 필요한 곳에만 부분적으로 쓰는 포인트 컬러. 화이트/블랙 톤 위주 배색에서
+  /// 러닝 아이콘, 완주 뱃지처럼 눈에 띄어야 하는 요소에만 쓴다.
+  static const Color accent = Color(0xFFFF7A33);
   static const Color ink = Color(0xFF101114);
   static const Color inkSoft = Color(0xFF1C1E23);
   static const Color paper = Color(0xFFF6F7F9);

@@ -38,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('프로필'),
+        title: const Text('마이페이지'),
         actions: [
           IconButton(
             tooltip: '서버 연결 테스트',

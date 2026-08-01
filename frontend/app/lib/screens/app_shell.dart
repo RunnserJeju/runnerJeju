@@ -36,12 +36,19 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: IndexedStack(index: _index, children: _tabs),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: FloatingActionButton.large(
-        onPressed: _startRun,
-        backgroundColor: AppColors.ink,
-        foregroundColor: AppColors.accent,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.directions_run_rounded, size: 34),
+      floatingActionButton: Transform.translate(
+        offset: const Offset(0, 12),
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: FloatingActionButton(
+            onPressed: _startRun,
+            backgroundColor: AppColors.ink,
+            foregroundColor: AppColors.accent,
+            shape: const CircleBorder(),
+            child: const Icon(Icons.directions_run_rounded, size: 28),
+          ),
+        ),
       ),
       bottomNavigationBar: BottomAppBar(
         color: Colors.white,
@@ -72,7 +79,7 @@ class _AppShellState extends State<AppShell> {
             ),
             _NavItem(
               icon: Icons.person_rounded,
-              label: '프로필',
+              label: '마이페이지',
               selected: _index == 3,
               onTap: () => setState(() => _index = 3),
             ),
