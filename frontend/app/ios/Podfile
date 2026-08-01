@@ -1,6 +1,6 @@
 # KakaoMapsSDK가 iOS 13.0 이상을 요구한다. 명시하지 않으면 CocoaPods가 더 낮은
 # 버전을 기본값으로 잡아 pod install이 실패한다.
-platform :ios, '13.0'
+platform :ios, '14.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

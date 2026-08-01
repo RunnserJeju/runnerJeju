@@ -30,7 +30,12 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    kakao_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    kakao_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, index=True, default=None
+    )
+    apple_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, index=True, default=None
+    )
     nickname: Mapped[str | None] = mapped_column(String(100), default=None)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
