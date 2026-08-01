@@ -81,6 +81,7 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
     final file = _pickedFile;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(title: const Text('GPX로 코스 등록')),
       body: Form(
         key: _formKey,
@@ -105,17 +106,53 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
             ),
             const SizedBox(height: 8),
             Card(
-              child: ListTile(
-                leading: Icon(
-                  file == null ? Icons.upload_file_rounded : Icons.route_rounded,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-                title: Text(file?.name ?? '선택된 파일 없음'),
-                subtitle: file == null
-                    ? null
-                    : Text('${(file.size / 1024).toStringAsFixed(0)} KB'),
-                trailing: OutlinedButton(
-                  onPressed: _submitting ? null : _pickFile,
-                  child: Text(file == null ? '파일 선택' : '변경'),
+                child: Row(
+                  children: [
+                    Icon(
+                      file == null
+                          ? Icons.upload_file_rounded
+                          : Icons.route_rounded,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            file?.name ?? '선택된 파일 없음',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (file != null)
+                            Text(
+                              '${(file.size / 1024).toStringAsFixed(0)} KB',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: _submitting ? null : _pickFile,
+                      // 전역 OutlinedButton 테마의 minimumSize는 화면 폭 전체를
+                      // 채우는 버튼(Size.fromHeight)을 기준으로 잡혀 있다. 이 버튼은
+                      // Row 안에 Expanded 없이 놓이므로 그 값을 그대로 물려받으면
+                      // 무한 너비를 요구해 레이아웃이 깨진다. 여기서만 좁게 되돌린다.
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                      ),
+                      child: Text(file == null ? '파일 선택' : '변경'),
+                    ),
+                  ],
                 ),
               ),
             ),

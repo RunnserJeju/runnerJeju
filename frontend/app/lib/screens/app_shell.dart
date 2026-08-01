@@ -56,32 +56,48 @@ class _AppShellState extends State<AppShell> {
         height: 68,
         padding: EdgeInsets.zero,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _NavItem(
-              icon: Icons.home_rounded,
-              label: '홈',
-              selected: _index == 0,
-              onTap: () => setState(() => _index = 0),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _NavItem(
+                    icon: Icons.home_rounded,
+                    label: '홈',
+                    selected: _index == 0,
+                    onTap: () => setState(() => _index = 0),
+                  ),
+                  _NavItem(
+                    icon: Icons.route_rounded,
+                    label: '코스',
+                    selected: _index == 1,
+                    onTap: () => setState(() => _index = 1),
+                  ),
+                ],
+              ),
             ),
-            _NavItem(
-              icon: Icons.route_rounded,
-              label: '코스',
-              selected: _index == 1,
-              onTap: () => setState(() => _index = 1),
-            ),
+            // FAB(72)가 들어갈 자리. 좌우를 Expanded로 동일 폭으로 맞춰야
+            // 라벨 길이가 달라도 이 틈이 항상 화면 정중앙에 오고, centerDocked로
+            // 배치되는 FAB의 실제 중심과 어긋나지 않는다.
             const SizedBox(width: 72),
-            _NavItem(
-              icon: Icons.workspace_premium_rounded,
-              label: '스탬프',
-              selected: _index == 2,
-              onTap: () => setState(() => _index = 2),
-            ),
-            _NavItem(
-              icon: Icons.person_rounded,
-              label: '마이페이지',
-              selected: _index == 3,
-              onTap: () => setState(() => _index = 3),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _NavItem(
+                    icon: Icons.workspace_premium_rounded,
+                    label: '스탬프',
+                    selected: _index == 2,
+                    onTap: () => setState(() => _index = 2),
+                  ),
+                  _NavItem(
+                    icon: Icons.person_rounded,
+                    label: '마이페이지',
+                    selected: _index == 3,
+                    onTap: () => setState(() => _index = 3),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

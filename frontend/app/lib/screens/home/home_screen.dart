@@ -92,19 +92,20 @@ class _WeeklySummaryCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: SizedBox(
-          height: 116,
-          child: FutureBuilder<List<RunRecord>>(
-            future: future,
-            builder: (context, snapshot) => AsyncView<List<RunRecord>>(
-              snapshot: snapshot,
-              onRetry: onRetry,
-              isEmpty: (records) => records.isEmpty,
-              emptyTitle: '이번 주 기록이 없어요',
-              emptyMessage: '아래 버튼으로 첫 러닝을 시작해 보세요',
-              emptyIcon: Icons.directions_run_rounded,
-              builder: (context, records) => _SummaryContent(records: records),
-            ),
+        child: FutureBuilder<List<RunRecord>>(
+          future: future,
+          builder: (context, snapshot) => AsyncView<List<RunRecord>>(
+            snapshot: snapshot,
+            onRetry: onRetry,
+            isEmpty: (records) => records.isEmpty,
+            emptyTitle: '이번 주 기록이 없어요',
+            emptyMessage: '아래 버튼으로 첫 러닝을 시작해 보세요',
+            emptyIcon: Icons.directions_run_rounded,
+            // 116은 데이터가 있을 때의 요약 레이아웃 높이일 뿐, 로딩/에러/빈
+            // 상태 메시지(아이콘+제목+버튼)는 이보다 크므로 그 상태에서는
+            // 강제로 줄이지 않고 고정 높이를 로드된 콘텐츠에만 건다.
+            builder: (context, records) =>
+                SizedBox(height: 116, child: _SummaryContent(records: records)),
           ),
         ),
       ),
@@ -179,21 +180,24 @@ class _RecommendedCourses extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 210,
-      child: FutureBuilder<List<RunningCourse>>(
-        future: future,
-        builder: (context, snapshot) => AsyncView<List<RunningCourse>>(
-          snapshot: snapshot,
-          onRetry: onRetry,
-          isEmpty: (courses) => courses.isEmpty,
-          emptyTitle: '아직 코스가 없어요',
-          emptyMessage: '직접 달린 경로를 코스로 등록해 보세요',
-          emptyIcon: Icons.route_rounded,
-          builder: (context, courses) {
-            final top = courses.take(5).toList();
+    return FutureBuilder<List<RunningCourse>>(
+      future: future,
+      builder: (context, snapshot) => AsyncView<List<RunningCourse>>(
+        snapshot: snapshot,
+        onRetry: onRetry,
+        isEmpty: (courses) => courses.isEmpty,
+        emptyTitle: '아직 코스가 없어요',
+        emptyMessage: '직접 달린 경로를 코스로 등록해 보세요',
+        emptyIcon: Icons.route_rounded,
+        // 210은 목록(ListView)이 스스로 스크롤되기 위해 필요한 고정 높이일
+        // 뿐이다. 로딩/에러/빈 상태 메시지는 이 값과 무관하게 필요한 만큼
+        // 자연스러운 높이를 가져야 하므로 로드된 목록에만 높이를 건다.
+        builder: (context, courses) {
+          final top = courses.take(5).toList();
 
-            return ListView.separated(
+          return SizedBox(
+            height: 210,
+            child: ListView.separated(
               padding: EdgeInsets.zero,
               itemCount: top.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -205,9 +209,9 @@ class _RecommendedCourses extends StatelessWidget {
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }

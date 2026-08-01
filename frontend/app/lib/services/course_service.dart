@@ -18,7 +18,7 @@ class CourseService {
     try {
       return await _courseApi.fetchCourses(region: region, keyword: keyword);
     } catch (e) {
-      throw CourseException('코스 목록을 불러오지 못했어요.', e);
+      throw AppException('코스 목록을 불러오지 못했어요.', e);
     }
   }
 
@@ -26,7 +26,7 @@ class CourseService {
     try {
       return await _courseApi.fetchCourse(courseId);
     } catch (e) {
-      throw CourseException('코스 정보를 불러오지 못했어요.', e);
+      throw AppException('코스 정보를 불러오지 못했어요.', e);
     }
   }
 
@@ -55,7 +55,7 @@ class CourseService {
     CourseDifficulty difficulty = CourseDifficulty.normal,
   }) async {
     if (path.length < 2) {
-      throw CourseException('코스로 등록하려면 경로가 2개 지점 이상이어야 해요.');
+      throw AppException('코스로 등록하려면 경로가 2개 지점 이상이어야 해요.');
     }
 
     try {
@@ -70,7 +70,7 @@ class CourseService {
         ),
       );
     } catch (e) {
-      throw CourseException('코스 등록에 실패했어요.', e);
+      throw AppException('코스 등록에 실패했어요.', e);
     }
   }
 
@@ -81,7 +81,7 @@ class CourseService {
     required String name,
   }) async {
     if (bytes.isEmpty) {
-      throw CourseException('GPX 파일이 비어 있어요.');
+      throw AppException('GPX 파일이 비어 있어요.');
     }
 
     try {
@@ -91,19 +91,7 @@ class CourseService {
         name: name,
       );
     } catch (e) {
-      throw CourseException('GPX 업로드에 실패했어요.', e);
+      throw AppException('GPX 업로드에 실패했어요.', e);
     }
   }
-}
-
-class CourseException implements AppException {
-  CourseException(this.message, [this.cause]);
-
-  @override
-  final String message;
-  @override
-  final Object? cause;
-
-  @override
-  String toString() => message;
 }

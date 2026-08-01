@@ -21,7 +21,7 @@ class RunMapView extends StatefulWidget {
     this.followCurrentPosition = false,
   });
 
-  /// 따라 달릴 코스 경로. 회색 실선으로 그린다.
+  /// 따라 달릴 코스 경로. 강조색 실선으로 그린다.
   final List<GeoPoint> coursePath;
 
   /// 사용자가 실제로 달린 경로. 강조색 실선으로 그린다.
@@ -82,7 +82,7 @@ class _RunMapViewState extends State<RunMapView> {
   static const int _fitPadding = 48;
 
   late final kakao.RouteStyle _courseStyle = kakao.RouteStyle(
-    const Color(0xBF7A8593), // 75% 불투명 회색
+    AppColors.accent,
     6,
   );
   late final kakao.RouteStyle _runStyle = kakao.RouteStyle(AppColors.ink, 7);

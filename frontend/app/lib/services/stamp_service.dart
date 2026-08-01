@@ -14,7 +14,7 @@ class StampService {
       stamps.sort((a, b) => b.acquiredAt.compareTo(a.acquiredAt));
       return stamps;
     } catch (e) {
-      throw StampException('스탬프를 불러오지 못했어요.', e);
+      throw AppException('스탬프를 불러오지 못했어요.', e);
     }
   }
 
@@ -22,19 +22,7 @@ class StampService {
     try {
       return await _stampApi.fetchStamp(stampId);
     } catch (e) {
-      throw StampException('스탬프 정보를 불러오지 못했어요.', e);
+      throw AppException('스탬프 정보를 불러오지 못했어요.', e);
     }
   }
-}
-
-class StampException implements AppException {
-  StampException(this.message, [this.cause]);
-
-  @override
-  final String message;
-  @override
-  final Object? cause;
-
-  @override
-  String toString() => message;
 }

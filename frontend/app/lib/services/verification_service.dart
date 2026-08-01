@@ -1,4 +1,5 @@
 import '../api/verification_api.dart';
+import '../exceptions/app_exception.dart';
 import '../models/run_verification.dart';
 
 /// 비즈니스 로직 계층: 경로 검증 요청과 결과 대기.
@@ -29,7 +30,7 @@ class VerificationService {
         courseId: courseId,
       );
     } catch (e) {
-      throw VerificationException('경로 검증을 요청하지 못했어요.', e);
+      throw AppException('경로 검증을 요청하지 못했어요.', e);
     }
 
     if (requested.status.isTerminal) return requested;
@@ -48,20 +49,10 @@ class VerificationService {
       try {
         latest = await _verificationApi.fetchVerification(latest.id);
       } catch (e) {
-        throw VerificationException('검증 결과를 확인하지 못했어요.', e);
+        throw AppException('검증 결과를 확인하지 못했어요.', e);
       }
     }
 
     return latest;
   }
-}
-
-class VerificationException implements Exception {
-  VerificationException(this.message, [this.cause]);
-
-  final String message;
-  final Object? cause;
-
-  @override
-  String toString() => message;
 }
