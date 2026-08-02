@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# 팀 공용 디버그 서명 — 위 규칙에서 예외로 커밋한다(디버그 전용이라 안전).
+!keystore/shared-debug.keystore

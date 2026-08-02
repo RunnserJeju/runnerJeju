@@ -40,6 +40,7 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 - [ ] 카카오 로그인 (SDK → access token 서버 전달)
 - [ ] 애플 로그인 (Sign in with Apple, iOS)
 - [ ] 서버에서 카카오/애플 토큰 검증
+- [ ] User에 apple_id 컬럼 추가 (nullable)
 - [ ] 최초 로그인 시 자동 회원가입 (upsert)
 - [ ] JWT access token 발급 (유효기간 1시간)
 - [ ] refresh token 발급 및 저장 (유효기간 30일)
@@ -52,6 +53,10 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 - refresh token rotation 여부 — 미정
 - 애플 로그인 — iOS 배포 확정. 소셜 로그인 제공 시 애플 로그인 동반 요구(가이드라인 4.8)라 필수로 전환
 - 회원 탈퇴 — iOS 배포 확정으로 앱스토어 심사 가이드라인(5.1.1v) 상 필수로 전환
+- 카카오/애플 계정 연동 — MVP는 지원 안 함, provider별로 별개 계정. 필요해지면 로그인 상태에서 다른 provider 연동하는 플로우 추가
+- 애플 로그인 서버(`POST /auth/apple`)·클라이언트 코드는 이미 구현돼 있음. Apple Developer
+  계정이 없어서 막힌 건 iOS Sign In with Apple capability뿐 — `frontend/app/ios/Runner/Runner.entitlements`가
+  빈 상태(`<dict></dict>`)라 실기기/시뮬레이터에서 로그인이 안 된다. 아래 "Apple 로그인 복구" 체크리스트로 해결.
 
 **배포 준비 (개발 외)**
 - [ ] 카카오 개발자 계정 생성 + 앱 등록
@@ -61,6 +66,13 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 - [ ] Android 릴리즈 키스토어 생성 + 릴리즈 키 해시 카카오 콘솔 등록
 - [ ] Apple Developer Program 가입 ($99/년)
 - [ ] 카카오 로그인 실 서비스 전환
+
+**Apple 로그인 복구 (Developer Program 가입 후)**
+- [ ] Apple Developer 콘솔에서 App ID(`com.runnersjeju.runnersJeju`)에 Sign In with Apple capability 활성화
+- [ ] Xcode에서 Runner 타깃에 개발팀(Team) 설정
+- [ ] Xcode Signing & Capabilities에서 "Sign in with Apple" 추가 — `Runner.entitlements`에
+  `com.apple.developer.applesignin` 키가 자동으로 채워짐 (수동 편집 불필요)
+- [ ] 실기기 또는 iOS 시뮬레이터에서 `POST /auth/apple` 로그인 플로우 테스트
 
 ### Course
 

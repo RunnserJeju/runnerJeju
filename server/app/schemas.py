@@ -29,6 +29,17 @@ class KakaoLoginRequest(BaseModel):
     access_token: str
 
 
+class AppleLoginRequest(BaseModel):
+    """Sign in with Apple로 받은 identityToken(애플 서명 JWT)을 전달받는다.
+
+    email/full_name은 애플이 최초 인가 시에만 내려주므로 없을 수 있다.
+    """
+
+    identity_token: str
+    email: str | None = None
+    full_name: str | None = None
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 

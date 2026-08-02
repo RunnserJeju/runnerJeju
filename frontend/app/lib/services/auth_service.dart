@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../api/auth_api.dart' as api;
 import '../exceptions/app_exception.dart';
@@ -42,6 +43,52 @@ class AuthService {
 
     try {
       final tokens = await _authApi.loginWithKakao(kakaoToken.accessToken);
+      await _tokenStorage.save(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+    } catch (e) {
+      throw AppException('서버 로그인에 실패했어요.', e);
+    }
+  }
+
+  /// iOS 전용. 앱스토어 심사 가이드라인(4.8) 대응으로 iOS에서만 노출한다.
+  Future<void> loginWithApple() async {
+    AuthorizationCredentialAppleID credential;
+    try {
+      credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        throw AppException('로그인이 취소됐어요.');
+      }
+      throw AppException('애플 로그인에 실패했어요.', e);
+    } catch (e) {
+      throw AppException('애플 로그인에 실패했어요.', e);
+    }
+
+    final identityToken = credential.identityToken;
+    if (identityToken == null) {
+      throw AppException('애플 로그인에 실패했어요.');
+    }
+
+    // 이름은 애플이 최초 인가 시에만 내려준다. 이후 로그인부터는 null이라
+    // 서버에 매번 새로 저장하지 않는다.
+    final fullName = [
+      credential.givenName,
+      credential.familyName,
+    ].whereType<String>().join(' ').trim();
+
+    try {
+      final tokens = await _authApi.loginWithApple(
+        identityToken,
+        email: credential.email,
+        fullName: fullName.isEmpty ? null : fullName,
+      );
       await _tokenStorage.save(
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,

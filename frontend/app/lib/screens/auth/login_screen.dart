@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../config/app_config.dart';
@@ -5,7 +7,10 @@ import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../app_shell.dart';
 
-/// 카카오 로그인 하나만 있는 첫 화면.
+/// 카카오 로그인, iOS에서는 애플 로그인도 함께 보여주는 첫 화면.
+///
+/// 애플 로그인은 iOS에서만 노출한다 — Android에서 요구되는 기능이 아니고,
+/// iOS 심사 가이드라인(4.8, 소셜 로그인 제공 시 애플 로그인 동반 요구) 대응 목적이다.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,10 +21,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
 
-  Future<void> _login() async {
+  Future<void> _login(Future<void> Function() action) async {
     setState(() => _loading = true);
     try {
-      await Services.instance.auth.loginWithKakao();
+      await action();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const AppShell()),
@@ -70,7 +75,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: _loading ? null : _login,
+                    onPressed: _loading
+                        ? null
+                        : () => _login(Services.instance.auth.loginWithKakao),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFEE500),
                       foregroundColor: Colors.black87,
@@ -90,6 +97,35 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                   ),
                 ),
+              if (Platform.isIOS) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _loading
+                        ? null
+                        : () => _login(Services.instance.auth.loginWithApple),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _loading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Apple로 로그인',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

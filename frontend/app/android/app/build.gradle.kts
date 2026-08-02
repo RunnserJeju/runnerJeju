@@ -26,6 +26,18 @@ android {
         versionName = flutter.versionName
     }
 
+    // 팀 공용 디버그 키스토어. 각자 PC마다 다른 ~/.android/debug.keystore 대신 이걸 써서,
+    // 카카오 콘솔에 키 해시를 한 번만 등록하면 팀원 전체가 로컬에서 로그인이 된다.
+    // 디버그 전용이라 git에 커밋해도 안전하다(비밀번호 고정, 배포에는 안 쓰임).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("../keystore/shared-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

@@ -30,6 +30,7 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    # 카카오/애플 둘 다 로그인 provider이므로 둘 중 하나만 있어도 되게 nullable이다.
     kakao_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, index=True, default=None
     )

@@ -27,6 +27,25 @@ class AuthApi {
     return TokenPair.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Sign in with Apple로 받은 identityToken을 서버에 보내 우리 서비스의 JWT를 받는다.
+  ///
+  /// email/fullName은 애플이 최초 인가 시에만 내려주므로, 받았을 때만 함께 보낸다.
+  Future<TokenPair> loginWithApple(
+    String identityToken, {
+    String? email,
+    String? fullName,
+  }) async {
+    final response = await _client.dio.post(
+      '/auth/apple',
+      data: {
+        'identity_token': identityToken,
+        if (email != null) 'email': email,
+        if (fullName != null) 'full_name': fullName,
+      },
+    );
+    return TokenPair.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<String> refresh(String refreshToken) async {
     final response = await _client.dio.post(
       '/auth/refresh',

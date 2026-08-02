@@ -7,7 +7,8 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.1",
-    "pyjwt>=2.13.0",
+    # [crypto]: 애플 로그인 identityToken(RS256) 서명 검증에 필요.
+    "pyjwt[crypto]>=2.13.0",
     "httpx>=0.28.1",
     "alembic>=1.13",
     # FastAPI의 UploadFile/Form(코스 GPX 업로드)에 필요하다.
