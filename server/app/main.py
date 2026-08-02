@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from app import schema_guard
 from app.db import engine
-from app.routers import auth, courses, runs, stamps, verifications
+from app.routers import auth, courses, notices, runs, stamps, verifications
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ app.include_router(courses.router)
 app.include_router(runs.router)
 app.include_router(verifications.router)
 app.include_router(stamps.router)
+app.include_router(notices.router)
 
 
 @app.get("/ping")

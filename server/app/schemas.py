@@ -164,3 +164,20 @@ class StampOut(BaseModel):
     acquired_at: datetime
     image_url: str | None
     record_id: uuid.UUID | None
+
+
+# --- 공지사항 -------------------------------------------------------------
+
+
+class NoticeCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1)
+
+
+class NoticeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    body: str
+    created_at: datetime

@@ -5,6 +5,7 @@ import '../../services/service_locator.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/metric_tile.dart';
+import '../auth/login_screen.dart';
 import '../connection_test_screen.dart';
 
 /// 프로필: 누적 기록 요약 + 최근 러닝 목록.
@@ -33,6 +34,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _future.catchError((_) => <RunRecord>[]);
   }
 
+  Future<void> _logout() async {
+    await Services.instance.auth.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -46,6 +56,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               MaterialPageRoute(builder: (_) => const ConnectionTestScreen()),
             ),
             icon: const Icon(Icons.settings_ethernet_rounded),
+          ),
+          IconButton(
+            tooltip: '로그아웃',
+            onPressed: _logout,
+            icon: const Icon(Icons.logout_rounded),
           ),
         ],
       ),

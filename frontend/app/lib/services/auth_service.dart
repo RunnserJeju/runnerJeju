@@ -38,6 +38,13 @@ class AuthService {
       }
     } on AppException {
       rethrow;
+    } on PlatformException catch (e) {
+      // 카카오계정(웹뷰) 로그인 화면에서 X로 닫아도 CANCELED가 여기로 올라온다 —
+      // 카카오톡 경로와 동일하게 취소로 처리해야 "로그인 실패"로 잘못 뜨지 않는다.
+      if (e.code == 'CANCELED') {
+        throw AppException('로그인이 취소됐어요.');
+      }
+      throw AppException('카카오 로그인에 실패했어요.', e);
     } catch (e) {
       // 이 구간은 카카오 SDK가 카카오 서버와 직접 통신하는 단계라 우리 백엔드 로그에는
       // 아무것도 남지 않는다. 키 해시 미등록(KOE101) 같은 원인이 여기서 잡힌다.

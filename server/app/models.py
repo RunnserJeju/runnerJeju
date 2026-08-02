@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -204,3 +205,19 @@ class Stamp(Base):
     )
 
     course: Mapped[Course] = relationship(back_populates="stamps")
+
+
+class Notice(Base):
+    """홈 화면에 노출되는 공지사항. 관리자가 DB에 직접 등록한다."""
+
+    __tablename__ = "notices"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
