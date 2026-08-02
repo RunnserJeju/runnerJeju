@@ -1,15 +1,23 @@
 import '../network/api_client.dart';
 
 class TokenPair {
-  const TokenPair({required this.accessToken, required this.refreshToken});
+  const TokenPair({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.needsNickname,
+  });
 
   factory TokenPair.fromJson(Map<String, dynamic> json) => TokenPair(
     accessToken: json['access_token'] as String,
     refreshToken: json['refresh_token'] as String,
+    needsNickname: json['needs_nickname'] as bool,
   );
 
   final String accessToken;
   final String refreshToken;
+
+  /// true면 아직 닉네임이 없다는 뜻 — 클라이언트가 닉네임 설정 화면으로 보내야 한다.
+  final bool needsNickname;
 }
 
 /// API 계층: 인증 관련 서버 엔드포인트.
@@ -29,21 +37,30 @@ class AuthApi {
 
   /// Sign in with Apple로 받은 identityToken을 서버에 보내 우리 서비스의 JWT를 받는다.
   ///
-  /// email/fullName은 애플이 최초 인가 시에만 내려주므로, 받았을 때만 함께 보낸다.
-  Future<TokenPair> loginWithApple(
-    String identityToken, {
-    String? email,
-    String? fullName,
-  }) async {
+  /// email은 애플이 최초 인가 시에만 내려주므로, 받았을 때만 함께 보낸다.
+  Future<TokenPair> loginWithApple(String identityToken, {String? email}) async {
     final response = await _client.dio.post(
       '/auth/apple',
       data: {
         'identity_token': identityToken,
-        if (email != null) 'email': email,
-        if (fullName != null) 'full_name': fullName,
+        'email': ?email,
       },
     );
     return TokenPair.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Google Sign-In으로 받은 idToken을 서버에 보내 우리 서비스의 JWT를 받는다.
+  Future<TokenPair> loginWithGoogle(String idToken) async {
+    final response = await _client.dio.post(
+      '/auth/google',
+      data: {'id_token': idToken},
+    );
+    return TokenPair.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// 로그인 직후(닉네임 없을 때) 닉네임 설정 화면에서 호출한다.
+  Future<void> updateNickname(String nickname) {
+    return _client.dio.patch('/auth/nickname', data: {'nickname': nickname});
   }
 
   Future<String> refresh(String refreshToken) async {

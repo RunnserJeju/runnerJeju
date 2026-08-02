@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' show KakaoMapSdk;
 
@@ -15,6 +18,12 @@ Future<void> main() async {
     KakaoSdk.init(nativeAppKey: AppConfig.kakaoNativeAppKey);
     await KakaoMapSdk.instance.initialize(AppConfig.kakaoNativeAppKey);
   }
+
+  // clientId는 iOS에서만 필요하다 — Android는 패키지명+SHA-1로 콘솔이 자동 매칭한다.
+  await GoogleSignIn.instance.initialize(
+    clientId: Platform.isIOS ? AppConfig.googleIosClientId : null,
+    serverClientId: AppConfig.googleServerClientId,
+  );
 
   runApp(const RunnersJejuApp());
 }

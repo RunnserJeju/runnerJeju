@@ -53,13 +53,18 @@ class TestLoginWithApple:
     def test_creates_new_user_from_claims(self, monkeypatch):
         _patch_apple_verification(monkeypatch, {"sub": APPLE_SUB})
         db = FakeSession(existing_user=None)
-        payload = AppleLoginRequest(identity_token="fake.jwt.token", full_name="테스터")
+        payload = AppleLoginRequest(
+            identity_token="fake.jwt.token", email="tester@example.com"
+        )
 
         result = auth_router.login_with_apple(payload, db)
 
         new_user = next(obj for obj in db.added if isinstance(obj, User))
         assert new_user.apple_id == APPLE_SUB
-        assert new_user.nickname == "테스터"
+        assert new_user.email == "tester@example.com"
+        # 닉네임은 provider가 안 채운다 — 앱의 닉네임 설정 화면으로 유도해야 한다.
+        assert new_user.nickname is None
+        assert result.needs_nickname is True
         assert result.access_token
         assert result.refresh_token
 
@@ -67,13 +72,14 @@ class TestLoginWithApple:
         _patch_apple_verification(monkeypatch, {"sub": APPLE_SUB})
         existing = User(id=uuid.uuid4(), apple_id=APPLE_SUB, nickname="기존닉네임")
         db = FakeSession(existing_user=existing)
-        # 최초 인가 이후에는 애플이 full_name을 다시 내려주지 않는다.
-        payload = AppleLoginRequest(identity_token="fake.jwt.token", full_name=None)
+        # 최초 인가 이후에는 애플이 email을 다시 내려주지 않는다.
+        payload = AppleLoginRequest(identity_token="fake.jwt.token", email=None)
 
-        auth_router.login_with_apple(payload, db)
+        result = auth_router.login_with_apple(payload, db)
 
         assert not any(isinstance(obj, User) for obj in db.added)
         assert existing.nickname == "기존닉네임"
+        assert result.needs_nickname is False
 
     def test_rejects_invalid_token(self, monkeypatch):
         monkeypatch.setattr(

@@ -37,8 +37,15 @@ class User(Base):
     apple_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, index=True, default=None
     )
+    google_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, index=True, default=None
+    )
     nickname: Mapped[str | None] = mapped_column(String(100), default=None)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    # provider가 동의항목으로 내려줄 때만 채워진다. 로그인 식별자가 아니라
+    # 참고용 정보라 unique 제약은 안 건다 (카카오/애플 두 provider가 같은
+    # 사람이라도 별개 계정이라 같은 이메일을 가질 수 있다).
+    email: Mapped[str | None] = mapped_column(String(255), default=None)
 
     # 'user' | 'admin' — 코스 등록(admin 전용) 권한 구분용.
     role: Mapped[str] = mapped_column(String(20), default="user")

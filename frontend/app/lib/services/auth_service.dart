@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -17,7 +18,9 @@ class AuthService {
       await _tokenStorage.readAccessToken() != null;
 
   /// 카카오톡 앱이 있으면 앱 전환 로그인, 없으면 카카오계정(웹뷰) 로그인으로 자동 대체한다.
-  Future<void> loginWithKakao() async {
+  ///
+  /// 반환값 true면 아직 닉네임이 없다는 뜻 — 호출부가 닉네임 설정 화면으로 보내야 한다.
+  Future<bool> loginWithKakao() async {
     OAuthToken kakaoToken;
 
     try {
@@ -47,20 +50,20 @@ class AuthService {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       );
+      return tokens.needsNickname;
     } catch (e) {
       throw AppException('서버 로그인에 실패했어요.', e);
     }
   }
 
   /// iOS 전용. 앱스토어 심사 가이드라인(4.8) 대응으로 iOS에서만 노출한다.
-  Future<void> loginWithApple() async {
+  ///
+  /// 반환값 true면 아직 닉네임이 없다는 뜻 — 호출부가 닉네임 설정 화면으로 보내야 한다.
+  Future<bool> loginWithApple() async {
     AuthorizationCredentialAppleID credential;
     try {
       credential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
+        scopes: [AppleIDAuthorizationScopes.email],
       );
     } on SignInWithAppleAuthorizationException catch (e) {
       if (e.code == AuthorizationErrorCode.canceled) {
@@ -76,25 +79,60 @@ class AuthService {
       throw AppException('애플 로그인에 실패했어요.');
     }
 
-    // 이름은 애플이 최초 인가 시에만 내려준다. 이후 로그인부터는 null이라
-    // 서버에 매번 새로 저장하지 않는다.
-    final fullName = [
-      credential.givenName,
-      credential.familyName,
-    ].whereType<String>().join(' ').trim();
-
     try {
       final tokens = await _authApi.loginWithApple(
         identityToken,
         email: credential.email,
-        fullName: fullName.isEmpty ? null : fullName,
       );
       await _tokenStorage.save(
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       );
+      return tokens.needsNickname;
     } catch (e) {
       throw AppException('서버 로그인에 실패했어요.', e);
+    }
+  }
+
+  /// 구글 계정 선택 UI를 띄우고, idToken을 서버에 보내 로그인한다.
+  ///
+  /// 반환값 true면 아직 닉네임이 없다는 뜻 — 호출부가 닉네임 설정 화면으로 보내야 한다.
+  Future<bool> loginWithGoogle() async {
+    String? idToken;
+    try {
+      final account = await GoogleSignIn.instance.authenticate();
+      idToken = account.authentication.idToken;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        throw AppException('로그인이 취소됐어요.');
+      }
+      throw AppException('구글 로그인에 실패했어요.', e);
+    } catch (e) {
+      throw AppException('구글 로그인에 실패했어요.', e);
+    }
+
+    if (idToken == null) {
+      throw AppException('구글 로그인에 실패했어요.');
+    }
+
+    try {
+      final tokens = await _authApi.loginWithGoogle(idToken);
+      await _tokenStorage.save(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+      return tokens.needsNickname;
+    } catch (e) {
+      throw AppException('서버 로그인에 실패했어요.', e);
+    }
+  }
+
+  /// 닉네임 설정 화면에서 호출한다.
+  Future<void> setNickname(String nickname) async {
+    try {
+      await _authApi.updateNickname(nickname);
+    } catch (e) {
+      throw AppException('닉네임을 저장하지 못했어요.', e);
     }
   }
 

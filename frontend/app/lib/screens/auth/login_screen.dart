@@ -6,8 +6,9 @@ import '../../config/app_config.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../app_shell.dart';
+import 'nickname_setup_screen.dart';
 
-/// 카카오 로그인, iOS에서는 애플 로그인도 함께 보여주는 첫 화면.
+/// 카카오/구글 로그인, iOS에서는 애플 로그인도 함께 보여주는 첫 화면.
 ///
 /// 애플 로그인은 iOS에서만 노출한다 — Android에서 요구되는 기능이 아니고,
 /// iOS 심사 가이드라인(4.8, 소셜 로그인 제공 시 애플 로그인 동반 요구) 대응 목적이다.
@@ -21,13 +22,17 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
 
-  Future<void> _login(Future<void> Function() action) async {
+  Future<void> _login(Future<bool> Function() action) async {
     setState(() => _loading = true);
     try {
-      await action();
+      final needsNickname = await action();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AppShell()),
+        MaterialPageRoute(
+          builder: (_) => needsNickname
+              ? const NicknameSetupScreen()
+              : const AppShell(),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -97,6 +102,34 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                   ),
                 ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _loading
+                      ? null
+                      : () => _login(Services.instance.auth.loginWithGoogle),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black87,
+                    side: const BorderSide(color: Color(0xFFDADCE0)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Google로 로그인',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ),
               if (Platform.isIOS) ...[
                 const SizedBox(height: 12),
                 SizedBox(

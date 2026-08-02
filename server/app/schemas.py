@@ -32,21 +32,36 @@ class KakaoLoginRequest(BaseModel):
 class AppleLoginRequest(BaseModel):
     """Sign in with Apple로 받은 identityToken(애플 서명 JWT)을 전달받는다.
 
-    email/full_name은 애플이 최초 인가 시에만 내려주므로 없을 수 있다.
+    email은 애플이 최초 인가 시에만 내려주므로 없을 수 있다.
     """
 
     identity_token: str
     email: str | None = None
-    full_name: str | None = None
+
+
+class GoogleLoginRequest(BaseModel):
+    """Google Sign-In으로 받은 idToken(구글 서명 JWT)을 전달받는다.
+
+    email/sub 등은 idToken 클레임에 항상 포함돼 있어 애플과 달리 별도 필드로
+    받을 필요가 없다.
+    """
+
+    id_token: str
 
 
 class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class NicknameUpdate(BaseModel):
+    nickname: str = Field(min_length=1, max_length=20)
+
+
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
+    # 닉네임이 아직 없으면(=최초 로그인) 클라이언트가 닉네임 설정 화면으로 보낸다.
+    needs_nickname: bool
 
 
 class AccessTokenOut(BaseModel):
