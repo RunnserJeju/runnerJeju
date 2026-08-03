@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/running_course.dart';
 import '../../services/service_locator.dart';
+import '../../widgets/admin_only.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/course_card.dart';
 import 'course_detail_screen.dart';
@@ -52,12 +53,16 @@ class _CourseListScreenState extends State<CourseListScreen> {
       appBar: AppBar(
         title: const Text('코스'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_file_rounded),
-            tooltip: 'GPX로 코스 등록',
-            onPressed: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const GpxUploadScreen()))
-                .then((_) => _reload()),
+          AdminOnly(
+            child: IconButton(
+              icon: const Icon(Icons.upload_file_rounded),
+              tooltip: 'GPX로 코스 등록',
+              onPressed: () => Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(builder: (_) => const GpxUploadScreen()),
+                  )
+                  .then((_) => _reload()),
+            ),
           ),
         ],
       ),

@@ -1,10 +1,13 @@
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
+// 카카오 SDK도 User를 내보내는데 여기서는 쓰지 않는다. 우리 모델과 이름이
+// 겹치므로 감춰서 어느 User인지 헷갈릴 여지를 없앤다.
+import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' hide User;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../api/auth_api.dart' as api;
 import '../exceptions/app_exception.dart';
+import '../models/user.dart';
 import 'token_storage.dart';
 
 /// 비즈니스 로직 계층: 카카오 SDK 로그인 → 우리 서버 JWT 교환 → 토큰 저장.
@@ -14,8 +17,32 @@ class AuthService {
   final api.AuthApi _authApi;
   final TokenStorage _tokenStorage;
 
+  /// 한 번 받아온 사용자 정보. 화면마다 다시 묻지 않도록 붙들고 있는다.
+  User? _currentUser;
+
   Future<bool> get isLoggedIn async =>
       await _tokenStorage.readAccessToken() != null;
+
+  /// 마지막으로 받아온 사용자. 아직 조회 전이면 null.
+  User? get currentUser => _currentUser;
+
+  /// 현재 사용자를 가져온다. 한 번 성공하면 그 뒤로는 캐시를 돌려준다.
+  ///
+  /// 로그인하지 않았거나 조회에 실패하면 null이다. 호출부(권한에 따른 UI 노출)는
+  /// "모르면 감춘다"로 처리하면 되므로 예외를 던지지 않는다.
+  Future<User?> loadCurrentUser({bool refresh = false}) async {
+    if (_currentUser != null && !refresh) return _currentUser;
+    if (!await isLoggedIn) return null;
+
+    try {
+      _currentUser = await _authApi.fetchMe();
+    } catch (_) {
+      // 네트워크 문제로 권한을 모를 수 있다. 그때는 admin이 아닌 것으로 본다.
+      return null;
+    }
+
+    return _currentUser;
+  }
 
   /// 카카오톡 앱이 있으면 앱 전환 로그인, 없으면 카카오계정(웹뷰) 로그인으로 자동 대체한다.
   ///
@@ -57,6 +84,8 @@ class AuthService {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       );
+      // 다른 계정으로 갈아탔을 수 있으므로 이전 사용자 정보를 버린다.
+      _currentUser = null;
       return tokens.needsNickname;
     } catch (e) {
       throw AppException('서버 로그인에 실패했어요.', e);
@@ -95,6 +124,8 @@ class AuthService {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       );
+      // 다른 계정으로 갈아탔을 수 있으므로 이전 사용자 정보를 버린다.
+      _currentUser = null;
       return tokens.needsNickname;
     } catch (e) {
       throw AppException('서버 로그인에 실패했어요.', e);
@@ -128,6 +159,8 @@ class AuthService {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       );
+      // 다른 계정으로 갈아탔을 수 있으므로 이전 사용자 정보를 버린다.
+      _currentUser = null;
       return tokens.needsNickname;
     } catch (e) {
       throw AppException('서버 로그인에 실패했어요.', e);
@@ -153,5 +186,6 @@ class AuthService {
       }
     }
     await _tokenStorage.clear();
+    _currentUser = null;
   }
 }

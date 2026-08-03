@@ -39,6 +39,9 @@ class Services {
     VerificationApi(apiClient),
   );
   late final NoticeService notice = NoticeService(NoticeApi(apiClient));
+
+  /// 실제 GPS. 시뮬레이션 러닝은 이걸 바꾸지 않고 [RunTracker.start]에
+  /// 위치원을 따로 넘긴다 — 그래야 앱 전역이 아니라 그 한 번의 러닝만 가짜가 된다.
   late final LocationService location = LocationService();
 
   /// 진행 중인 러닝은 화면 전환과 무관하게 유지되어야 하므로 전역에 하나만 둔다.

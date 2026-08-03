@@ -80,8 +80,16 @@ class RunTracker extends ChangeNotifier {
 
   /// 러닝 시작. [course]를 주면 코스를 따라 달리는 러닝이 된다.
   /// 권한이 없으면 사유를 반환하고 시작하지 않는다.
-  Future<LocationAvailability> start({RunningCourse? course}) async {
-    final availability = await _locationService.ensurePermission();
+  ///
+  /// [source]를 주면 이번 러닝만 그 위치원을 쓴다. 디버그 빌드의 시뮬레이션
+  /// 러닝이 유일한 사용처이고, 주지 않으면 평소대로 실제 GPS를 쓴다.
+  Future<LocationAvailability> start({
+    RunningCourse? course,
+    LocationService? source,
+  }) async {
+    final location = source ?? _locationService;
+
+    final availability = await location.ensurePermission();
     if (!availability.isReady) return availability;
 
     _reset();
@@ -89,9 +97,7 @@ class RunTracker extends ChangeNotifier {
     _startedAt = DateTime.now();
     _status = RunStatus.running;
 
-    _positionSubscription = _locationService.trackPosition().listen(
-      _onPosition,
-    );
+    _positionSubscription = location.trackPosition().listen(_onPosition);
     _startTicker();
     notifyListeners();
 

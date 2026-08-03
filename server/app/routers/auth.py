@@ -19,6 +19,7 @@ from app.schemas import (
     NicknameUpdate,
     RefreshRequest,
     TokenPair,
+    UserOut,
 )
 from app.security import (
     REFRESH_TOKEN_TTL,
@@ -183,6 +184,19 @@ def login_with_google(payload: GoogleLoginRequest, db: Session = Depends(get_db)
     db.refresh(user)
 
     return _issue_tokens(db, user)
+
+
+@router.get("/me", response_model=UserOut)
+def get_me(
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """현재 로그인한 사용자. 앱이 admin 전용 UI 노출 여부를 정하는 데 쓴다."""
+    user = db.get(User, uuid.UUID(user_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없어요.")
+
+    return user
 
 
 @router.patch("/nickname", status_code=204)

@@ -4,6 +4,7 @@ import '../../models/notice.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/admin_only.dart';
 import '../../widgets/async_view.dart';
 import 'notice_create_screen.dart';
 
@@ -40,14 +41,16 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Runners Jeju'),
         actions: [
-          // TODO: 지금은 로그인만 하면 보인다. User.role이 admin일 때만
-          // 보이도록 나중에 제한한다 (서버는 이미 admin만 쓰게 막혀 있음).
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded),
-            tooltip: '공지사항 작성',
-            onPressed: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const NoticeCreateScreen()))
-                .then((_) => _refresh()),
+          AdminOnly(
+            child: IconButton(
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              tooltip: '공지사항 작성',
+              onPressed: () => Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(builder: (_) => const NoticeCreateScreen()),
+                  )
+                  .then((_) => _refresh()),
+            ),
           ),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/geo_point.dart';
@@ -5,6 +6,7 @@ import '../../models/running_course.dart';
 import '../../services/location_service.dart';
 import '../../services/run_tracker.dart';
 import '../../services/service_locator.dart';
+import '../../test/simulation_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/metric_tile.dart';
@@ -60,8 +62,12 @@ class _RunScreenState extends State<RunScreen> {
     }
   }
 
-  Future<void> _start() async {
-    final availability = await _tracker.start(course: widget.course);
+  /// [source]를 주면 실제 GPS 대신 그 위치원으로 달린다(디버그 빌드의 시뮬레이션).
+  Future<void> _start({LocationService? source}) async {
+    final availability = await _tracker.start(
+      course: widget.course,
+      source: source,
+    );
     if (availability.isReady || !mounted) return;
 
     _showPermissionSheet(availability);
@@ -175,7 +181,9 @@ class _RunScreenState extends State<RunScreen> {
                   const Spacer(),
                   _ControlPanel(
                     tracker: tracker,
+                    coursePath: widget.course?.path ?? const [],
                     onStart: _start,
+                    onStartSimulation: (source) => _start(source: source),
                     onPause: tracker.pause,
                     onResume: tracker.resume,
                     onFinish: _finish,
@@ -254,14 +262,18 @@ class _TopBar extends StatelessWidget {
 class _ControlPanel extends StatelessWidget {
   const _ControlPanel({
     required this.tracker,
+    required this.coursePath,
     required this.onStart,
+    required this.onStartSimulation,
     required this.onPause,
     required this.onResume,
     required this.onFinish,
   });
 
   final RunTracker tracker;
+  final List<GeoPoint> coursePath;
   final VoidCallback onStart;
+  final void Function(LocationService source) onStartSimulation;
   final VoidCallback onPause;
   final VoidCallback onResume;
   final VoidCallback onFinish;
@@ -310,7 +322,9 @@ class _ControlPanel extends StatelessWidget {
           const SizedBox(height: 24),
           _Controls(
             tracker: tracker,
+            coursePath: coursePath,
             onStart: onStart,
+            onStartSimulation: onStartSimulation,
             onPause: onPause,
             onResume: onResume,
             onFinish: onFinish,
@@ -324,14 +338,18 @@ class _ControlPanel extends StatelessWidget {
 class _Controls extends StatelessWidget {
   const _Controls({
     required this.tracker,
+    required this.coursePath,
     required this.onStart,
+    required this.onStartSimulation,
     required this.onPause,
     required this.onResume,
     required this.onFinish,
   });
 
   final RunTracker tracker;
+  final List<GeoPoint> coursePath;
   final VoidCallback onStart;
+  final void Function(LocationService source) onStartSimulation;
   final VoidCallback onPause;
   final VoidCallback onResume;
   final VoidCallback onFinish;
@@ -339,9 +357,23 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (tracker.status) {
-      RunStatus.idle || RunStatus.finished => FilledButton(
-        onPressed: onStart,
-        child: const Text('러닝 시작'),
+      // 시뮬레이션 버튼은 디버그 빌드에서만 그려진다(SimulationStartButton 참고).
+      RunStatus.idle || RunStatus.finished => Row(
+        children: [
+          Expanded(
+            child: FilledButton(
+              onPressed: onStart,
+              child: const Text('러닝 시작'),
+            ),
+          ),
+          if (kDebugMode) ...[
+            const SizedBox(width: 12),
+            SimulationStartButton(
+              coursePath: coursePath,
+              onStart: onStartSimulation,
+            ),
+          ],
+        ],
       ),
       RunStatus.running => Row(
         children: [

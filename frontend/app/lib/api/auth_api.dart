@@ -1,3 +1,4 @@
+import '../models/user.dart';
 import '../network/api_client.dart';
 
 class TokenPair {
@@ -56,6 +57,12 @@ class AuthApi {
       data: {'id_token': idToken},
     );
     return TokenPair.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// 현재 로그인한 사용자. role이 담겨 있어 admin 전용 UI 판단에 쓴다.
+  Future<User> fetchMe() async {
+    final response = await _client.dio.get('/auth/me');
+    return User.fromJson(response.data as Map<String, dynamic>);
   }
 
   /// 로그인 직후(닉네임 없을 때) 닉네임 설정 화면에서 호출한다.

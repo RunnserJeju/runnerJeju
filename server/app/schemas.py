@@ -57,6 +57,22 @@ class NicknameUpdate(BaseModel):
     nickname: str = Field(min_length=1, max_length=20)
 
 
+class UserOut(BaseModel):
+    """현재 로그인한 사용자. 앱이 admin 전용 UI를 보일지 정하는 데 쓴다.
+
+    권한 판정 자체는 서버가 `require_admin`으로 하고, 여기서 내려주는 role은
+    "보여줄지 말지"를 정하는 용도다. 이 값을 위조해도 서버가 403으로 막는다.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    nickname: str | None
+    email: str | None
+    profile_image_url: str | None
+    role: str
+
+
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str

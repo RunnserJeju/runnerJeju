@@ -4,9 +4,8 @@ import '../../services/service_locator.dart';
 
 /// 공지사항 작성 화면.
 ///
-/// TODO: 지금은 로그인만 하면 진입 버튼이 보인다. User.role이 admin인 계정만
-/// 버튼이 보이도록 나중에 제한한다 (제출 자체는 서버가 admin만 허용하므로
-/// 지금도 일반 유저가 눌러도 403으로 막힌다).
+/// 진입 버튼은 [AdminOnly]로 admin에게만 보이고, 제출은 서버가 `require_admin`으로
+/// 막는다. 화면 자체에는 권한 검사를 두지 않는다 — 최종 판정은 서버 몫이다.
 class NoticeCreateScreen extends StatefulWidget {
   const NoticeCreateScreen({super.key});
 
