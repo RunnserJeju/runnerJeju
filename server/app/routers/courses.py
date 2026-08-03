@@ -8,7 +8,7 @@ from app import gpx
 from app.db import get_db
 from app.deps import current_user_id
 from app.models import Course, Stamp
-from app.schemas import CourseCreate, CourseSummary, Difficulty
+from app.schemas import CourseCreate, CourseListItem, CourseSummary, Difficulty
 
 router = APIRouter(tags=["courses"])
 
@@ -78,7 +78,7 @@ def _unique_slug(db: Session, base: str) -> str:
     return candidate
 
 
-@router.get("/courses", response_model=list[CourseSummary])
+@router.get("/courses", response_model=list[CourseListItem])
 def list_courses(
     region: str | None = Query(default=None),
     keyword: str | None = Query(default=None),

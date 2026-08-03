@@ -80,8 +80,13 @@ class CourseCreate(BaseModel):
     path: list[GeoPointSchema]
 
 
-class CourseSummary(BaseModel):
-    """목록용. 경로 좌표까지 모두 내려준다(앱에서 미리보기를 그릴 수 있게)."""
+class CourseListItem(BaseModel):
+    """목록용. 카드에 필요한 것만 담고 경로 좌표는 뺀다.
+
+    좌표는 코스 하나에 수백 개라 목록 응답을 가장 크게 만드는데, 목록 화면은
+    지도를 그리지 않고 카드를 눌러도 상세를 다시 받아온다. 목록에서 미리보기를
+    그리게 되면 전체 좌표 대신 줄인 좌표를 따로 내리는 편이 낫다.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,10 +100,15 @@ class CourseSummary(BaseModel):
     estimated_duration_sec: int | None
     elevation_gain_meters: float | None
     thumbnail_url: str | None
-    path: list[GeoPointSchema]
     is_loop: bool
     completed_count: int
     is_completed_by_me: bool
+
+
+class CourseSummary(CourseListItem):
+    """상세/생성 응답. 지도에 그릴 경로 좌표까지 포함한다."""
+
+    path: list[GeoPointSchema]
 
 
 # --- 러닝 기록 ------------------------------------------------------------
