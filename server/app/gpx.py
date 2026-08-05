@@ -27,6 +27,10 @@ LOOP_THRESHOLD_METERS = 50.0
 # 코스로 인정하는 최소 점 개수. 2점이면 직선 하나라 코스라 부르기 어렵다.
 MIN_POINTS = 3
 
+# 저장용 경로의 리샘플 간격(m). 러닝 기록(5m 필터)보다 성기고 검증 tolerance(30m)보다
+# 촘촘해야 한다: 기록 간격 < 리샘플 간격 < tolerance. 자세한 배경은 resample_path 참고.
+RESAMPLE_INTERVAL_METERS = 15.0
+
 
 class GpxParseError(ValueError):
     """GPX를 코스로 만들 수 없을 때. message는 그대로 사용자에게 보여진다."""
@@ -58,6 +62,14 @@ class ParsedCourse:
     distance_meters: float
     elevation_gain_meters: float | None
     is_loop: bool
+
+    # 균등 간격(RESAMPLE_INTERVAL_METERS)으로 다시 찍은 경로. DB에 저장되어
+    # 지도 그리기와 검증 매칭률 계산에 쓰인다 — 매칭률이 "코스 거리의 몇 %"라는
+    # 직관과 일치하려면 점 밀도가 균등해야 한다(geo.resample_path 참고).
+    #
+    # 점별 고도는 담지 않는다. 보간한 점의 고도는 계산해봐야 추정치이고,
+    # 앱에서 점별 고도를 쓰는 곳이 없다(코스 고도는 elevation_gain_meters 하나로 충분).
+    resampled_points: list[TrackPoint]
 
     @property
     def coordinates(self) -> list[geo.Point]:
@@ -208,6 +220,10 @@ def parse(content: bytes) -> ParsedCourse:
         elevation_gain_meters=gain,
         is_loop=geo.distance_meters(coordinates[0], coordinates[-1])
         <= LOOP_THRESHOLD_METERS,
+        resampled_points=[
+            TrackPoint(lat=lat, lng=lng)
+            for lat, lng in geo.resample_path(coordinates, RESAMPLE_INTERVAL_METERS)
+        ],
     )
 
 

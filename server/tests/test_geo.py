@@ -81,6 +81,96 @@ class TestSegmentDistance:
         assert geo.distance_to_path_meters(JEJU_CITY_HALL, []) == float("inf")
 
 
+class TestResample:
+    """코스 리샘플링 — 불균등한 GPX 점을 균등 간격으로 다시 찍는다."""
+
+    def test_short_paths_returned_as_is(self):
+        assert geo.resample_path([], 15.0) == []
+        assert geo.resample_path([JEJU_CITY_HALL], 15.0) == [JEJU_CITY_HALL]
+
+    def test_rejects_non_positive_interval(self):
+        with pytest.raises(ValueError):
+            geo.resample_path([(33.20, 126.30), (33.21, 126.30)], 0)
+
+    def test_uniform_spacing_on_straight_line(self):
+        # 정북으로 약 111m 직선. 15m 간격이면 마지막 구간만 짧고 나머지는 전부 15m.
+        path = [(33.2000, 126.3000), (33.2010, 126.3000)]
+        resampled = geo.resample_path(path, 15.0)
+
+        gaps = [
+            geo.distance_meters(resampled[i], resampled[i + 1])
+            for i in range(len(resampled) - 1)
+        ]
+        assert all(gap == pytest.approx(15.0, abs=0.1) for gap in gaps[:-1])
+        assert gaps[-1] <= 15.1
+
+    def test_preserves_endpoints(self):
+        path = [(33.2000, 126.3000), (33.2010, 126.3005), (33.2013, 126.3020)]
+        resampled = geo.resample_path(path, 15.0)
+
+        assert resampled[0] == path[0]
+        assert geo.distance_meters(resampled[-1], path[-1]) < 0.01
+
+    def test_spacing_crosses_segment_boundaries(self):
+        # 원본 점 간격(약 7m씩)이 리샘플 간격보다 촘촘해도, 세그먼트 경계를 넘어
+        # 거리를 누적해서 15m마다 찍어야 한다.
+        path = [(33.2000 + i * 0.00006, 126.3000) for i in range(20)]
+        resampled = geo.resample_path(path, 15.0)
+
+        gaps = [
+            geo.distance_meters(resampled[i], resampled[i + 1])
+            for i in range(len(resampled) - 1)
+        ]
+        assert all(gap == pytest.approx(15.0, abs=0.1) for gap in gaps[:-1])
+
+    def test_uneven_input_becomes_uniform(self):
+        # 성긴 구간(111m)과 촘촘한 구간(11m×5)이 섞인 경로 → 출력 간격은 균일해야 한다.
+        sparse_then_dense = [
+            (33.2000, 126.3000),
+            (33.2010, 126.3000),  # 111m 점프
+            *[(33.2010 + i * 0.0001, 126.3000) for i in range(1, 6)],  # 11m 간격
+        ]
+        resampled = geo.resample_path(sparse_then_dense, 15.0)
+
+        gaps = [
+            geo.distance_meters(resampled[i], resampled[i + 1])
+            for i in range(len(resampled) - 1)
+        ]
+        assert all(gap == pytest.approx(15.0, abs=0.1) for gap in gaps[:-1])
+
+    def test_new_points_lie_on_original_polyline(self):
+        # 꺾인 경로를 리샘플해도 새 점은 원본 꺾은선 위에 있어야 한다(경로 왜곡 금지).
+        bent = [(33.2000, 126.3000), (33.2010, 126.3000), (33.2010, 126.3012)]
+        resampled = geo.resample_path(bent, 15.0)
+
+        for point in resampled:
+            assert geo.distance_to_path_meters(point, bent) < 0.5
+
+    def test_total_length_preserved(self):
+        # 점은 전부 원본 선 위에 있으므로 경로 길이가 달라지면 안 된다.
+        path = [(33.2000, 126.3000), (33.2010, 126.3005), (33.2020, 126.3000)]
+        original = geo.path_length_meters(path)
+        resampled = geo.path_length_meters(geo.resample_path(path, 15.0))
+
+        assert resampled == pytest.approx(original, rel=0.001)
+
+    def test_interval_longer_than_path(self):
+        # 전체 길이(약 111m)보다 긴 간격이면 시작점과 끝점만 남는다.
+        path = [(33.2000, 126.3000), (33.2005, 126.3000), (33.2010, 126.3000)]
+        assert geo.resample_path(path, 500.0) == [path[0], path[-1]]
+
+    def test_skips_duplicate_points(self):
+        # 같은 좌표가 연달아 있어도(0m 세그먼트) 0으로 나누지 않고 건너뛴다.
+        path = [(33.2000, 126.3000), (33.2000, 126.3000), (33.2010, 126.3000)]
+        resampled = geo.resample_path(path, 15.0)
+
+        gaps = [
+            geo.distance_meters(resampled[i], resampled[i + 1])
+            for i in range(len(resampled) - 1)
+        ]
+        assert all(gap == pytest.approx(15.0, abs=0.1) for gap in gaps[:-1])
+
+
 class TestJejuBounds:
     def test_accepts_jeju(self):
         assert geo.is_within_jeju([JEJU_CITY_HALL, (33.2285, 126.3064)])

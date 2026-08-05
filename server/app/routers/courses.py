@@ -209,7 +209,10 @@ def upsert_course_from_gpx_bytes(
     course.estimated_duration_sec = estimated_duration_sec
     course.thumbnail_url = thumbnail_url
 
-    course.path = [point.to_json() for point in parsed.points]
+    # 원본 GPX 점이 아니라 균등 간격으로 리샘플한 경로를 저장한다.
+    # 검증 매칭률이 "코스 거리의 몇 %"와 일치하려면 점 밀도가 균등해야 하고,
+    # 클라이언트도 이 경로를 그대로 받아 실시간 커버리지 계산의 기준점으로 쓴다.
+    course.path = [point.to_json() for point in parsed.resampled_points]
     course.distance_meters = parsed.distance_meters
     course.elevation_gain_meters = parsed.elevation_gain_meters
     course.is_loop = parsed.is_loop

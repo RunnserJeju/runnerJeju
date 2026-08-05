@@ -2,8 +2,8 @@
 
 `verification.py`와 마찬가지로 순수 함수만 담는다. 다만 두 모듈을 서로 import하지는
 않는다 — `verification.py`는 나중에 검증 서버로 통째로 떼어낼 파일이라 의존성을 하나도
-갖지 않는 편이 낫고, 그래서 Haversine 구현이 양쪽에 각각 있다. 10줄짜리 중복을 감수하고
-그 파일의 이식성을 지키는 쪽을 택했다 (docs/architecture.md 참고).
+갖지 않는 편이 낫고, 그래서 Haversine과 점-선분 거리 구현이 양쪽에 각각 있다.
+수십 줄짜리 중복을 감수하고 그 파일의 이식성을 지키는 쪽을 택했다 (docs/architecture.md 참고).
 """
 
 from math import asin, atan2, cos, degrees, radians, sin, sqrt
@@ -99,6 +99,52 @@ def distance_to_path_meters(point: Point, path: list[Point]) -> float:
         distance_to_segment_meters(point, path[i], path[i + 1])
         for i in range(len(path) - 1)
     )
+
+
+def resample_path(path: list[Point], interval_meters: float) -> list[Point]:
+    """경로를 따라 interval_meters 간격으로 점을 다시 찍는다.
+
+    코스 GPX는 사람이 그린 것이라 점 밀도가 불균등하다(곡선은 촘촘, 직선은 성김 —
+    사계해안도로는 평균 30m, 최장 252m). 이대로 "커버된 점 개수 비율"을 매칭률로
+    쓰면 점이 몰린 구간에 가중치가 쏠려서, 사용자가 이해하는 "코스 거리의 몇 %"와
+    어긋난다. 균등 간격으로 리샘플링하면 점 개수 비율이 곧 거리 비율이 된다.
+
+    새 점은 원본 꺾은선 위에 놓인다(두 점 사이 선형 보간 — 수십 m 간격에서
+    구면 오차는 무시할 수준). 시작점과 끝점은 원본 그대로 보존하므로 순환 판정과
+    시작/종료 지점 확인에 그대로 쓸 수 있다. 마지막 구간만 interval보다 짧을 수 있다.
+    """
+    if interval_meters <= 0:
+        raise ValueError("interval_meters는 양수여야 한다.")
+    if len(path) < 2:
+        return list(path)
+
+    result = [path[0]]
+    # 직전에 찍은 점 이후로 걸어온 거리. 세그먼트 경계를 넘어 누적된다.
+    walked = 0.0
+
+    for start, end in zip(path, path[1:]):
+        seg_len = distance_meters(start, end)
+        if seg_len == 0:
+            continue
+
+        # 이 세그먼트 안에서 다음 점을 찍을 위치(세그먼트 시작 기준 거리).
+        offset = interval_meters - walked
+        while offset <= seg_len:
+            t = offset / seg_len
+            result.append(
+                (
+                    start[0] + (end[0] - start[0]) * t,
+                    start[1] + (end[1] - start[1]) * t,
+                )
+            )
+            offset += interval_meters
+        walked = seg_len - (offset - interval_meters)
+
+    # 끝점 보존. 마지막으로 찍힌 점이 사실상 끝점이면 중복을 만들지 않는다.
+    if distance_meters(result[-1], path[-1]) > 1e-6:
+        result.append(path[-1])
+
+    return result
 
 
 def elevation_gain_meters(elevations: list[float], threshold: float = 3.0) -> float:

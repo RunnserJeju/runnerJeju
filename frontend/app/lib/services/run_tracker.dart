@@ -31,10 +31,15 @@ class RunTracker extends ChangeNotifier {
   RunningCourse? _targetCourse;
   GeoPoint? _lastPosition;
 
-  /// 완주로 인정하는 코스 진행률(서버 판정 전 UI용 기준).
+  /// 완주 힌트를 띄우는 코스 진행률(UI용).
+  ///
+  /// 서버 기준(코스의 85% — verification.DEFAULT_MIN_DISTANCE_RATIO)보다 일부러
+  /// 엄격하다. 힌트가 서버보다 엄격한 방향의 불일치는 안전하다 — 힌트가 떴는데
+  /// 서버가 거절하는 일은 없고, 힌트 없이 통과하는 경우만 생긴다.
   static const double _completionRatio = 0.9;
 
-  /// 코스 종료 지점으로 인정하는 반경(m).
+  /// 코스 종료 지점 도달로 보는 반경(m). UI 힌트 전용 —
+  /// 서버는 종료 지점 도달을 요구하지 않는다(기준이 완주가 아니라 85%).
   static const double _finishRadiusMeters = 60;
 
   RunStatus get status => _status;
