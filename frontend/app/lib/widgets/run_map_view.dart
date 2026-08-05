@@ -60,6 +60,19 @@ class _RunMapViewState extends State<RunMapView> {
   bool _hasFittedCourse = false;
   bool _disposed = false;
 
+  // 러닝 중 카메라에 지정할 배율.
+  //
+  // 매번 명시적인 값을 넘겨야 한다. CameraUpdate.newCenterPosition의 zoomLevel을
+  // 비우면 SDK가 -1을 보내는데, iOS 네이티브(CameraTypeConverter.swift:28)는
+  // "키가 없을 때"만 현재 배율로 대체하고 -1은 그대로 배율로 써버린다. 그러면
+  // 지도가 최소 배율(전국)로 빠진다.
+  //
+  // 그래서 배율을 여기서 직접 들고 있는다. 러닝을 시작할 때 _runningZoomLevel로
+  // 맞추고, 사용자가 손으로 확대/축소하면 onCameraMoveEnd로 그 값을 받아 따른다.
+  // 그래야 달리는 중에 축소해서 앞길을 봐도 다음 위치 갱신에 되돌아가지 않는다.
+  int _followZoomLevel = _runningZoomLevel;
+  bool _isFollowing = false;
+
   // 네이티브 키 인증에 실패하면 지도는 아무것도 그리지 않은 채 빈 화면으로 남는다.
   // 그대로 두면 키 문제인지, 좌표 문제인지, 빌드 문제인지 구분할 수 없어서
   // 오류를 붙잡아 원인과 조치를 화면에 띄운다.
@@ -75,6 +88,10 @@ class _RunMapViewState extends State<RunMapView> {
 
   /// 지도 초기 확대 수준. 값이 클수록 확대된다.
   static const int _initialZoomLevel = 16;
+
+  /// 러닝 중 확대 수준. 코스 전체가 아니라 발밑 몇 십 미터를 보는 화면이라
+  /// 초기값보다 더 당긴다.
+  static const int _runningZoomLevel = 18;
 
   /// 현재 위치 마커의 반지름(m).
   static const double _currentPositionRadius = 12;
@@ -130,6 +147,10 @@ class _RunMapViewState extends State<RunMapView> {
         _controller = controller;
         _redraw();
       },
+      // 사용자가 손으로 바꾼 배율을 러닝 중 카메라 추적에 이어서 쓴다.
+      // 우리가 옮긴 경우에도 불리지만, 방금 지정한 값이 그대로 돌아올 뿐이다.
+      onCameraMoveEnd: (cameraPosition, _) =>
+          _followZoomLevel = cameraPosition.zoomLevel,
       onMapError: _handleMapError,
     );
   }
@@ -263,11 +284,23 @@ class _RunMapViewState extends State<RunMapView> {
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {
     final position = widget.currentPosition;
     if (widget.followCurrentPosition && position != null) {
+      // 러닝이 막 시작됐으면 코스 전체를 보던 배율에서 러닝용 배율로 당긴다.
+      if (!_isFollowing) {
+        _isFollowing = true;
+        _followZoomLevel = _runningZoomLevel;
+      }
+
       await controller.moveCamera(
-        kakao.CameraUpdate.newCenterPosition(_toLatLng(position)),
+        kakao.CameraUpdate.newCenterPosition(
+          _toLatLng(position),
+          zoomLevel: _followZoomLevel,
+        ),
       );
       return;
     }
+
+    // 러닝이 끝났으면 다음 러닝에서 다시 당길 수 있게 되돌린다.
+    _isFollowing = false;
 
     // 코스를 처음 받아왔을 때 한 번만 전체가 보이도록 맞춘다.
     if (!_hasFittedCourse && widget.coursePath.length >= 2) {
