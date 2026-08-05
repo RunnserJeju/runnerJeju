@@ -53,7 +53,8 @@ class _RunMapViewState extends State<RunMapView> {
   // changePoint/changePosition으로 제자리 갱신해야 러닝 중 깜빡임이 없다.
   kakao.Route? _courseRoute;
   kakao.Route? _runRoute;
-  // addPolygonShape는 Polygon<CirclePoint>가 아니라 Polygon을 반환하므로 그대로 받는다.
+  // 현재 위치 마커. 원형이지만 SDK의 CirclePoint가 아니라 MapPoint로 그린다 —
+  // 이유는 [_drawCurrentPosition]에 적어 뒀다.
   kakao.Polygon? _currentPositionMarker;
 
   bool _hasFittedCourse = false;
@@ -220,6 +221,15 @@ class _RunMapViewState extends State<RunMapView> {
     return existing;
   }
 
+  /// 현재 위치를 원형 마커로 그린다.
+  ///
+  /// 원인데도 SDK의 [kakao.CirclePoint] 대신 [kakao.MapPoint]에 직접 만든
+  /// 다각형을 넘기는 이유: kakao_map_sdk 1.2.6에서 CirclePoint·RectanglePoint를
+  /// 넘기면 iOS가 크래시한다. 이 둘의 부모인 _BaseDotPoint.toMessageable()이
+  /// payload에 "type" 키를 빼먹는데, 네이티브(ShapeControllerHandler.swift:97)는
+  /// `position["type"]!`로 강제 언래핑해서 그대로 죽는다. MapPoint는
+  /// toMessageable()이 "type"을 넣어주므로 이 경로를 타지 않는다.
+  /// addPolygonShape와 changePosition 양쪽 다 해당된다.
   Future<void> _drawCurrentPosition(kakao.KakaoMapController controller) async {
     final position = widget.currentPosition;
 
@@ -232,9 +242,10 @@ class _RunMapViewState extends State<RunMapView> {
       return;
     }
 
-    final point = kakao.CirclePoint(
-      _currentPositionRadius,
-      _toLatLng(position),
+    final point = kakao.MapPoint(
+      GeoUtils.circleAround(position, _currentPositionRadius)
+          .map(_toLatLng)
+          .toList(),
     );
 
     final existing = _currentPositionMarker;

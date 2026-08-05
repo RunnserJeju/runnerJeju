@@ -77,5 +77,28 @@ class GeoUtils {
     return nearest;
   }
 
+  /// [center]를 중심으로 반지름 [radiusMeters]인 원을 근사하는 다각형의 꼭짓점.
+  ///
+  /// 지도 SDK의 원형 도형(CirclePoint)을 쓰지 않고 직접 만드는 이유는
+  /// run_map_view.dart의 _drawCurrentPosition에 적어 뒀다 — SDK의 원형 도형이
+  /// iOS에서 크래시한다.
+  static List<GeoPoint> circleAround(
+    GeoPoint center,
+    double radiusMeters, {
+    int vertexCount = 32,
+  }) {
+    // 위도 1도의 길이는 어디서나 거의 같지만, 경도 1도는 극으로 갈수록 짧아진다.
+    final latDelta = radiusMeters / _earthRadiusMeters * 180 / math.pi;
+    final lngDelta = latDelta / math.cos(_toRadians(center.latitude));
+
+    return List.generate(vertexCount, (i) {
+      final theta = 2 * math.pi * i / vertexCount;
+      return GeoPoint(
+        latitude: center.latitude + latDelta * math.cos(theta),
+        longitude: center.longitude + lngDelta * math.sin(theta),
+      );
+    });
+  }
+
   static double _toRadians(double degrees) => degrees * math.pi / 180;
 }

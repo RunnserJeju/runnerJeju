@@ -5,17 +5,7 @@ import '../models/geo_point.dart';
 import '../services/location_service.dart';
 import 'simulated_location_service.dart';
 
-/// 디버그 빌드에서만 보이는 "시뮬레이션으로 달리기" 버튼.
-///
-/// 왜 admin이 아니라 [kDebugMode]인가
-/// --------------------------------
-/// 공지 작성·GPX 등록은 운영 기능이라 admin에게 열어야 하지만, 가짜 GPS는 다르다.
-/// admin 권한으로 열면 시뮬레이터가 배포 바이너리에 실려 나가고, 관리자 계정으로
-/// 가짜 러닝을 실제 서버에 올릴 수 있게 된다. [kDebugMode]는 컴파일 타임 상수라
-/// 릴리스 빌드에서는 이 버튼도 아래 시트도 존재하지 않는다.
-///
-/// 프로파일 선택을 빌드 인자가 아니라 시트로 둔 이유는, 프로파일마다
-/// `--dart-define`을 하나씩 만들면 테스트용 환경변수가 계속 늘어나기 때문이다.
+/// 디버그 빌드에서만 보이는 "시뮬레이션으로 달리기" 버튼. (kDebugMode로 판별 가능)
 class SimulationStartButton extends StatelessWidget {
   const SimulationStartButton({
     super.key,
