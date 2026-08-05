@@ -1,12 +1,5 @@
-# 커밋 컨벤션
+커밋 컨벤션은 작업 내용 잘 설명하기.. 
 
-## 타입
-
-- `feat` — 새 기능
-- `fix` — 버그 수정
-- `docs` — 문서만 변경
-- `chore` — 설정/의존성 등 잡일
-- `refactor` — 동작은 그대로, 구조만 정리
 
 
 
@@ -20,5 +13,5 @@ Android
 
 성현우 컴퓨터에서는
     cd D:\RunnersJeju\runnerJeju\frontend\app
-    flutter run --target-platform android-arm64
+    flutter run -P target-platform=android-arm64 -P disable-abi-filtering=true
 AMD64 ryzen cpu 이슈로 이렇게 arm64로 명시적으로 지정하여 실행 필요

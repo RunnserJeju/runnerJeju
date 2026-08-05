@@ -57,6 +57,10 @@ class _RunMapViewState extends State<RunMapView> {
   // 이유는 [_drawCurrentPosition]에 적어 뒀다.
   kakao.Polygon? _currentPositionMarker;
 
+  // 지도에 실제로 올라가 있는 경로. 같은 점이 다시 들어오면 플랫폼 호출을 건너뛴다.
+  List<GeoPoint>? _drawnCoursePath;
+  List<GeoPoint>? _drawnRunPath;
+
   bool _hasFittedCourse = false;
   bool _disposed = false;
 
@@ -113,7 +117,24 @@ class _RunMapViewState extends State<RunMapView> {
   @override
   void didUpdateWidget(covariant RunMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _redraw();
+    // 러닝 화면은 경과 시간 때문에 1초마다 rebuild된다. 지도에 넣을 값이 그대로면
+    // 다시 그리지 않는다 — 그리기는 전부 플랫폼 왕복이라, 변화 없이 매초 돌리면
+    // 뒤따르는 카메라 이동까지 밀려서 현위치 추적이 끊긴다.
+    if (_hasMapInputChanged(oldWidget)) _redraw();
+  }
+
+  bool _hasMapInputChanged(RunMapView old) =>
+      old.followCurrentPosition != widget.followCurrentPosition ||
+      !identical(old.currentPosition, widget.currentPosition) ||
+      !_isSamePath(old.coursePath, widget.coursePath) ||
+      !_isSamePath(old.runPath, widget.runPath);
+
+  /// 경로는 뒤에 점이 붙기만 하므로 길이와 마지막 점만 보면 같은지 알 수 있다.
+  /// (GeoPoint는 값 비교를 정의하지 않아 identical로 본다 — 점이 추가되면
+  /// 반드시 새 인스턴스라 이걸로 충분하다.)
+  static bool _isSamePath(List<GeoPoint> a, List<GeoPoint> b) {
+    if (a.length != b.length) return false;
+    return a.isEmpty || identical(a.last, b.last);
   }
 
   @override
@@ -186,10 +207,13 @@ class _RunMapViewState extends State<RunMapView> {
         final controller = _controller;
         if (controller == null || _disposed) return;
 
-        await _drawCourse(controller);
-        await _drawRunPath(controller);
+        // 순서가 중요하다. 현위치 마커와 카메라는 점 하나만 보내면 되지만
+        // 경로는 점이 쌓일수록 무거워진다. 경로를 먼저 그리면 러닝이 길어질수록
+        // 현위치 추적이 눈에 띄게 밀리므로, 가벼운 쪽을 앞에 둔다.
         await _drawCurrentPosition(controller);
         await _moveCamera(controller);
+        await _drawCourse(controller);
+        await _drawRunPath(controller);
       } while (_needsRedraw && !_disposed);
     } finally {
       _isRedrawing = false;
@@ -197,23 +221,37 @@ class _RunMapViewState extends State<RunMapView> {
   }
 
   Future<void> _drawCourse(kakao.KakaoMapController controller) async {
+    // 코스는 러닝 내내 바뀌지 않는다. 매 갱신마다 전체 점을 다시 보내면
+    // 코스가 길수록 그대로 낭비다.
+    final points = widget.coursePath;
+    if (_drawnCoursePath != null && _isSamePath(_drawnCoursePath!, points)) {
+      return;
+    }
+
     _courseRoute = await _syncRoute(
       controller,
       existing: _courseRoute,
-      points: widget.coursePath,
+      points: points,
       style: _courseStyle,
       zOrder: _courseZOrder,
     );
+    _drawnCoursePath = points;
   }
 
   Future<void> _drawRunPath(kakao.KakaoMapController controller) async {
+    final points = widget.runPath;
+    if (_drawnRunPath != null && _isSamePath(_drawnRunPath!, points)) {
+      return;
+    }
+
     _runRoute = await _syncRoute(
       controller,
       existing: _runRoute,
-      points: widget.runPath,
+      points: points,
       style: _runStyle,
       zOrder: _runZOrder,
     );
+    _drawnRunPath = points;
   }
 
   /// 선 하나를 현재 [points] 상태에 맞춘다. 점이 부족하면 지우고, 이미 있으면
