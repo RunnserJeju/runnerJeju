@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import gpx
 from app.db import get_db
-from app.deps import current_user_id
+from app.deps import current_user_id, require_admin
 from app.models import Course, Stamp
 from app.schemas import CourseCreate, CourseListItem, CourseSummary, Difficulty
 
@@ -238,16 +238,9 @@ def upsert_course_from_gpx(
     estimated_duration_sec: int | None = Form(default=None),
     thumbnail_url: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
+    user_id: str = Depends(require_admin),
 ):
-    """GPX로 코스를 등록하거나 갱신한다.
-
-    POST가 아니라 PUT인 이유는 이 연산이 멱등이기 때문이다. 같은 slug로 같은 파일을
-    몇 번을 올려도 코스는 하나이고 결과도 같다. 재업로드가 새 코스를 만들면
-    stamps.course_id가 가리키던 완주 스탬프가 고아가 되므로 갱신이어야 한다.
-
-    거리와 고도는 폼으로 받지 않고 GPX에서 계산한다. 파일과 어긋난 값이 들어오는
-    경로를 아예 만들지 않기 위해서다.
+    """GPX로 코스를 등록하거나 갱신한다. **관리자 전용.**
     """
     content = file.file.read(MAX_GPX_BYTES + 1)
     if len(content) > MAX_GPX_BYTES:

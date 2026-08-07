@@ -81,8 +81,8 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 - [x] courses 테이블 (이름, 난이도, 거리, 고도, 설명, 경로 — 경로는 JSONB, 이유는 architecture.md)
 - [x] 코스 목록 조회 API
 - [x] 코스 상세 조회 API
-- [ ] User에 role 컬럼 추가 (user/admin)
-- [x] 코스 등록 API (`PUT /courses/gpx`) — **admin 제한은 아직 없음**
+- [x] User에 role 컬럼 추가 (user/admin)
+- [x] 코스 등록 API (`PUT /courses/gpx`, admin role 필요)
 
 **결정됨**
 - 코스 등록 입력 방식 — **GPX 업로드**로 확정. 관리자가 경로 플래너에서 그려
@@ -92,8 +92,10 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 
 **보류 / 검토 필요**
 - 관리자 신청 셀프서비스 플로우 — 나중 단계
-- `PUT /courses/gpx`에 admin 권한 제한 — 인증이 없어서 지금은 누구나 호출할 수 있다.
-  `deps.current_user_id`를 실제 토큰 검증으로 바꿀 때 함께 막아야 한다.
+- `POST /courses`(달린 경로를 코스로 등록)는 일부러 로그인만 요구한다. 사용자
+  기능으로 설계된 엔드포인트라 admin으로 막지 않았다. 다만 지금 앱에서 이걸 부르는
+  화면이 없으니, 공식 코스만 남길 생각이면 이 엔드포인트를 admin으로 올리거나
+  아예 지우는 쪽을 정해야 한다.
 
 ### Running Record
 
@@ -134,7 +136,7 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 - [x] 공지사항 작성 API (`POST /notices`, admin role 필요)
 - [x] 앱: 더미 데이터 → API 연동으로 교체
 - [x] 공지 작성 화면 (홈 AppBar 버튼 → `NoticeCreateScreen`)
-- [ ] 작성 버튼 admin 전용으로 제한 — 지금은 로그인만 하면 버튼이 보임(제출 자체는 서버가 admin만 허용)
+- [x] 작성 버튼 admin 전용으로 제한 (`AdminOnly` 위젯 — 화면 정리용, 권한 판정은 서버)
 
 **보류 / 검토 필요**
 - 관리자 화면 필요 시점 — 당장은 사람이 API로 직접 등록, 필요해지면 앱/웹에 작성 화면 추가
