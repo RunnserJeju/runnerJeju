@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
 import '../models/geo_point.dart';
 import '../models/run_record.dart';
 import '../models/running_course.dart';
+import '../utils/course_coverage.dart';
 import '../utils/geo_utils.dart';
 import 'location_service.dart';
 
@@ -30,17 +32,14 @@ class RunTracker extends ChangeNotifier {
   DateTime? _endedAt;
   RunningCourse? _targetCourse;
   GeoPoint? _lastPosition;
+  CourseCoverageTracker? _coverage;
 
-  /// 완주 힌트를 띄우는 코스 진행률(UI용).
-  ///
-  /// 서버 기준(코스의 85% — verification.DEFAULT_MIN_DISTANCE_RATIO)보다 일부러
-  /// 엄격하다. 힌트가 서버보다 엄격한 방향의 불일치는 안전하다 — 힌트가 떴는데
-  /// 서버가 거절하는 일은 없고, 힌트 없이 통과하는 경우만 생긴다.
-  static const double _completionRatio = 0.9;
-
-  /// 코스 종료 지점 도달로 보는 반경(m). UI 힌트 전용 —
-  /// 서버는 종료 지점 도달을 요구하지 않는다(기준이 완주가 아니라 85%).
-  static const double _finishRadiusMeters = 60;
+  /// 인정에 필요한 커버리지와 주행 거리 비율. 서버 판정과 **같은 값이어야 한다**
+  /// (verification.DEFAULT_MATCH_THRESHOLD / DEFAULT_MIN_DISTANCE_RATIO).
+  /// [hasReachedCourseGoal]이 서버가 matched를 줄 상태를 정확히 미러링해야,
+  /// 완주 버튼을 눌렀는데 서버가 거절하는 배신이 구조적으로 불가능해진다.
+  static const double _matchThreshold = 0.85;
+  static const double _minDistanceRatio = 0.85;
 
   RunStatus get status => _status;
   List<GeoPoint> get path => List.unmodifiable(_path);
@@ -61,26 +60,46 @@ class RunTracker extends ChangeNotifier {
     return _elapsed.inSeconds / (_distanceMeters / 1000);
   }
 
-  /// 코스 진행률 0.0~1.0. 자유 러닝이면 null.
-  double? get courseProgress {
+  /// 코스 커버리지 0.0~1.0(코스 점 중 실제로 지나간 비율). 자유 러닝이면 null.
+  ///
+  /// 서버 검증의 match_rate와 같은 개념·같은 로직이다(CourseCoverageTracker 참고).
+  double? get courseCoverage =>
+      _targetCourse == null ? null : _coverage?.ratio;
+
+  /// 누적 주행 거리 ÷ 코스 거리 (1.0 초과 가능). 자유 러닝이면 null.
+  double? get _distanceRatio {
     final course = _targetCourse;
     if (course == null || course.distanceMeters <= 0) return null;
-    return (_distanceMeters / course.distanceMeters).clamp(0.0, 1.0);
+    return _distanceMeters / course.distanceMeters;
   }
 
-  /// 코스 완주 조건 충족 여부(거리 + 종료 지점 도달). 최종 판정은 서버가 한다.
+  /// 화면에 보여주는 코스 진행도 0.0~1.0. 자유 러닝이면 null.
+  ///
+  /// 서버가 보는 두 숫자(커버리지, 거리 비율) 중 **낮은 쪽**이다. 둘 다 85%를
+  /// 넘어야 인정되므로 낮은 쪽이 곧 "인정까지의 진행도"다.
+  ///
+  /// 커버리지만 보여주면 왕복 코스에서 반환점(거리 절반)에 이미 100%가 떠서
+  /// 혼란스럽다 — 복로가 왕로의 tolerance 안이라 편도만 뛰어도 코스 점이 전부
+  /// 커버되기 때문. min을 취하면 반환점에 50%가 표시되고, 코스를 벗어나면
+  /// 커버리지가 멈춰 바도 멈춘다.
+  double? get courseProgress {
+    final coverage = courseCoverage;
+    final distanceRatio = _distanceRatio;
+    if (coverage == null || distanceRatio == null) return null;
+    return math.min(coverage, distanceRatio).clamp(0.0, 1.0);
+  }
+
+  /// 서버가 matched를 줄 조건(커버리지 85% + 거리 85%)을 채웠는지.
+  ///
+  /// 이 값이 true가 되면 화면에 완주(종료) 버튼이 나타난다. 자동으로 종료하지는
+  /// 않는다 — 더 달리고 싶은 사람을 끊어버리고, 조건 판정의 잔버그가 곧바로
+  /// "종료를 못 하는 버그"가 되기 때문이다. 종료는 항상 사용자의 버튼으로만.
   bool get hasReachedCourseGoal {
-    final course = _targetCourse;
-    final endPoint = course?.endPoint;
-    final position = _lastPosition;
-    if (course == null || endPoint == null || position == null) return false;
+    final coverage = courseCoverage;
+    final distanceRatio = _distanceRatio;
+    if (coverage == null || distanceRatio == null) return false;
 
-    final coveredEnough =
-        _distanceMeters >= course.distanceMeters * _completionRatio;
-    final atFinish =
-        GeoUtils.distanceBetween(position, endPoint) <= _finishRadiusMeters;
-
-    return coveredEnough && atFinish;
+    return coverage >= _matchThreshold && distanceRatio >= _minDistanceRatio;
   }
 
   /// 러닝 시작. [course]를 주면 코스를 따라 달리는 러닝이 된다.
@@ -99,6 +118,9 @@ class RunTracker extends ChangeNotifier {
 
     _reset();
     _targetCourse = course;
+    _coverage = course == null || course.path.isEmpty
+        ? null
+        : CourseCoverageTracker(course.path);
     _startedAt = DateTime.now();
     _status = RunStatus.running;
 
@@ -174,6 +196,7 @@ class RunTracker extends ChangeNotifier {
 
     _lastPosition = point;
     _path.add(point);
+    _coverage?.add(point);
     notifyListeners();
   }
 
@@ -199,6 +222,7 @@ class RunTracker extends ChangeNotifier {
     _endedAt = null;
     _targetCourse = null;
     _lastPosition = null;
+    _coverage = null;
   }
 
   @override

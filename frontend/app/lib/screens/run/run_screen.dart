@@ -131,6 +131,12 @@ class _RunScreenState extends State<RunScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    await _completeRun();
+  }
+
+  /// 러닝을 끝내고 결과 화면으로 넘어간다. 수동 종료(확인 다이얼로그 뒤)와
+  /// 완주 자동 종료가 공유하는 경로다.
+  Future<void> _completeRun() async {
     _tracker.finish();
     final record = _tracker.buildRecord();
     if (record == null || !mounted) return;
@@ -176,7 +182,9 @@ class _RunScreenState extends State<RunScreen> {
                   _TopBar(
                     course: widget.course,
                     progress: tracker.courseProgress,
-                    onClose: isActive ? null : () => Navigator.of(context).pop(),
+                    onClose: isActive
+                        ? null
+                        : () => Navigator.of(context).pop(),
                   ),
                   const Spacer(),
                   _ControlPanel(
@@ -233,14 +241,31 @@ class _TopBar extends StatelessWidget {
                   ),
                   if (progress != null) ...[
                     const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 6,
-                        backgroundColor: const Color(0xFFE8EBEF),
-                        valueColor: const AlwaysStoppedAnimation(AppColors.ink),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 6,
+                              backgroundColor: const Color(0xFFE8EBEF),
+                              valueColor: const AlwaysStoppedAnimation(
+                                AppColors.ink,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // 커버리지 숫자. 바만으로는 얼마나 달렸는지 읽기 어렵다.
+                        Text(
+                          '코스 ${(progress! * 100).round()}%',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -361,10 +386,7 @@ class _Controls extends StatelessWidget {
       RunStatus.idle || RunStatus.finished => Row(
         children: [
           Expanded(
-            child: FilledButton(
-              onPressed: onStart,
-              child: const Text('러닝 시작'),
-            ),
+            child: FilledButton(onPressed: onStart, child: const Text('러닝 시작')),
           ),
           if (kDebugMode) ...[
             const SizedBox(width: 12),
@@ -375,6 +397,9 @@ class _Controls extends StatelessWidget {
           ],
         ],
       ),
+      // 완주 조건(서버 인정 기준과 동일)을 채우면 일시정지 옆에 완주 버튼이
+      // 나타난다. 자동 종료는 하지 않는다 — 종료는 항상 사용자의 버튼으로만
+      // (RunTracker.hasReachedCourseGoal 참고).
       RunStatus.running => Row(
         children: [
           Expanded(
@@ -384,6 +409,16 @@ class _Controls extends StatelessWidget {
               label: const Text('일시정지'),
             ),
           ),
+          if (tracker.hasReachedCourseGoal) ...[
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: onFinish,
+                icon: const Icon(Icons.flag_rounded),
+                label: const Text('완주'),
+              ),
+            ),
+          ],
         ],
       ),
       RunStatus.paused => Row(
@@ -428,7 +463,7 @@ class _GoalReachedBanner extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              '완주 지점에 도착했어요! 종료하면 스탬프를 받아요',
+              '완주 조건을 채웠어요! 완주 버튼을 누르면 스탬프를 받아요',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ),
