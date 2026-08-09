@@ -151,7 +151,7 @@ class _RunMapViewState extends State<RunMapView>
   static const int _runningZoomLevel = 18;
 
   /// 현재 위치 마커의 화면 크기(dp). 지도 배율과 무관하게 일정하다.
-  static const int _currentPositionMarkerSize = 28;
+  static const int _currentPositionMarkerSize = 12;
 
   /// 지도 갱신 주기(≈30Hz).
   ///
@@ -167,18 +167,14 @@ class _RunMapViewState extends State<RunMapView>
     6,
   );
   late final kakao.RouteStyle _runStyle = kakao.RouteStyle(AppColors.ink, 7);
-  // TODO: 아이콘(assets/circleMarker.png)을 넘길 수 있게 작업해야함(flutter sdk)
   late final kakao.PoiStyle _currentPositionStyle = kakao.PoiStyle(
     // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
     anchor: const kakao.KPoint(0.5, 0.5),
-    textStyle: [
-      kakao.PoiTextStyle(
-        color: AppColors.ink,
-        size: _currentPositionMarkerSize,
-        stroke: 4,
-        strokeColor: Colors.white,
-      ),
-    ],
+    icon: kakao.KImage.fromAsset(
+      'assets/circleMarker.png',
+      _currentPositionMarkerSize,
+      _currentPositionMarkerSize,
+    ),
   );
 
   @override
@@ -561,16 +557,28 @@ class _RunMapViewState extends State<RunMapView>
 
         // 마커 → 경로 순서. 마커가 카메라 추적 대상이라 먼저 자리를 잡는 편이
         // 화면 흔들림이 적다.
+        //
+        // 호출 사이마다 상태를 다시 본다. await 동안 화면이 사라지거나 러닝이
+        // 초기화되면 이미 걷어낸 오버레이를 이어서 건드리게 된다.
         await marker.move(_toLatLng(position));
-        if (settled.isNotEmpty) await live.append(settled);
-        await live.moveTip(position);
+        if (!_isLiveCurrent(live, marker)) break;
 
+        if (settled.isNotEmpty) await live.append(settled);
+        if (!_isLiveCurrent(live, marker)) break;
+
+        await live.moveTip(position);
         _renderedPosition = position;
       }
     } finally {
       _isRendering = false;
     }
   }
+
+  /// 프레임을 시작할 때 잡아 둔 오버레이가 아직 화면에 살아 있는지.
+  bool _isLiveCurrent(_GrowingRoute live, kakao.Poi marker) =>
+      !_disposed &&
+      identical(_liveRoute, live) &&
+      identical(_currentPositionMarker, marker);
 
   static bool _isSameCoordinate(GeoPoint? a, GeoPoint? b) =>
       a != null &&

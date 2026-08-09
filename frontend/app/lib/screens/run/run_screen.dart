@@ -114,18 +114,23 @@ class _RunScreenState extends State<RunScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        // 대등한 두 선택지라 모양을 같게 두고 텍스트만 바꾼다. 기본 actions는
-        // 폭이 모자라면 버튼을 위아래로 쌓으므로 Row로 직접 좌우에 놓는다.
-        Widget action(String label, bool result) => Expanded(
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              // 테마 기본 여백(24)이면 반쪽 폭에 '계속 달리기'가 안 들어간다.
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(result),
-            child: Text(label, maxLines: 1),
-          ),
-        );
+        // 크기와 모양은 같게 두고 색으로만 구분한다. 
+        Widget action(String label, bool result, {Color? background}) =>
+            Expanded(
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: background,
+                  minimumSize: const Size.fromHeight(44),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  textStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                onPressed: () => Navigator.of(dialogContext).pop(result),
+                child: Text(label, maxLines: 1),
+              ),
+            );
 
         return AlertDialog(
           title: const Text('러닝을 종료할까요?'),
@@ -136,7 +141,7 @@ class _RunScreenState extends State<RunScreen> {
               children: [
                 action('계속 달리기', false),
                 const SizedBox(width: 12),
-                action('종료', true),
+                action('종료', true, background: AppColors.danger),
               ],
             ),
           ],
