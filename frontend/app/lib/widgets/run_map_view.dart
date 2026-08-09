@@ -167,18 +167,18 @@ class _RunMapViewState extends State<RunMapView>
     6,
   );
   late final kakao.RouteStyle _runStyle = kakao.RouteStyle(AppColors.ink, 7);
-  // [진단중] 플러그인 포크의 diag/ios-image-format 브랜치와 함께 쓴다.
-  // iOS에서 아이콘을 넣으면 지도 엔진이 "unsupport png pixel format: 7"로 죽는데,
-  // 그 원인이 플러그인의 이미지 리사이즈인지 확인하는 중이다.
-  // 진단이 끝나면 텍스트 마커로 되돌리거나, 원인을 고치고 이대로 둔다.
+  // TODO: 아이콘(assets/circleMarker.png)을 넘길 수 있게 작업해야함(flutter sdk)
   late final kakao.PoiStyle _currentPositionStyle = kakao.PoiStyle(
     // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
     anchor: const kakao.KPoint(0.5, 0.5),
-    icon: kakao.KImage.fromAsset(
-      'assets/circleMarker.png',
-      _currentPositionMarkerSize,
-      _currentPositionMarkerSize,
-    ),
+    textStyle: [
+      kakao.PoiTextStyle(
+        color: AppColors.ink,
+        size: _currentPositionMarkerSize,
+        stroke: 4,
+        strokeColor: Colors.white,
+      ),
+    ],
   );
 
   @override
