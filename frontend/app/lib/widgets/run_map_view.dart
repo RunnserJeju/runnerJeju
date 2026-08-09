@@ -53,9 +53,9 @@ class _RunMapViewState extends State<RunMapView> {
   // changePoint/changePosition으로 제자리 갱신해야 러닝 중 깜빡임이 없다.
   kakao.Route? _courseRoute;
   kakao.Route? _runRoute;
-  // 현재 위치 마커. 원형이지만 SDK의 CirclePoint가 아니라 MapPoint로 그린다 —
-  // 이유는 [_drawCurrentPosition]에 적어 뒀다.
-  kakao.Polygon? _currentPositionMarker;
+  // 현재 위치 마커. Label(Poi)인 이유는 [_drawCurrentPosition]에 적어 뒀다.
+  kakao.Poi? _currentPositionMarker;
+  bool _isTracking = false;
 
   // 지도에 실제로 올라가 있는 경로. 같은 점이 다시 들어오면 플랫폼 호출을 건너뛴다.
   List<GeoPoint>? _drawnCoursePath;
@@ -97,8 +97,14 @@ class _RunMapViewState extends State<RunMapView> {
   /// 초기값보다 더 당긴다.
   static const int _runningZoomLevel = 18;
 
-  /// 현재 위치 마커의 반지름(m).
-  static const double _currentPositionRadius = 12;
+  /// 현재 위치 마커의 화면 크기(dp). 지도 배율과 무관하게 일정하다.
+  static const int _currentPositionMarkerSize = 28;
+
+  /// 현위치 마커가 새 좌표로 미끄러지는 시간(ms).
+  ///
+  /// 위치는 5m마다 오므로(distanceFilter) 갱신 간격이 6분/km 페이스에서 약 1.8초다.
+  /// 그보다 짧아야 다음 갱신 전에 이동이 끝나고, 애니메이션이 겹치지 않는다.
+  static const int _markerMoveMillis = 900;
 
   /// 코스 전체를 화면에 맞출 때 가장자리에 두는 여백(px).
   static const int _fitPadding = 48;
@@ -108,10 +114,21 @@ class _RunMapViewState extends State<RunMapView> {
     6,
   );
   late final kakao.RouteStyle _runStyle = kakao.RouteStyle(AppColors.ink, 7);
-  late final kakao.PolygonStyle _currentPositionStyle = kakao.PolygonStyle(
-    AppColors.ink,
-    strokeWidth: 3,
-    strokeColor: Colors.white,
+  // TODO: 아이콘(assets/circleMarker.png)으로 되돌린다. 지금 텍스트인 이유는
+  // 플러그인의 iOS 이미지 변환(ReferenceTypeConverter.resize)이 지도 엔진이 못 읽는
+  // 포맷을 만들어 앱이 죽기 때문이다. 플러그인을 고친 뒤 icon: KImage.fromAsset(...)
+  // 으로 교체한다. 이미지를 안 쓰면 그 경로를 아예 타지 않는다.
+  late final kakao.PoiStyle _currentPositionStyle = kakao.PoiStyle(
+    // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
+    anchor: const kakao.KPoint(0.5, 0.5),
+    textStyle: [
+      kakao.PoiTextStyle(
+        color: AppColors.ink,
+        size: _currentPositionMarkerSize,
+        stroke: 4,
+        strokeColor: Colors.white,
+      ),
+    ],
   );
 
   @override
@@ -280,65 +297,65 @@ class _RunMapViewState extends State<RunMapView> {
     return existing;
   }
 
-  /// 현재 위치를 원형 마커로 그린다.
+  /// 현재 위치를 마커로 그린다.
   ///
-  /// 원인데도 SDK의 [kakao.CirclePoint] 대신 [kakao.MapPoint]에 직접 만든
-  /// 다각형을 넘기는 이유: kakao_map_sdk 1.2.6에서 CirclePoint·RectanglePoint를
-  /// 넘기면 iOS가 크래시한다. 이 둘의 부모인 _BaseDotPoint.toMessageable()이
-  /// payload에 "type" 키를 빼먹는데, 네이티브(ShapeControllerHandler.swift:97)는
-  /// `position["type"]!`로 강제 언래핑해서 그대로 죽는다. MapPoint는
-  /// toMessageable()이 "type"을 넣어주므로 이 경로를 타지 않는다.
-  /// addPolygonShape와 changePosition 양쪽 다 해당된다.
+  /// 도형(Shape)이 아니라 Label(Poi)인 이유는 둘이다. 첫째, Poi.move는 네이티브가
+  /// 좌표 사이를 보간해줘서 5m마다 오는 위치가 순간이동으로 보이지 않는다. 둘째,
+  /// TrackingController가 추적할 수 있는 대상이 Poi뿐이다(도형은 안 된다).
+  ///
+  /// 도형 원(CirclePoint)은 애초에 쓸 수 없기도 하다 — kakao_map_sdk 1.2.6에서
+  /// 넘기면 iOS가 크래시한다. _BaseDotPoint.toMessageable()이 payload에 "type"을
+  /// 빼먹는데 네이티브(ShapeControllerHandler.swift:97)가 `position["type"]!`로
+  /// 강제 언래핑한다.
   Future<void> _drawCurrentPosition(kakao.KakaoMapController controller) async {
     final position = widget.currentPosition;
 
     if (position == null) {
       final existing = _currentPositionMarker;
       if (existing != null) {
+        await _stopTracking(controller);
         await existing.remove();
         _currentPositionMarker = null;
       }
       return;
     }
 
-    final point = kakao.MapPoint(
-      GeoUtils.circleAround(position, _currentPositionRadius)
-          .map(_toLatLng)
-          .toList(),
-    );
-
     final existing = _currentPositionMarker;
     if (existing == null) {
-      _currentPositionMarker = await controller.shapeLayer.addPolygonShape(
-        point,
-        _currentPositionStyle,
+      _currentPositionMarker = await controller.labelLayer.addPoi(
+        _toLatLng(position),
+        style: _currentPositionStyle,
+        text: '●',
       );
       return;
     }
 
-    await existing.changePosition(point);
+    await existing.move(_toLatLng(position), _markerMoveMillis);
   }
 
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {
     final position = widget.currentPosition;
     if (widget.followCurrentPosition && position != null) {
       // 러닝이 막 시작됐으면 코스 전체를 보던 배율에서 러닝용 배율로 당긴다.
+      // 위치 갱신마다 카메라를 옮기지는 않는다 — 그건 TrackingController가 한다.
       if (!_isFollowing) {
         _isFollowing = true;
         _followZoomLevel = _runningZoomLevel;
+        await controller.moveCamera(
+          kakao.CameraUpdate.newCenterPosition(
+            _toLatLng(position),
+            zoomLevel: _followZoomLevel,
+          ),
+        );
       }
 
-      await controller.moveCamera(
-        kakao.CameraUpdate.newCenterPosition(
-          _toLatLng(position),
-          zoomLevel: _followZoomLevel,
-        ),
-      );
+      await _startTracking(controller);
       return;
     }
 
     // 러닝이 끝났으면 다음 러닝에서 다시 당길 수 있게 되돌린다.
     _isFollowing = false;
+    await _stopTracking(controller);
 
     // 코스를 처음 받아왔을 때 한 번만 전체가 보이도록 맞춘다.
     if (!_hasFittedCourse && widget.coursePath.length >= 2) {
@@ -350,6 +367,29 @@ class _RunMapViewState extends State<RunMapView> {
         ),
       );
     }
+  }
+
+  /// 카메라가 현위치 마커를 따라다니게 한다.
+  ///
+  /// 우리가 위치 갱신마다 moveCamera를 부르는 것과 결과는 같아 보이지만, 이동을
+  /// 네이티브가 마커 애니메이션과 같은 타임라인으로 처리해서 카메라와 마커가
+  /// 따로 놀지 않는다. 회전 추적(setTrackingRotate)은 켜지 않는다 — 마커가
+  /// 원형이라 방향이 없고, 지도가 돌면 코스 폴리라인만 읽기 어려워진다.
+  Future<void> _startTracking(kakao.KakaoMapController controller) async {
+    final marker = _currentPositionMarker;
+    if (_isTracking || marker == null) return;
+
+    controller.tracking.poi = marker;
+    await controller.tracking.start();
+    _isTracking = true;
+  }
+
+  Future<void> _stopTracking(kakao.KakaoMapController controller) async {
+    if (!_isTracking) return;
+
+    await controller.tracking.stop();
+    controller.tracking.poi = null;
+    _isTracking = false;
   }
 
   static kakao.LatLng _toLatLng(GeoPoint point) =>

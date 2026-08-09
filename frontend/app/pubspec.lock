@@ -483,10 +483,11 @@ packages:
   kakao_map_sdk:
     dependency: "direct main"
     description:
-      name: kakao_map_sdk
-      sha256: cdd355272ec5a7f4c46b50f240150ea93479a9a52441ccc083fb399a9c9392c2
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: runners-jeju
+      resolved-ref: "226d07217e4eba7912a682ea5c175cfbe5296b88"
+      url: "https://github.com/RunnserJeju/flutter_kakao_maps.git"
+    source: git
     version: "1.2.6"
   leak_tracker:
     dependency: transitive
