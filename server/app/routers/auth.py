@@ -138,10 +138,13 @@ def login_with_apple(payload: AppleLoginRequest, db: Session = Depends(get_db)):
         user = User(apple_id=apple_id)
         db.add(user)
 
-    # 이메일은 애플이 최초 인가 시에만 내려주므로, 값이 있을 때만 덮어쓴다.
+    # identityToken의 email 클레임을 우선한다 — 구글처럼 서명이 검증된 값이라, 앱이
+    # 임의로 채울 수 있는 payload.email보다 믿을 수 있다. payload.email은 클레임이
+    # 없을 때(email 스코프 미동의)의 폴백이고, 둘 다 없으면 기존 값을 유지한다.
     # 닉네임은 (카카오와 마찬가지로) provider 값을 안 쓰고 앱에서 직접 받는다.
-    if payload.email:
-        user.email = payload.email
+    email = claims.get("email") or payload.email
+    if email:
+        user.email = email
     db.commit()
     db.refresh(user)
 

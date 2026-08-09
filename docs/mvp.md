@@ -56,9 +56,9 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 - 애플 로그인 — iOS 배포 확정. 소셜 로그인 제공 시 애플 로그인 동반 요구(가이드라인 4.8)라 필수로 전환
 - 회원 탈퇴 — iOS 배포 확정으로 앱스토어 심사 가이드라인(5.1.1v) 상 필수로 전환
 - 카카오/애플 계정 연동 — MVP는 지원 안 함, provider별로 별개 계정. 필요해지면 로그인 상태에서 다른 provider 연동하는 플로우 추가
-- 애플 로그인 서버(`POST /auth/apple`)·클라이언트 코드는 이미 구현돼 있음. Apple Developer
-  계정이 없어서 막힌 건 iOS Sign In with Apple capability뿐 — `frontend/app/ios/Runner/Runner.entitlements`가
-  빈 상태(`<dict></dict>`)라 실기기/시뮬레이터에서 로그인이 안 된다. 아래 "Apple 로그인 복구" 체크리스트로 해결.
+- 애플 로그인 — 시뮬레이터에서 end-to-end 동작 확인 완료(2026-08-09). 시뮬레이터는
+  서명을 안 해서 인증서·프로파일·entitlement 없이 되므로, 팀원도 개발자 계정 없이
+  `flutter run`으로 테스트할 수 있다(setup.md). 실기기·배포는 별도.
 
 **배포 준비 (개발 외)**
 - [ ] 카카오 개발자 계정 생성 + 앱 등록
@@ -69,12 +69,20 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 - [ ] Apple Developer Program 가입 ($99/년)
 - [ ] 카카오 로그인 실 서비스 전환
 
-**Apple 로그인 복구 (Developer Program 가입 후)**
-- [ ] Apple Developer 콘솔에서 App ID(`com.runnersjeju.runnersJeju`)에 Sign In with Apple capability 활성화
-- [ ] Xcode에서 Runner 타깃에 개발팀(Team) 설정
-- [ ] Xcode Signing & Capabilities에서 "Sign in with Apple" 추가 — `Runner.entitlements`에
-  `com.apple.developer.applesignin` 키가 자동으로 채워짐 (수동 편집 불필요)
-- [ ] 실기기 또는 iOS 시뮬레이터에서 `POST /auth/apple` 로그인 플로우 테스트
+**Apple 로그인 (시뮬레이터까지 완료)**
+- [x] Apple Developer Program 가입, App ID에 Sign In with Apple capability 활성화
+- [x] 개발 인증서 발급 (Apple Development, 팀 `G92RR9396W`)
+- [x] `ios/Flutter/Signing.xcconfig`에 Team ID 설정 — 팀 공용이라 커밋해서 공유
+- [x] `Runner.entitlements`에 `com.apple.developer.applesignin` 키 추가. 시뮬레이터
+  빌드에는 적용되지 않지만 실기기·배포 빌드에 필요하다.
+- [x] 시뮬레이터에서 `POST /auth/apple` 플로우 확인 — 유저 생성·닉네임까지 통과
+
+**Apple 로그인 (실기기·배포용, 남음)**
+- [ ] 아이폰 UDID 등록 — 등록 기기 0대면 프로비저닝 프로파일 발급이 거부된다
+- [ ] 실기기 빌드로 App ID capability가 프로파일에 실렸는지 확인 (시뮬레이터에서는
+  검증되지 않는 부분)
+- [ ] 회원 탈퇴 시 애플 토큰 revoke — 심사 5.1.1(v). `.p8` 키 발급 + 앱이
+  `authorizationCode`를 서버로 전달하도록 수정 필요
 
 ### Course
 

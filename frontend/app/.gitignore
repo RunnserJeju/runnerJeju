@@ -32,8 +32,6 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 
-# 개인 서명 정보 — 각자 로컬에서 Signing.xcconfig.sample을 복사해서 만든다.
-ios/Flutter/Signing.xcconfig
 .dart_tool/
 .flutter-plugins-dependencies
 .pub-cache/

@@ -1,0 +1,4 @@
+// 팀 전원이 같은 Apple Developer 팀으로 빌드하므로 Team ID를 커밋해 공유한다.
+// Team ID는 공유해도됨
+//
+DEVELOPMENT_TEAM = G92RR9396W

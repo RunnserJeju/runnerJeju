@@ -128,9 +128,37 @@ VSCode에서 매번 치기 귀찮으면 `frontend/app/.vscode/launch.json.sample
   ```
   앱이 이미 뜨는 상태라면 `KakaoMapSdk.instance.hashKey()`로 실행 중인 빌드의
   키 해시를 직접 찍어볼 수도 있다. 등록한 값과 실제 값이 어긋났을 때 원인 찾기가 빠르다.
-- **iOS 서명**: `frontend/app/ios/Flutter/Signing.xcconfig.sample`을
-  `Signing.xcconfig`로 복사하고 본인 Apple ID Team ID로 채운다. **Xcode의
-  Signing & Capabilities 화면에서 직접 Team을 선택하지 말 것** — Xcode가 그 값을
-  `project.pbxproj`에 다시 박아버려서 다른 사람 로컬 세팅과 충돌한다.
 - Android SDK 36 / Xcode가 처음 세팅된 PC라면 라이선스 동의, 플랫폼 다운로드가
   추가로 필요할 수 있다(`flutter doctor`가 알려준다).
+
+### iOS 애플 로그인 — 시뮬레이터에서 테스트하기
+
+**Apple Developer 계정 없이 된다.** 시뮬레이터 빌드는 서명을 하지 않아서
+(flutter는 실기기 빌드에만 서명 설정을 붙인다) 인증서도 프로비저닝 프로파일도
+entitlement도 개입하지 않고, 시뮬레이터의 Sign in with Apple은 그 선언을 요구하지
+않는다. 그래서 `flutter run` 그대로 쓰면 된다.
+(근데 여기서 하는 말은 클로드가 100번 정도 틀렸고 그냥 현상을 보고 설명해준 말이라 너무 믿으면 안된다.)  
+
+준비물은 시뮬레이터 **설정 앱 최상단에서 Apple ID 로그인**을 해두는 것뿐이다.
+개인 Apple ID면 되고 개발자 계정일 필요는 없다. 로그인이 안 돼 있으면 애플 시트가
+떠도 진행되지 않는다.
+
+각자 자기 Apple ID로 로그인하므로 `sub`가 달라 서버에는 별개 유저로 생성된다.
+
+### iOS 서명 (실기기 빌드 · 배포용)
+
+시뮬레이터만 쓸 거면 이 절은 건너뛰어도 된다. 실기기에 올리거나 배포하려면 그때부터
+인증서와 프로비저닝 프로파일이 필요하다. Team ID는 `ios/Flutter/Signing.xcconfig`에
+커밋돼 있다.
+
+1. Apple Developer 팀(`G92RR9396W`)에 소속돼야 한다.  
+2. Xcode > Settings > Accounts에서 멤버 Apple ID로 로그인한다.
+3. xcode에서 Manage Certificates > `+` > **Apple Development**로 개발 인증서를
+   만든다. 키 생성부터 keychain 설치까지 Xcode가 알아서 한다.
+4. 아이폰을 USB로 연결한 채 빌드하면 기기 등록과 프로파일 발급이 자동으로 된다.
+   **등록된 기기가 0대면 프로파일 발급 자체가 거부된다** — Development 프로파일은
+   "이 기기들에 한해 허용"이 존재 이유라서 기기 목록이 비면 의미가 없기 때문이다.
+
+**Xcode의 Signing & Capabilities 화면에서 Team을 직접 선택하지 말 것** — Xcode가 그
+값을 `project.pbxproj`에 다시 박아버려서 xcconfig로 관리하는 방식이 깨진다. 같은
+이유로 capability 추가도 그 화면 대신 `Runner.entitlements`를 직접 편집한다.
