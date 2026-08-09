@@ -32,7 +32,16 @@ class RunTracker extends ChangeNotifier {
   DateTime? _endedAt;
   RunningCourse? _targetCourse;
   GeoPoint? _lastPosition;
+  GeoPoint? _commitAnchor;
   CourseCoverageTracker? _coverage;
+
+  /// 경로·거리·커버리지에 점을 반영하는 최소 이동 거리(m).
+  ///
+  /// 위치 자체는 1m마다 들어온다([LocationService]) — 현위치 마커를 부드럽게
+  /// 움직이려면 그만큼 촘촘해야 한다. 하지만 그 해상도를 그대로 누적하면
+  /// 제자리에 서 있어도 GPS 지터(보통 2~5m)가 거리로 쌓인다. 화면 갱신은
+  /// 촘촘하게, 기록은 이 게이트를 지난 점만.
+  static const double _commitMeters = 5;
 
   /// 인정에 필요한 커버리지와 주행 거리 비율. 서버 판정과 **같은 값이어야 한다**
   /// (verification.DEFAULT_MATCH_THRESHOLD / DEFAULT_MIN_DISTANCE_RATIO).
@@ -46,6 +55,9 @@ class RunTracker extends ChangeNotifier {
   double get distanceMeters => _distanceMeters;
   Duration get elapsed => _elapsed;
   DateTime? get startedAt => _startedAt;
+
+  /// 가장 최근에 들어온 위치. [path]와 달리 게이트를 거치지 않은 원본이라
+  /// 1m마다 갱신된다 — 지도의 현위치 마커가 이걸 본다.
   GeoPoint? get currentPosition => _lastPosition;
 
   /// 따라 달리는 중인 코스. 자유 러닝이면 null.
@@ -143,8 +155,9 @@ class RunTracker extends ChangeNotifier {
     if (_status != RunStatus.paused) return;
 
     _status = RunStatus.running;
-    // 일시정지 중 이동은 거리에 반영하지 않는다.
-    _lastPosition = null;
+    // 일시정지 중 이동은 거리에 반영하지 않는다. 기준점만 버리고 _lastPosition은
+    // 남긴다 — 그걸 비우면 지도에서 현위치 마커가 잠깐 사라진다.
+    _commitAnchor = null;
     _startTicker();
     notifyListeners();
   }
@@ -189,14 +202,25 @@ class RunTracker extends ChangeNotifier {
   void _onPosition(GeoPoint point) {
     if (_status != RunStatus.running) return;
 
-    final previous = _lastPosition;
-    if (previous != null) {
-      _distanceMeters += GeoUtils.distanceBetween(previous, point);
+    // 마커용 최신 위치는 무조건 갱신한다.
+    _lastPosition = point;
+
+    final anchor = _commitAnchor;
+    if (anchor == null) {
+      // 러닝 시작 직후, 또는 일시정지에서 막 돌아온 첫 점. 기준점만 잡는다.
+      _commitAnchor = point;
+      _path.add(point);
+      _coverage?.add(point);
+    } else {
+      final moved = GeoUtils.distanceBetween(anchor, point);
+      if (moved >= _commitMeters) {
+        _distanceMeters += moved;
+        _commitAnchor = point;
+        _path.add(point);
+        _coverage?.add(point);
+      }
     }
 
-    _lastPosition = point;
-    _path.add(point);
-    _coverage?.add(point);
     notifyListeners();
   }
 
@@ -222,6 +246,7 @@ class RunTracker extends ChangeNotifier {
     _endedAt = null;
     _targetCourse = null;
     _lastPosition = null;
+    _commitAnchor = null;
     _coverage = null;
   }
 

@@ -19,10 +19,14 @@ enum LocationAvailability {
 /// 비즈니스 로직 계층: GPS 권한과 위치 스트림을 앱 도메인 타입으로 감싼다.
 /// UI는 geolocator 타입을 직접 알지 못한다.
 class LocationService {
-  /// 러닝 중 위치 수집 설정. 5m 이상 움직여야 새 점으로 인정한다.
+  /// 러닝 중 위치 수집 설정. 1m 이상 움직이면 바로 새 점을 받는다.
+  ///
+  /// 화면 갱신용 해상도다. 이 값이 크면 현위치 마커가 그만큼 띄엄띄엄 움직인다.
+  /// 대신 1m 간격은 GPS 지터를 그대로 물고 오므로, 거리·커버리지 누적은
+  /// [RunTracker]가 따로 5m 게이트를 걸어 거른다.
   static const LocationSettings _trackingSettings = LocationSettings(
     accuracy: LocationAccuracy.best,
-    distanceFilter: 5,
+    distanceFilter: 1,
   );
 
   /// 권한 상태를 확인하고, 필요하면 사용자에게 요청한다.

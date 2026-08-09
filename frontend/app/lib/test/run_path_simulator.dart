@@ -13,7 +13,7 @@ class RunSimulationProfile {
     this.paceWobble = 0.18,
     this.lateralDriftMeters = 4,
     this.gpsNoiseMeters = 2.5,
-    this.interval = const Duration(seconds: 1),
+    this.interval = const Duration(milliseconds: 330),
     this.speedMultiplier = 1,
   });
 
@@ -33,7 +33,11 @@ class RunSimulationProfile {
   /// 측정 자체에 섞이는 오차(m). 위 [lateralDriftMeters]보다 빠르게 변한다.
   final double gpsNoiseMeters;
 
-  /// 위치를 보고하는 주기. 실제 GPS도 대략 1초에 한 번 올라온다.
+  /// 위치를 보고하는 주기.
+  ///
+  /// 여기에는 distanceFilter가 없으므로 이 값이 곧 점 간격을 정한다. 기본값
+  /// 330ms는 기본 페이스(3.03m/s)에서 약 1m — 실제 수집 설정
+  /// (LocationService.distanceFilter = 1)과 같은 간격이다.
   final Duration interval;
 
   /// 시간 배속. 20이면 6km 코스를 100초 남짓에 완주한다.
@@ -45,7 +49,9 @@ class RunSimulationProfile {
   /// 완주까지 빠르게 돌려보는 용도.
   ///
   /// 배속만 올리면 한 점당 이동 거리가 그만큼 벌어져서 경로가 각지고 누적 거리도
-  /// 실제와 달라진다. 보고 주기를 같은 배율로 줄여 점 간격은 [normal]과 같게 둔다.
+  /// 실제와 달라진다. 보고 주기도 같이 줄여 점 간격을 3m 안쪽으로 잡는다.
+  /// [normal]의 1m보다는 성기다 — 20배속에서 1m 간격을 맞추려면 17ms마다
+  /// 보고해야 해서 화면 프레임보다 잦아진다.
   static const timeLapse = RunSimulationProfile(
     interval: Duration(milliseconds: 50),
     speedMultiplier: 20,
