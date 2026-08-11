@@ -46,14 +46,14 @@ dependencies:
   google_sign_in: ^7.2.0
   flutter_svg: ^2.3.0
 
-# 포크를 쓴다. pub 1.2.6의 iOS 래퍼에 크래시가 있어 직접 고치면서 사용해야 할 것 같다.. 
+# 포크를 쓴다. pub 1.2.6의 iOS 래퍼에 크래시가 있어 직접 고치면서 사용해야 할 것 같다..
 # 실제로 받는 커밋은 pubspec.lock에 박히므로 팀원은 모두 같은 코드를 쓴다.
 # 포크에 새 커밋을 올라가면 `flutter pub upgrade kakao_map_sdk`로 갱신한다.
 dependency_overrides:
   kakao_map_sdk:
     git:
       url: https://github.com/RunnserJeju/flutter_kakao_maps.git
-      ref: runners-jeju
+      ref: runners-jeju-main
 
 dev_dependencies:
   flutter_test:
