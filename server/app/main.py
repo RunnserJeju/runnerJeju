@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from app import schema_guard
 from app.db import engine
-from app.routers import auth, courses, notices, runs, stamps, verifications
+from app.routers import auth, banners, courses, notices, runs, stamps, verifications
 
 
 @asynccontextmanager
@@ -29,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(banners.router)
 app.include_router(courses.router)
 app.include_router(runs.router)
 app.include_router(verifications.router)

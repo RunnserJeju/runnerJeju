@@ -192,6 +192,18 @@ class StampOut(BaseModel):
     record_id: uuid.UUID | None
 
 
+# --- 배너 -----------------------------------------------------------------
+
+
+class BannerOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    image_url: str
+    sort_order: int
+    created_at: datetime
+
+
 # --- 공지사항 -------------------------------------------------------------
 
 

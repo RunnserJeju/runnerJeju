@@ -1,4 +1,5 @@
 import '../api/auth_api.dart';
+import '../api/banner_api.dart';
 import '../api/course_api.dart';
 import '../api/notice_api.dart';
 import '../api/run_api.dart';
@@ -7,6 +8,7 @@ import '../api/verification_api.dart';
 import '../config/app_config.dart';
 import '../network/api_client.dart';
 import 'auth_service.dart';
+import 'banner_service.dart';
 import 'course_service.dart';
 import 'location_service.dart';
 import 'notice_service.dart';
@@ -39,6 +41,7 @@ class Services {
     VerificationApi(apiClient),
   );
   late final NoticeService notice = NoticeService(NoticeApi(apiClient));
+  late final BannerService banner = BannerService(BannerApi(apiClient));
 
   /// 실제 GPS. 시뮬레이션 러닝은 이걸 바꾸지 않고 [RunTracker.start]에
   /// 위치원을 따로 넘긴다 — 그래야 앱 전역이 아니라 그 한 번의 러닝만 가짜가 된다.

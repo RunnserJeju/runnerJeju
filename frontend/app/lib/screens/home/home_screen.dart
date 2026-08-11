@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../../models/home_banner.dart';
 import '../../models/notice.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/admin_only.dart';
 import '../../widgets/async_view.dart';
+import '../../widgets/banner_carousel.dart';
+import 'banner_create_screen.dart';
 import 'notice_create_screen.dart';
 
-/// 홈: 공지사항.
+/// 홈: 배너 + 공지사항.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -18,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Notice>> _noticesFuture;
+  late Future<List<HomeBanner>> _bannersFuture;
 
   @override
   void initState() {
@@ -27,11 +31,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _load() {
     _noticesFuture = Services.instance.notice.loadNotices();
+    _bannersFuture = Services.instance.banner.loadBanners();
   }
 
   Future<void> _refresh() async {
     setState(_load);
     await _noticesFuture.catchError((_) => <Notice>[]);
+    await _bannersFuture.catchError((_) => <HomeBanner>[]);
   }
 
   @override
@@ -41,6 +47,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Runners Jeju'),
         actions: [
+          AdminOnly(
+            child: IconButton(
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              tooltip: '배너 등록',
+              onPressed: () => Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(builder: (_) => const BannerCreateScreen()),
+                  )
+                  .then((_) => _refresh()),
+            ),
+          ),
           AdminOnly(
             child: IconButton(
               icon: const Icon(Icons.add_circle_outline_rounded),
@@ -59,6 +76,21 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
           children: [
+            // 배너가 없으면 섹션 자체를 접는다 — 공지사항과 달리 배너는 장식용이라
+            // "배너가 없어요" 같은 빈 상태를 굳이 보여줄 필요가 없다.
+            FutureBuilder<List<HomeBanner>>(
+              future: _bannersFuture,
+              builder: (context, snapshot) {
+                final banners = snapshot.data ?? const <HomeBanner>[];
+                if (banners.isEmpty) return const SizedBox.shrink();
+                return Column(
+                  children: [
+                    BannerCarousel(banners: banners),
+                    const SizedBox(height: 24),
+                  ],
+                );
+              },
+            ),
             const _SectionTitle('공지사항'),
             const SizedBox(height: 12),
             FutureBuilder<List<Notice>>(

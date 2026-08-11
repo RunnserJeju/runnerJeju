@@ -207,6 +207,30 @@ class Stamp(Base):
     course: Mapped[Course] = relationship(back_populates="stamps")
 
 
+class Banner(Base):
+    """홈 화면 상단 이미지 배너. 관리자가 앱에서 직접 올린다.
+
+    image_url은 Supabase Storage의 public URL이다(app.storage 참고) — 이 테이블은
+    이미지 파일 자체가 아니라 어디 있는지와 노출 여부/순서만 안다.
+    """
+
+    __tablename__ = "banners"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    image_url: Mapped[str] = mapped_column(String(500))
+
+    # 낮을수록 먼저 보인다. 같은 값이면 created_at으로 tie-break(목록 쿼리 참고).
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_by: Mapped[str | None] = mapped_column(String(100), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Notice(Base):
     """홈 화면에 노출되는 공지사항. 관리자가 DB에 직접 등록한다."""
 

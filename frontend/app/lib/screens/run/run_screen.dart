@@ -360,10 +360,6 @@ class _ControlPanel extends StatelessWidget {
               ),
             ],
           ),
-          if (tracker.hasReachedCourseGoal) ...[
-            const SizedBox(height: 16),
-            const _GoalReachedBanner(),
-          ],
           const SizedBox(height: 24),
           _Controls(
             tracker: tracker,
@@ -417,9 +413,8 @@ class _Controls extends StatelessWidget {
           ],
         ],
       ),
-      // 완주 조건(서버 인정 기준과 동일)을 채우면 일시정지 옆에 완주 버튼이
-      // 나타난다. 자동 종료는 하지 않는다 — 종료는 항상 사용자의 버튼으로만
-      // (RunTracker.hasReachedCourseGoal 참고).
+      // 종료는 항상 일시정지를 거친다 — 완주했든 아니든 사용자가 일시정지를
+      // 누른 뒤 종료 버튼으로 끝낸다(아래 RunStatus.paused 참고).
       RunStatus.running => Row(
         children: [
           Expanded(
@@ -429,16 +424,6 @@ class _Controls extends StatelessWidget {
               label: const Text('일시정지'),
             ),
           ),
-          if (tracker.hasReachedCourseGoal) ...[
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: onFinish,
-                icon: const Icon(Icons.flag_rounded),
-                label: const Text('완주'),
-              ),
-            ),
-          ],
         ],
       ),
       RunStatus.paused => Row(
@@ -465,30 +450,3 @@ class _Controls extends StatelessWidget {
   }
 }
 
-class _GoalReachedBanner extends StatelessWidget {
-  const _GoalReachedBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.accent,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.flag_rounded, size: 18, color: AppColors.ink),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '완주 조건을 채웠어요! 완주 버튼을 누르면 스탬프를 받아요',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
