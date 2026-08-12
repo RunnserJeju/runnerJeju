@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../models/running_course.dart';
 import '../../services/service_locator.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/metric_tile.dart';
 import '../../widgets/run_map_view.dart';
@@ -88,15 +87,18 @@ class _CourseDetailBody extends StatelessWidget {
                         letterSpacing: -0.8,
                       ),
                     ),
-                    if (course.region != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        course.region!,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
-                        ),
+                    if (course.tagList.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final tag in course.tagList)
+                            Chip(
+                              label: Text(tag),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                        ],
                       ),
                     ],
                     const SizedBox(height: 20),
@@ -104,17 +106,9 @@ class _CourseDetailBody extends StatelessWidget {
                       children: [
                         Expanded(
                           child: MetricTile(
-                            label: '거리',
-                            value: Formatters.distanceKm(course.distanceMeters),
+                            label: '거리 (왕복)',
+                            value: '${course.distanceKm}',
                             unit: 'km',
-                          ),
-                        ),
-                        Expanded(
-                          child: MetricTile(
-                            label: '예상 시간',
-                            value: course.estimatedDuration == null
-                                ? '--:--'
-                                : Formatters.duration(course.estimatedDuration!),
                           ),
                         ),
                         Expanded(
@@ -133,6 +127,24 @@ class _CourseDetailBody extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 24),
+                    _InfoRow(
+                      icon: Icons.place_outlined,
+                      label: '주소',
+                      value: course.address,
+                    ),
+                    if (course.parkingAddress != null)
+                      _InfoRow(
+                        icon: Icons.local_parking_outlined,
+                        label: '근처 주차장',
+                        value: course.parkingAddress!,
+                      ),
+                    if (course.restroomAddress != null)
+                      _InfoRow(
+                        icon: Icons.wc_outlined,
+                        label: '근처 화장실',
+                        value: course.restroomAddress!,
+                      ),
+                    const SizedBox(height: 24),
                     _CompletionRow(course: course),
                   ],
                 ),
@@ -149,6 +161,46 @@ class _CourseDetailBody extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 주소·주차장·화장실처럼 "이름: 값" 한 줄로 보여주는 정보.
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: muted),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(color: muted),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: theme.textTheme.bodyMedium),
+          ),
+        ],
+      ),
     );
   }
 }

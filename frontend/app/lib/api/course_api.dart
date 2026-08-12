@@ -9,15 +9,11 @@ class CourseApi {
 
   final ApiClient _client;
 
-  /// 코스 목록. region/keyword는 서버 쿼리 파라미터로 그대로 넘긴다.
-  Future<List<RunningCourse>> fetchCourses({
-    String? region,
-    String? keyword,
-  }) async {
+  /// 코스 목록. keyword는 서버 쿼리 파라미터로 그대로 넘긴다.
+  Future<List<RunningCourse>> fetchCourses({String? keyword}) async {
     final response = await _client.dio.get(
       '/courses',
       queryParameters: {
-        'region': ?region,
         if (keyword != null && keyword.isNotEmpty) 'keyword': keyword,
       },
     );
@@ -33,25 +29,35 @@ class CourseApi {
     return RunningCourse.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// 내가 달린 경로를 새 코스로 등록.
-  Future<RunningCourse> uploadCourse(CourseUploadRequest request) async {
-    final response = await _client.dio.post('/courses', data: request.toJson());
-    return RunningCourse.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  /// GPX 파일로 코스를 등록한다. slug를 안 넘기면 서버가 이름에서 자동 생성한다
-  /// (재업로드 개념이 없는 단발성 등록이라 항상 새 코스가 생긴다).
+  /// GPX 파일로 코스를 등록한다 (관리자 전용).
+  ///
+  /// 항상 새 코스가 생긴다 — 같은 파일을 두 번 올리면 코스도 두 개가 된다.
+  /// 거리·난이도·주소는 GPX에서 알 수 없으므로 폼으로 함께 보낸다.
   Future<RunningCourse> uploadGpx({
     required List<int> bytes,
     required String filename,
     required String name,
+    required int distanceKm,
+    required CourseDifficulty difficulty,
+    required String address,
+    String? tags,
+    String? parkingAddress,
+    String? restroomAddress,
+    String? description,
   }) async {
     final formData = FormData.fromMap({
       'name': name,
+      'distance_km': distanceKm,
+      'difficulty': difficulty.value,
+      'address': address,
+      'tags': ?tags,
+      'parking_address': ?parkingAddress,
+      'restroom_address': ?restroomAddress,
+      'description': ?description,
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });
 
-    final response = await _client.dio.put(
+    final response = await _client.dio.post(
       '/courses/gpx',
       data: formData,
       options: Options(sendTimeout: const Duration(seconds: 30)),

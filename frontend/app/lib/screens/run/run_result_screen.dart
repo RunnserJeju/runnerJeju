@@ -9,7 +9,6 @@ import '../../utils/formatters.dart';
 import '../../widgets/metric_tile.dart';
 import '../../widgets/run_map_view.dart';
 import '../../widgets/stamp_badge.dart';
-import '../course/course_upload_screen.dart';
 
 /// 러닝 결과: 기록을 서버에 저장하고, 완주 스탬프를 받았으면 함께 보여준다.
 class RunResultScreen extends StatefulWidget {
@@ -132,14 +131,6 @@ class _RunResultScreenState extends State<RunResultScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  Future<void> _uploadAsCourse() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CourseUploadScreen(path: widget.record.path),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final record = widget.record;
@@ -190,12 +181,6 @@ class _RunResultScreenState extends State<RunResultScreen> {
             const SizedBox(height: 20),
             _ResultMetrics(record: record),
             const SizedBox(height: 28),
-            OutlinedButton.icon(
-              onPressed: record.path.length >= 2 ? _uploadAsCourse : null,
-              icon: const Icon(Icons.add_road_rounded),
-              label: const Text('이 경로를 코스로 등록'),
-            ),
-            const SizedBox(height: 10),
             FilledButton(onPressed: _close, child: const Text('완료')),
           ],
         ),

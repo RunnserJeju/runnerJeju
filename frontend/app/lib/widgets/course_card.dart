@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/running_course.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 
 /// 코스 목록/홈에서 쓰는 코스 요약 카드.
 class CourseCard extends StatelessWidget {
@@ -62,22 +61,14 @@ class CourseCard extends StatelessWidget {
                 children: [
                   _Tag(
                     icon: Icons.straighten_rounded,
-                    label: '${Formatters.distanceKm(course.distanceMeters)}km',
+                    label: '왕복 ${course.distanceKm}km',
                   ),
                   _Tag(
                     icon: Icons.trending_up_rounded,
                     label: course.difficulty.label,
                   ),
-                  if (course.estimatedDuration != null)
-                    _Tag(
-                      icon: Icons.schedule_rounded,
-                      label: Formatters.duration(course.estimatedDuration!),
-                    ),
-                  if (course.region != null)
-                    _Tag(
-                      icon: Icons.place_outlined,
-                      label: course.region!,
-                    ),
+                  for (final tag in course.tagList)
+                    _Tag(icon: Icons.sell_outlined, label: tag),
                 ],
               ),
             ],

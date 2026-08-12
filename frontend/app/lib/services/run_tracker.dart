@@ -31,6 +31,10 @@ class RunTracker extends ChangeNotifier {
   DateTime? _startedAt;
   DateTime? _endedAt;
   RunningCourse? _targetCourse;
+
+  /// [_targetCourse]의 경로를 실측한 길이(m). 진행률 분모라 매 틱 다시 재지 않고
+  /// 코스를 잡을 때 한 번만 계산한다.
+  double _courseLengthMeters = 0;
   GeoPoint? _lastPosition;
   GeoPoint? _commitAnchor;
   CourseCoverageTracker? _coverage;
@@ -79,10 +83,15 @@ class RunTracker extends ChangeNotifier {
       _targetCourse == null ? null : _coverage?.ratio;
 
   /// 누적 주행 거리 ÷ 코스 거리 (1.0 초과 가능). 자유 러닝이면 null.
+  ///
+  /// 분모는 `course.distanceKm`이 아니라 **코스 경로를 실측한 길이**다. 서버
+  /// 검증도 `courses` 컬럼이 아니라 `path`를 재서 같은 비율을 구하므로
+  /// (verification.path_length_meters), 같은 기준을 써야 앱 진행률과 서버 판정이
+  /// 어긋나지 않는다. distanceKm은 시트에 적힌 왕복 안내값(정수 km)이라 이 계산에
+  /// 쓰면 최대 수백 m가 어긋난다.
   double? get _distanceRatio {
-    final course = _targetCourse;
-    if (course == null || course.distanceMeters <= 0) return null;
-    return _distanceMeters / course.distanceMeters;
+    if (_targetCourse == null || _courseLengthMeters <= 0) return null;
+    return _distanceMeters / _courseLengthMeters;
   }
 
   /// 화면에 보여주는 코스 진행도 0.0~1.0. 자유 러닝이면 null.
@@ -130,6 +139,7 @@ class RunTracker extends ChangeNotifier {
 
     _reset();
     _targetCourse = course;
+    _courseLengthMeters = course == null ? 0 : GeoUtils.pathLength(course.path);
     _coverage = course == null || course.path.isEmpty
         ? null
         : CourseCoverageTracker(course.path);
@@ -245,6 +255,7 @@ class RunTracker extends ChangeNotifier {
     _startedAt = null;
     _endedAt = null;
     _targetCourse = null;
+    _courseLengthMeters = 0;
     _lastPosition = null;
     _commitAnchor = null;
     _coverage = null;

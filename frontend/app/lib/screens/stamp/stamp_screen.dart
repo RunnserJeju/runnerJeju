@@ -48,13 +48,6 @@ class _StampScreenState extends State<StampScreen> {
                 '${Formatters.date(stamp.acquiredAt)} 완주',
                 style: Theme.of(sheetContext).textTheme.bodyMedium,
               ),
-              if (stamp.region != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  stamp.region!,
-                  style: Theme.of(sheetContext).textTheme.bodySmall,
-                ),
-              ],
             ],
           ),
         ),

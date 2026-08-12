@@ -1,9 +1,6 @@
 import '../api/course_api.dart';
 import '../exceptions/app_exception.dart';
-import '../models/geo_point.dart';
-import '../models/run_record.dart';
 import '../models/running_course.dart';
-import '../utils/geo_utils.dart';
 
 /// 비즈니스 로직 계층: 코스 조회/등록. UI가 이해할 수 있는 형태로 오류를 바꿔준다.
 class CourseService {
@@ -11,12 +8,9 @@ class CourseService {
 
   final CourseApi _courseApi;
 
-  Future<List<RunningCourse>> loadCourses({
-    String? region,
-    String? keyword,
-  }) async {
+  Future<List<RunningCourse>> loadCourses({String? keyword}) async {
     try {
-      return await _courseApi.fetchCourses(region: region, keyword: keyword);
+      return await _courseApi.fetchCourses(keyword: keyword);
     } catch (e) {
       throw AppException('코스 목록을 불러오지 못했어요.', e);
     }
@@ -30,55 +24,18 @@ class CourseService {
     }
   }
 
-  /// 방금 달린 기록을 코스로 등록한다.
-  Future<RunningCourse> uploadFromRecord({
-    required RunRecord record,
-    required String name,
-    String? description,
-    String? region,
-    CourseDifficulty difficulty = CourseDifficulty.normal,
-  }) {
-    return uploadPath(
-      path: record.path,
-      name: name,
-      description: description,
-      region: region,
-      difficulty: difficulty,
-    );
-  }
-
-  Future<RunningCourse> uploadPath({
-    required List<GeoPoint> path,
-    required String name,
-    String? description,
-    String? region,
-    CourseDifficulty difficulty = CourseDifficulty.normal,
-  }) async {
-    if (path.length < 2) {
-      throw AppException('코스로 등록하려면 경로가 2개 지점 이상이어야 해요.');
-    }
-
-    try {
-      return await _courseApi.uploadCourse(
-        CourseUploadRequest(
-          name: name,
-          description: description,
-          region: region,
-          difficulty: difficulty,
-          distanceMeters: GeoUtils.pathLength(path),
-          path: path,
-        ),
-      );
-    } catch (e) {
-      throw AppException('코스 등록에 실패했어요.', e);
-    }
-  }
-
   /// GPX 파일을 코스로 등록한다 (관리자용 수동 업로드).
   Future<RunningCourse> uploadGpxFile({
     required List<int> bytes,
     required String filename,
     required String name,
+    required int distanceKm,
+    required CourseDifficulty difficulty,
+    required String address,
+    String? tags,
+    String? parkingAddress,
+    String? restroomAddress,
+    String? description,
   }) async {
     if (bytes.isEmpty) {
       throw AppException('GPX 파일이 비어 있어요.');
@@ -89,6 +46,13 @@ class CourseService {
         bytes: bytes,
         filename: filename,
         name: name,
+        distanceKm: distanceKm,
+        difficulty: difficulty,
+        address: address,
+        tags: tags,
+        parkingAddress: parkingAddress,
+        restroomAddress: restroomAddress,
+        description: description,
       );
     } catch (e) {
       throw AppException('GPX 업로드에 실패했어요.', e);
