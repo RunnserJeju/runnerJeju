@@ -33,6 +33,7 @@ class RunningCourse {
     this.description,
     this.completedCount = 0,
     this.isCompletedByMe = false,
+    this.startPoint,
   });
 
   final String id;
@@ -63,7 +64,13 @@ class RunningCourse {
   /// 내가 이미 완주해서 스탬프를 받았는지.
   final bool isCompletedByMe;
 
-  GeoPoint? get startPoint => path.isEmpty ? null : path.first;
+  /// 코스가 시작되는 지점 = 지도에 라벨을 찍는 자리.
+  ///
+  /// 값은 경로의 첫 점과 같지만 필드로 따로 둔다. 목록 응답에는 [path]가 빠져
+  /// 있어서(용량 때문), 지도가 코스마다 상세를 다시 부르지 않으려면 점 하나는
+  /// 목록에서 바로 받아야 한다. 경로가 없는 코스면 null이다.
+  final GeoPoint? startPoint;
+
   GeoPoint? get endPoint => path.isEmpty ? null : path.last;
 
   /// 칩으로 보여줄 태그 목록. 빈 항목과 앞뒤 공백은 걸러낸다.
@@ -91,5 +98,8 @@ class RunningCourse {
         .toList(),
     completedCount: (json['completed_count'] as num?)?.toInt() ?? 0,
     isCompletedByMe: json['is_completed_by_me'] as bool? ?? false,
+    startPoint: json['start_point'] == null
+        ? null
+        : GeoPoint.fromJson(json['start_point'] as Map<String, dynamic>),
   );
 }

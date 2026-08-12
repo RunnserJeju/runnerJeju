@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import 'course/course_list_screen.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
-import 'run/run_screen.dart';
+import 'running/running_screen.dart';
 import 'stamp/stamp_screen.dart';
 
-/// 하단 탭 + 중앙 러닝 시작 버튼으로 구성된 앱 뼈대.
+/// 하단 탭 4개로 구성된 앱 뼈대.
+///
+/// 예전에는 탭 넷 사이에 러닝 시작 FAB가 하나 더 떠 있어 진입점이 다섯이었다.
+/// 러닝은 '러닝' 탭([RunningScreen])이 지도째로 맡는다 — 코스를 고르는 것도,
+/// 코스 없이 바로 달리는 것도 그 안에서 끝나므로 버튼을 따로 띄울 이유가 없다.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -20,85 +23,37 @@ class _AppShellState extends State<AppShell> {
 
   static const _tabs = <Widget>[
     HomeScreen(),
-    CourseListScreen(),
+    RunningScreen(),
     StampScreen(),
     ProfileScreen(),
   ];
 
-  void _startRun() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RunScreen()),
-    );
-  }
+  static const _items = <({IconData icon, String label})>[
+    (icon: Icons.home_rounded, label: '홈'),
+    (icon: Icons.map_rounded, label: '러닝'),
+    (icon: Icons.workspace_premium_rounded, label: '스탬프'),
+    (icon: Icons.person_rounded, label: '마이페이지'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _index, children: _tabs),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Transform.translate(
-        offset: const Offset(0, 12),
-        child: SizedBox(
-          width: 72,
-          height: 72,
-          child: FloatingActionButton(
-            onPressed: _startRun,
-            backgroundColor: AppColors.ink,
-            foregroundColor: AppColors.accent,
-            shape: const CircleBorder(),
-            child: const Icon(Icons.directions_run_rounded, size: 28),
-          ),
-        ),
-      ),
       bottomNavigationBar: BottomAppBar(
         color: Colors.white,
         elevation: 0,
         height: 68,
         padding: EdgeInsets.zero,
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _NavItem(
-                    icon: Icons.home_rounded,
-                    label: '홈',
-                    selected: _index == 0,
-                    onTap: () => setState(() => _index = 0),
-                  ),
-                  _NavItem(
-                    icon: Icons.route_rounded,
-                    label: '코스',
-                    selected: _index == 1,
-                    onTap: () => setState(() => _index = 1),
-                  ),
-                ],
+            for (final (index, item) in _items.indexed)
+              _NavItem(
+                icon: item.icon,
+                label: item.label,
+                selected: _index == index,
+                onTap: () => setState(() => _index = index),
               ),
-            ),
-            // FAB(72)가 들어갈 자리. 좌우를 Expanded로 동일 폭으로 맞춰야
-            // 라벨 길이가 달라도 이 틈이 항상 화면 정중앙에 오고, centerDocked로
-            // 배치되는 FAB의 실제 중심과 어긋나지 않는다.
-            const SizedBox(width: 72),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _NavItem(
-                    icon: Icons.workspace_premium_rounded,
-                    label: '스탬프',
-                    selected: _index == 2,
-                    onTap: () => setState(() => _index = 2),
-                  ),
-                  _NavItem(
-                    icon: Icons.person_rounded,
-                    label: '마이페이지',
-                    selected: _index == 3,
-                    onTap: () => setState(() => _index = 3),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

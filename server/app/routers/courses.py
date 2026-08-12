@@ -18,6 +18,8 @@ MAX_GPX_BYTES = 5 * 1024 * 1024
 
 
 def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) -> dict:
+    path = course.path or []
+
     return {
         "id": course.id,
         "name": course.name,
@@ -28,7 +30,11 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "parking_address": course.parking_address,
         "restroom_address": course.restroom_address,
         "description": course.description,
-        "path": course.path or [],
+        "path": path,
+        # 목록 응답(CourseListItem)에는 path가 빠지므로, 지도에 라벨을 찍을 점은
+        # 여기서 따로 뽑아 준다. 상세 응답에도 같이 들어가지만 값은 path[0]과
+        # 같아서 클라이언트가 둘 중 무엇을 봐도 결과가 다르지 않다.
+        "start_point": path[0] if path else None,
         "completed_count": completed_count,
         "is_completed_by_me": is_completed_by_me,
     }

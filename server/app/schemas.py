@@ -113,6 +113,11 @@ class CourseListItem(BaseModel):
     completed_count: int
     is_completed_by_me: bool
 
+    # 지도에 코스 라벨을 찍을 좌표. 경로 전체는 위 이유로 빼지만, 점 하나는
+    # 목록 크기에 영향이 없으면서 지도 화면이 코스마다 상세를 부르지 않아도
+    # 되게 해준다. 경로가 비어 있는 코스면 None이라 지도에서 빠진다.
+    start_point: GeoPointSchema | None
+
 
 class CourseSummary(CourseListItem):
     """상세/등록 응답. 지도에 그릴 경로 좌표까지 포함한다."""
