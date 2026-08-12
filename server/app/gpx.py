@@ -13,7 +13,6 @@
 오히려 성긴 쪽이 문제라 검증에서 점-대-선분 거리를 쓴다(`geo.distance_to_segment_meters`).
 """
 
-import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
@@ -225,15 +224,3 @@ def parse(content: bytes) -> ParsedCourse:
             for lat, lng in geo.resample_path(coordinates, RESAMPLE_INTERVAL_METERS)
         ],
     )
-
-
-def slugify(value: str) -> str:
-    """코스 이름을 slug 후보로. 한글은 그대로 두고 공백/기호만 정리한다.
-
-    slug는 재업로드 시 같은 코스를 알아보는 열쇠라(업로드할 때마다 새 코스가
-    생기면 안 된다) 사람이 직접 지정하는 편이 낫다. 이 함수는 지정하지 않았을
-    때의 기본값을 만들 뿐이다.
-    """
-    text = value.strip().lower()
-    text = re.sub(r"[^\w가-힣]+", "-", text, flags=re.UNICODE)
-    return text.strip("-")

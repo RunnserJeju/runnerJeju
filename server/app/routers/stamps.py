@@ -17,7 +17,6 @@ def _to_out(stamp: Stamp) -> dict:
         "id": stamp.id,
         "course_id": stamp.course_id,
         "course_name": stamp.course.name,
-        "region": stamp.course.region,
         "acquired_at": stamp.acquired_at,
         "image_url": stamp.image_url,
         "record_id": stamp.run_id,

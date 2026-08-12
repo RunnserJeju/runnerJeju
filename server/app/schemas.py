@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 # 필드 이름은 Flutter 클라이언트의 fromJson/toJson과 1:1로 맞춘다.
 # 이름을 바꾸면 앱이 조용히 깨지므로 양쪽을 같이 수정해야 한다.
 
-Difficulty = Literal["easy", "normal", "hard"]
+# 1=★, 2=★★, 3=★★★ — 클라이언트 CourseDifficulty.value와 값이 같아야 한다.
+Difficulty = Annotated[int, Field(ge=1, le=3)]
 VerificationStatusName = Literal[
     "pending", "inProgress", "matched", "mismatched", "failed"
 ]
@@ -87,15 +88,6 @@ class AccessTokenOut(BaseModel):
 # --- 코스 ---------------------------------------------------------------
 
 
-class CourseCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    description: str | None = None
-    region: str | None = None
-    difficulty: Difficulty = "normal"
-    distance_meters: float
-    path: list[GeoPointSchema]
-
-
 class CourseListItem(BaseModel):
     """목록용. 카드에 필요한 것만 담고 경로 좌표는 뺀다.
 
@@ -107,22 +99,23 @@ class CourseListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    slug: str
     name: str
-    description: str | None
-    region: str | None
+    distance_km: int
     difficulty: Difficulty
-    distance_meters: float
-    estimated_duration_sec: int | None
-    elevation_gain_meters: float | None
-    thumbnail_url: str | None
-    is_loop: bool
+
+    # "해안도로,제주시,동쪽" — 칩으로 쪼개는 건 클라이언트가 한다.
+    tags: str | None
+
+    address: str
+    parking_address: str | None
+    restroom_address: str | None
+    description: str | None
     completed_count: int
     is_completed_by_me: bool
 
 
 class CourseSummary(CourseListItem):
-    """상세/생성 응답. 지도에 그릴 경로 좌표까지 포함한다."""
+    """상세/등록 응답. 지도에 그릴 경로 좌표까지 포함한다."""
 
     path: list[GeoPointSchema]
 
@@ -186,7 +179,6 @@ class StampOut(BaseModel):
     id: uuid.UUID
     course_id: uuid.UUID
     course_name: str
-    region: str | None
     acquired_at: datetime
     image_url: str | None
     record_id: uuid.UUID | None

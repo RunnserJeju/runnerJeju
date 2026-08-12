@@ -86,24 +86,25 @@ GPS로 러닝 기록 → 공식 코스와 유사도 검증 → 완주 스탬프 
 
 ### Course
 
-- [x] courses 테이블 (이름, 난이도, 거리, 고도, 설명, 경로 — 경로는 JSONB, 이유는 architecture.md)
+- [x] courses 테이블 (이름, 거리, 난이도, 태그, 주소, 근처 주차장/화장실, 설명, 경로 — 경로는 JSONB, 이유는 architecture.md)
 - [x] 코스 목록 조회 API
 - [x] 코스 상세 조회 API
 - [x] User에 role 컬럼 추가 (user/admin)
-- [x] 코스 등록 API (`PUT /courses/gpx`, admin role 필요)
+- [x] 코스 등록 API (`POST /courses/gpx`, admin role 필요)
 
 **결정됨**
 - 코스 등록 입력 방식 — **GPX 업로드**로 확정. 관리자가 경로 플래너에서 그려
-  내보낸 GPX를 `server/courses/`에 두고 `courses.yaml`에 메타데이터를 적으면
-  `push_courses.py`가 업로드 API로 올린다. 자세한 내용은 architecture.md의
+  내보낸 GPX를 `server/courses/`에 두고 `courses.yaml`에 나머지 정보를 적으면
+  `push_courses.py`가 올린다. 자세한 내용은 architecture.md의
   "코스 데이터 파이프라인".
+- 코스는 **관리자만 올린다.** 달린 경로를 코스로 등록하던 `POST /courses`와 그
+  화면을 지웠다. 주소가 필수값이 되면서 "달리고 나서 즉석 등록"과 맞지 않고,
+  공식 코스만 노출하기로 했으므로 사용자 등록 경로를 남길 이유가 없다.
+- 코스 수정·재업로드를 코드로 다루지 않는다. slug와 upsert를 걷어냈고, 고칠
+  일은 DB에서 직접 처리한다. 배경은 architecture.md.
 
 **보류 / 검토 필요**
 - 관리자 신청 셀프서비스 플로우 — 나중 단계
-- `POST /courses`(달린 경로를 코스로 등록)는 일부러 로그인만 요구한다. 사용자
-  기능으로 설계된 엔드포인트라 admin으로 막지 않았다. 다만 지금 앱에서 이걸 부르는
-  화면이 없으니, 공식 코스만 남길 생각이면 이 엔드포인트를 admin으로 올리거나
-  아예 지우는 쪽을 정해야 한다.
 
 ### Running Record
 

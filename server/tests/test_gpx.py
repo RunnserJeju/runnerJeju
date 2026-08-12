@@ -205,17 +205,3 @@ class TestTimestamps:
         )
         parsed = gpx.parse(wrap(f"<trk><trkseg>{inner}</trkseg></trk>"))
         assert parsed.points[0].recorded_at is None
-
-
-class TestSlugify:
-    @pytest.mark.parametrize(
-        "value,expected",
-        [
-            ("사계해안도로", "사계해안도로"),
-            ("Sagye Coastal Road", "sagye-coastal-road"),
-            ("  공백   투성이  ", "공백-투성이"),
-            ("특수!@#문자", "특수-문자"),
-        ],
-    )
-    def test_slugify(self, value, expected):
-        assert gpx.slugify(value) == expected

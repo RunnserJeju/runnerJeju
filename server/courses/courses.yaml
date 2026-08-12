@@ -1,38 +1,41 @@
 # 코스 명단.
 #
-# GPX에는 좌표와 이름만 들어 있다. 지역·난이도·소개글처럼 코스를 서비스에
-# 노출하는 데 필요한 나머지 정보는 여기서 관리한다.
+# GPX에는 좌표와 이름만 들어 있다. 거리·난이도·태그·주소처럼 코스를 서비스에
+# 노출하는 데 필요한 나머지 정보는 전부 여기서 관리한다.
 #
 # 이 파일은 tools/push_courses.py가 읽어서 DB에 올린다. API(HTTP)는 거치지
-# 않지만, PUT /courses/gpx가 쓰는 것과 같은 함수(upsert_course_from_gpx_bytes)를
+# 않지만, POST /courses/gpx가 쓰는 것과 같은 함수(create_course_from_gpx_bytes)를
 # 그대로 호출하므로 검증 규칙은 여전히 한 곳에만 있다.
 #
 #   .\scripts\dev.ps1 seed              # 전부 업로드
 #   .\scripts\dev.ps1 seed --dry-run    # 파싱 결과만 확인
 #
-# slug는 코스의 영구 식별자다. 한 번 정하면 바꾸지 않는다 — slug를 바꾸면
-# 같은 코스가 새 코스로 등록되고, 기존 코스에 달린 완주 스탬프와 끊긴다.
+# 업로드는 매번 새 코스를 만든다 — 갱신이 아니다. 그래서 같은 명단을 두 번
+# 돌리면 코스가 두 벌 생긴다. 다시 올릴 때는 courses 테이블을 먼저 비울 것.
+#
+# 필수: file, name, distance_km, difficulty, address
+# 선택: tags, parking_address, restroom_address, description
+#
+# distance_km은 왕복 기준 km 정수다(GPX 실측값이 아니라 명단에 적힌 안내값).
+# difficulty는 1=★, 2=★★, 3=★★★.
+# tags는 쉼표로 구분한다 — 앱이 쪼개서 칩으로 보여준다.
 
 courses:
-  - slug: sagye-coastal
-    file: sagye-coastal.gpx
-    name: 사계해안도로
-    region: 안덕면
-    difficulty: easy
+  - file: sagye-coastal.gpx
+    name: No10. 사계 해안도로
+    distance_km: 6
+    difficulty: 2
+    tags: 해안도로,서쪽,서귀포
+    address: 송악산 주차장 서귀포시 대정읍 상모리 4165-123
     description: |
       산방산과 형제섬을 곁에 두고 달리는 해안 코스.
       고도 변화가 거의 없어 첫 러닝으로 좋다.
-    # 거리·고도·순환 여부는 GPX에서 계산하므로 여기 적지 않는다.
-    # estimated_duration_sec는 선택 — 적지 않으면 앱에서 '--:--'로 표시된다.
-    estimated_duration_sec: 2400
 
-  - slug: dangdangrun
-    file: dangdangrun.gpx
-    name: 댕댕런
-    region: 제주시
-    difficulty: easy
+  - file: dangdangrun.gpx
+    name: No16. 댕댕런
+    distance_km: 4
+    difficulty: 1
+    tags: 아트런,제주시
+    address: 제주시 탑동로 5
     description: |
-      원도심을 달리며 그리는 강아지 모양 댕댕런 
-    # 거리·고도·순환 여부는 GPX에서 계산하므로 여기 적지 않는다.
-    # estimated_duration_sec는 선택 — 적지 않으면 앱에서 '--:--'로 표시된다.
-    estimated_duration_sec: 2400
+      원도심을 달리며 그리는 강아지 모양 댕댕런
