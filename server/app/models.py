@@ -7,6 +7,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -77,38 +78,41 @@ class RefreshToken(Base):
 
 
 class Course(Base):
+    """관리자가 코스 명단(courses/courses.yaml)을 기준으로 올리는 러닝 코스.
+
+    컬럼은 명단 시트가 가진 항목과 1:1이다. 코스 수정이나 재업로드를 코드로
+    다루지 않는다 — 고칠 일이 생기면 DB에서 직접 고치거나 다시 올린다.
+    """
+
     __tablename__ = "courses"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
 
-    # 코스의 안정적인 식별자. 같은 GPX를 다시 올렸을 때 새 코스를 만들지 않고
-    # 기존 코스를 갱신하는 기준이다.
-    #
-    # id(uuid)를 기준으로 삼을 수 없는 이유: 업로드하는 쪽은 uuid를 모른다.
-    # 이름을 기준으로 삼을 수도 없다 — 코스명이 바뀌면 같은 코스가 둘로 갈라진다.
-    # 그리고 코스를 지웠다 다시 만들면 stamps.course_id가 가리키던 완주 스탬프가
-    # 고아가 되므로, 재업로드는 반드시 갱신이어야 한다.
-    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-
     name: Mapped[str] = mapped_column(String(200))
+
+    # 왕복 기준 km. GPX에서 계산한 실측 거리가 아니라 명단에 적힌 안내값이라
+    # 정수로 충분하다. 러닝 진행률처럼 정확도가 필요한 계산은 이 값이 아니라
+    # path에서 직접 거리를 재서 쓴다.
+    distance_km: Mapped[int] = mapped_column(Integer)
+
+    # 1=★, 2=★★, 3=★★★ — 클라이언트 CourseDifficulty.value와 값이 같아야 한다.
+    difficulty: Mapped[int] = mapped_column(SmallInteger)
+
+    # "해안도로,제주시,동쪽" 처럼 쉼표로 이어 붙인다. 태그로 코스를 걸러내는
+    # 화면이 아직 없어서 별도 테이블이나 배열 타입까지 갈 이유가 없었다.
+    tags: Mapped[str | None] = mapped_column(String(200), default=None)
+
+    address: Mapped[str] = mapped_column(String(300))
+
+    # 명단에 값이 없는 코스가 있어서 둘 다 nullable이다.
+    parking_address: Mapped[str | None] = mapped_column(String(300), default=None)
+    restroom_address: Mapped[str | None] = mapped_column(String(300), default=None)
+
     description: Mapped[str | None] = mapped_column(String(2000), default=None)
-    region: Mapped[str | None] = mapped_column(String(100), default=None, index=True)
-
-    # 'easy' | 'normal' | 'hard' — 클라이언트 CourseDifficulty.name과 값이 같아야 한다.
-    difficulty: Mapped[str] = mapped_column(String(20), default="normal")
-
-    distance_meters: Mapped[float] = mapped_column(Float)
-    estimated_duration_sec: Mapped[int | None] = mapped_column(Integer, default=None)
-    elevation_gain_meters: Mapped[float | None] = mapped_column(Float, default=None)
-    thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
-
-    # 출발점과 도착점이 같은 순환 코스인지. 검증에서 "완주했는가"를 판정할 때
-    # 순환 코스는 도착점 도달만으로는 판단할 수 없다(출발선에 서 있어도 도착점에 있다).
-    is_loop: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
     created_at: Mapped[datetime] = mapped_column(
