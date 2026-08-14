@@ -27,9 +27,14 @@ class RunTracker extends ChangeNotifier {
   RunStatus _status = RunStatus.idle;
   final List<GeoPoint> _path = [];
   double _distanceMeters = 0;
-  Duration _elapsed = Duration.zero;
   DateTime? _startedAt;
   DateTime? _endedAt;
+
+  /// 지금까지 멈춰 있던 시간의 합. [elapsed]가 시작 시각에서 이만큼을 뺀다.
+  Duration _pausedTotal = Duration.zero;
+
+  /// 지금 멈춰 있다면 그 멈춤이 시작된 시각. 달리는 중이면 null.
+  DateTime? _pausedAt;
   RunningCourse? _targetCourse;
 
   /// [_targetCourse]의 경로를 실측한 길이(m). 진행률 분모라 매 틱 다시 재지 않고
@@ -62,7 +67,24 @@ class RunTracker extends ChangeNotifier {
   LocationInterruption? get interruption => _interruption;
   List<GeoPoint> get path => List.unmodifiable(_path);
   double get distanceMeters => _distanceMeters;
-  Duration get elapsed => _elapsed;
+  /// 실제로 달린 시간(멈춰 있던 시간 제외).
+  ///
+  /// 1초 타이머로 세지 않고 시각을 뺀다. 타이머는 앱이 백그라운드로 내려가면
+  /// 느려지거나 아예 멈추는데, 그동안에도 위치는 계속 들어오고 거리는 쌓인다.
+  /// 그래서 예전에는 화면을 끄고 달린 만큼 시간이 덜 세어졌고, 그 값이 그대로
+  /// duration_sec와 페이스로 나가서 "3분 페이스" 같은 기록이 남았다.
+  Duration get elapsed {
+    final startedAt = _startedAt;
+    if (startedAt == null) return Duration.zero;
+
+    // 멈춰 있는 동안에는 시간이 흐르지 않아야 하므로 멈춘 시각에서 끊는다.
+    // 끝난 뒤에는 종료 시각에서 끊는다(finish가 멈춤을 먼저 정산한다).
+    final until = _pausedAt ?? _endedAt ?? DateTime.now();
+    final ran = until.difference(startedAt) - _pausedTotal;
+
+    // 기기 시계가 뒤로 돌아가는 경우까지 음수로 내보내지는 않는다.
+    return ran.isNegative ? Duration.zero : ran;
+  }
   DateTime? get startedAt => _startedAt;
 
   /// 가장 최근에 들어온 위치. [path]와 달리 게이트를 거치지 않은 원본이라
@@ -78,7 +100,7 @@ class RunTracker extends ChangeNotifier {
   /// km당 초. 아직 움직이지 않았으면 null.
   double? get paceSecondsPerKm {
     if (_distanceMeters <= 0) return null;
-    return _elapsed.inSeconds / (_distanceMeters / 1000);
+    return elapsed.inSeconds / (_distanceMeters / 1000);
   }
 
   /// 코스 커버리지 0.0~1.0(코스 점 중 실제로 지나간 비율). 자유 러닝이면 null.
@@ -173,6 +195,7 @@ class RunTracker extends ChangeNotifier {
     _positionSubscription = null;
 
     _status = RunStatus.paused;
+    _beginPause();
     _ticker?.cancel();
     _interruption = reason;
     notifyListeners();
@@ -182,14 +205,27 @@ class RunTracker extends ChangeNotifier {
     if (_status != RunStatus.running) return;
 
     _status = RunStatus.paused;
+    _beginPause();
     _ticker?.cancel();
     notifyListeners();
+  }
+
+  void _beginPause() => _pausedAt ??= DateTime.now();
+
+  /// 멈춰 있던 시간을 합계에 넣고 멈춤을 닫는다.
+  void _endPause() {
+    final pausedAt = _pausedAt;
+    if (pausedAt == null) return;
+
+    _pausedTotal += DateTime.now().difference(pausedAt);
+    _pausedAt = null;
   }
 
   void resume() {
     if (_status != RunStatus.paused) return;
 
     _status = RunStatus.running;
+    _endPause();
     // 일시정지 중 이동은 거리에 반영하지 않는다. 기준점만 버리고 _lastPosition은
     // 남긴다 — 그걸 비우면 지도에서 현위치 마커가 잠깐 사라진다.
     _commitAnchor = null;
@@ -210,6 +246,10 @@ class RunTracker extends ChangeNotifier {
   /// 러닝 종료. 이후 [buildRecord]로 서버에 올릴 기록을 만든다.
   void finish() {
     if (!isActive) return;
+
+    // 멈춘 채로 끝내는 경우가 보통이다(종료 버튼이 일시정지 상태에서만 나온다).
+    // 그 마지막 멈춤까지 정산해야 elapsed가 종료 시각 기준으로 맞는다.
+    _endPause();
 
     _status = RunStatus.finished;
     _endedAt = DateTime.now();
@@ -233,7 +273,7 @@ class RunTracker extends ChangeNotifier {
       startedAt: startedAt,
       endedAt: endedAt,
       distanceMeters: _distanceMeters,
-      duration: _elapsed,
+      duration: elapsed,
       path: List.of(_path),
     );
   }
@@ -275,12 +315,14 @@ class RunTracker extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 화면 갱신용 시계. 경과 시간을 여기서 세지는 않는다([elapsed] 참고) —
+  /// "1초마다 다시 그려라"는 신호일 뿐이라, 타이머가 밀려도 값은 틀리지 않는다.
   void _startTicker() {
     _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      _elapsed += const Duration(seconds: 1);
-      notifyListeners();
-    });
+    _ticker = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => notifyListeners(),
+    );
   }
 
   void _reset() {
@@ -292,9 +334,10 @@ class RunTracker extends ChangeNotifier {
     _status = RunStatus.idle;
     _path.clear();
     _distanceMeters = 0;
-    _elapsed = Duration.zero;
     _startedAt = null;
     _endedAt = null;
+    _pausedTotal = Duration.zero;
+    _pausedAt = null;
     _targetCourse = null;
     _courseLengthMeters = 0;
     _lastPosition = null;
