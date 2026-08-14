@@ -80,6 +80,12 @@ class SimulatedLocationService implements LocationService {
     return controller.stream;
   }
 
+  /// 시뮬레이션 스트림은 에러를 내지 않으므로 여기까지 올 일이 없지만,
+  /// 스트림이 끝나면 [RunTracker]가 이걸 부른다(onDone).
+  @override
+  LocationInterruption interruptionFrom(Object error) =>
+      LocationInterruption.lost;
+
   @override
   Future<void> openAppSettings() async {
     // 시뮬레이션에는 권한 문제가 없으므로 열 설정이 없다.

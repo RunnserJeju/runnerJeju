@@ -31,6 +31,9 @@ class _RunScreenState extends State<RunScreen> {
 
   final TransientMessenger _messenger = TransientMessenger();
 
+  /// 안내를 이미 띄운 끊김 사유. 같은 사유로 두 번 알리지 않으려고 들고 있는다.
+  LocationInterruption? _notifiedInterruption;
+
   GeoPoint? _initialCenter;
 
   @override
@@ -47,7 +50,18 @@ class _RunScreenState extends State<RunScreen> {
   }
 
   void _onTrackerChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+
+    // 같은 끊김으로 매 갱신마다 안내가 뜨지 않게, 사유가 바뀔 때만 알린다.
+    // (화면에 남는 표시는 _ControlPanel이 따로 그린다 — 안내는 사라지지만
+    // 왜 멈췄는지는 계속 보여야 한다.)
+    final interruption = _tracker.interruption;
+    if (interruption != _notifiedInterruption) {
+      _notifiedInterruption = interruption;
+      if (interruption != null) _messenger.show(context, interruption.message);
+    }
+
+    setState(() {});
   }
 
   /// 러닝 시작 전에도 지도가 내 주변을 보여주도록 현재 위치를 한 번 조회한다.
@@ -172,6 +186,7 @@ class _RunScreenState extends State<RunScreen> {
                   const Spacer(),
                   _ControlPanel(
                     tracker: tracker,
+                    interruption: tracker.interruption,
                     coursePath: widget.course?.path ?? const [],
                     onStart: _start,
                     onStartSimulation: (source) => _start(source: source),
@@ -270,6 +285,7 @@ class _TopBar extends StatelessWidget {
 class _ControlPanel extends StatelessWidget {
   const _ControlPanel({
     required this.tracker,
+    required this.interruption,
     required this.coursePath,
     required this.onStart,
     required this.onStartSimulation,
@@ -279,6 +295,11 @@ class _ControlPanel extends StatelessWidget {
   });
 
   final RunTracker tracker;
+
+  /// 위치가 끊겨서 멈춘 것이라면 그 사유. 사용자가 누른 일시정지와 화면 상태가
+  /// 같아서, 이유를 적어 두지 않으면 왜 멈췄는지 알 길이 없다.
+  final LocationInterruption? interruption;
+
   final List<GeoPoint> coursePath;
   final VoidCallback onStart;
   final void Function(LocationService source) onStartSimulation;
@@ -299,6 +320,10 @@ class _ControlPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (interruption != null) ...[
+            _InterruptionNotice(interruption: interruption!),
+            const SizedBox(height: 16),
+          ],
           Center(
             child: MetricTile(
               label: '거리 (KM)',
@@ -413,3 +438,57 @@ class _Controls extends StatelessWidget {
   }
 }
 
+
+/// 위치가 끊겨 기록이 멈췄음을 컨트롤 패널 안에 남겨 두는 줄.
+///
+/// 스낵바만으로는 부족하다. 몇 초 뒤 사라지는데, 그동안 화면을 안 보고 있었다면
+/// 남는 것은 "멈춰 있는 러닝" 하나뿐이라 사용자가 직접 일시정지를 누른 것과
+/// 구분되지 않는다.
+class _InterruptionNotice extends StatelessWidget {
+  const _InterruptionNotice({required this.interruption});
+
+  final LocationInterruption interruption;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.location_off_rounded,
+            size: 18,
+            color: AppColors.danger,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  interruption.message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  '위치를 다시 켜고 이어서를 누르면 계속 기록해요.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF5B6472)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

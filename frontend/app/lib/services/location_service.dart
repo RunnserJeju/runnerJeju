@@ -16,6 +16,21 @@ enum LocationAvailability {
   bool get isReady => this == LocationAvailability.ready;
 }
 
+/// 러닝 중 위치 수집이 끊긴 이유.
+///
+/// [LocationAvailability]와 나눠 둔 이유는 시점이 다르기 때문이다. 저쪽은 러닝을
+/// **시작하기 전에** 물어보는 것이라 "설정을 열어 주세요"로 끝나지만, 이쪽은 이미
+/// 달리고 있는 사람에게 "기록이 여기서 멈췄다"를 알리는 말이다.
+enum LocationInterruption {
+  serviceDisabled('기기의 위치 서비스가 꺼져서 기록을 멈췄어요'),
+  permissionRevoked('위치 권한이 사라져서 기록을 멈췄어요'),
+  lost('위치 신호가 끊겨서 기록을 멈췄어요');
+
+  const LocationInterruption(this.message);
+
+  final String message;
+}
+
 /// 비즈니스 로직 계층: GPS 권한과 위치 스트림을 앱 도메인 타입으로 감싼다.
 /// UI는 geolocator 타입을 직접 알지 못한다.
 class LocationService {
@@ -58,9 +73,23 @@ class LocationService {
   }
 
   /// 러닝 중 위치 스트림.
+  ///
+  /// 이 스트림은 러닝 도중에도 에러를 낸다 — 대표적으로 달리는 중에 기기의 위치
+  /// 서비스를 끄는 경우다. 구독하는 쪽은 반드시 `onError`를 달아야 한다
+  /// ([interruptionFrom]으로 사유를 읽을 수 있다).
   Stream<GeoPoint> trackPosition() => Geolocator.getPositionStream(
     locationSettings: _trackingSettings,
   ).map(_toGeoPoint);
+
+  /// [trackPosition]이 낸 에러를 앱이 쓰는 사유로 바꾼다.
+  ///
+  /// geolocator 타입을 아는 곳을 이 파일 안에 묶어 두려고 여기 둔다 — 구독하는
+  /// 쪽(RunTracker)은 받은 에러를 그대로 넘기기만 한다.
+  LocationInterruption interruptionFrom(Object error) => switch (error) {
+    LocationServiceDisabledException() => LocationInterruption.serviceDisabled,
+    PermissionDeniedException() => LocationInterruption.permissionRevoked,
+    _ => LocationInterruption.lost,
+  };
 
   Future<void> openAppSettings() => Geolocator.openAppSettings();
 

@@ -39,6 +39,15 @@ class RunTracker extends ChangeNotifier {
   GeoPoint? _commitAnchor;
   CourseCoverageTracker? _coverage;
 
+  /// 이번 러닝이 쓰는 위치원. 시뮬레이션이면 그쪽이 들어온다.
+  ///
+  /// [start]가 받은 것을 들고 있는 이유는 재개 때문이다. 위치가 끊겨서 멈춘
+  /// 경우에는 구독이 이미 죽어 있어서, 다시 달리려면 같은 위치원에 다시 붙어야 한다.
+  LocationService? _activeLocation;
+
+  /// 위치 수집이 끊긴 이유. 끊기지 않았으면 null.
+  LocationInterruption? _interruption;
+
   /// 경로·거리·커버리지에 점을 반영하는 최소 이동 거리(m).
   ///
   /// 위치 자체는 1m마다 들어온다([LocationService]) — 현위치 마커를 부드럽게
@@ -48,6 +57,9 @@ class RunTracker extends ChangeNotifier {
   static const double _commitMeters = 5;
 
   RunStatus get status => _status;
+
+  /// 위치가 끊겨서 기록이 멈춰 있다면 그 사유. 화면이 이걸 보고 알린다.
+  LocationInterruption? get interruption => _interruption;
   List<GeoPoint> get path => List.unmodifiable(_path);
   double get distanceMeters => _distanceMeters;
   Duration get elapsed => _elapsed;
@@ -125,12 +137,45 @@ class RunTracker extends ChangeNotifier {
         : CourseCoverageTracker(course.path);
     _startedAt = DateTime.now();
     _status = RunStatus.running;
+    _activeLocation = location;
 
-    _positionSubscription = location.trackPosition().listen(_onPosition);
+    _subscribeToPositions(location);
     _startTicker();
     notifyListeners();
 
     return availability;
+  }
+
+  void _subscribeToPositions(LocationService location) {
+    _positionSubscription?.cancel();
+    _positionSubscription = location.trackPosition().listen(
+      _onPosition,
+      // 에러를 받지 않으면 스트림이 조용히 끊긴다. 그러면 상태는 running인 채로
+      // 시계만 계속 돌고 거리·경로는 영영 멈춘 상태가 되는데, 화면에는 아무
+      // 신호도 없어서 달리는 사람은 기록되고 있다고 믿는다.
+      onError: (Object error) =>
+          _handlePositionLost(location.interruptionFrom(error)),
+      // 스트림이 정상 종료되는 경우도 결과는 같다(우리가 취소한 경우에는 불리지
+      // 않으므로 종료·초기화와 부딪히지 않는다).
+      onDone: () => _handlePositionLost(LocationInterruption.lost),
+    );
+  }
+
+  /// 위치가 끊겼다. 기록을 멈추고 사유를 남긴다.
+  ///
+  /// 러닝을 끝내지는 않는다 — 여기까지 달린 것은 그대로 살아 있고, 위치 서비스를
+  /// 다시 켜면 이어 달릴 수 있어야 한다. 화면에 나오는 상태는 사용자가 직접
+  /// 일시정지를 누른 것과 같아서, 이어서·종료 버튼이 그대로 쓰인다.
+  void _handlePositionLost(LocationInterruption reason) {
+    if (_status != RunStatus.running) return;
+
+    _positionSubscription?.cancel();
+    _positionSubscription = null;
+
+    _status = RunStatus.paused;
+    _ticker?.cancel();
+    _interruption = reason;
+    notifyListeners();
   }
 
   void pause() {
@@ -148,6 +193,16 @@ class RunTracker extends ChangeNotifier {
     // 일시정지 중 이동은 거리에 반영하지 않는다. 기준점만 버리고 _lastPosition은
     // 남긴다 — 그걸 비우면 지도에서 현위치 마커가 잠깐 사라진다.
     _commitAnchor = null;
+    _interruption = null;
+
+    // 끊겨서 멈춘 경우라면 구독이 없다. 같은 위치원에 다시 붙는다. 원인이
+    // 그대로면(위치 서비스가 여전히 꺼져 있으면) 곧바로 다시 멈추고 사유가
+    // 다시 뜬다 — 그게 "아직 안 됐다"를 알리는 가장 솔직한 방법이다.
+    final location = _activeLocation;
+    if (_positionSubscription == null && location != null) {
+      _subscribeToPositions(location);
+    }
+
     _startTicker();
     notifyListeners();
   }
@@ -245,6 +300,8 @@ class RunTracker extends ChangeNotifier {
     _lastPosition = null;
     _commitAnchor = null;
     _coverage = null;
+    _activeLocation = null;
+    _interruption = null;
   }
 
   @override
