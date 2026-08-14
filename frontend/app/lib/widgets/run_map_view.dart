@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 // 카카오맵 SDK는 Route, Polygon 등 머티리얼과 겹치는 이름을 내보내므로 접두사를 붙인다.
@@ -394,7 +396,7 @@ class _RunMapViewState extends State<RunMapView>
 
     final marker = _currentPositionMarker;
     if (marker != null) {
-      await _stopTracking(controller);
+      _stopTracking(controller);
       await marker.remove();
       _currentPositionMarker = null;
     }
@@ -519,13 +521,13 @@ class _RunMapViewState extends State<RunMapView>
         );
       }
 
-      await _startTracking(controller);
+      _startTracking(controller);
       return;
     }
 
     // 러닝이 끝났으면 다음 러닝에서 다시 당길 수 있게 되돌린다.
     _isFollowing = false;
-    await _stopTracking(controller);
+    _stopTracking(controller);
 
     // 그릴 것을 처음 받았을 때 한 번만 전체가 보이도록 맞춘다.
     //
@@ -556,19 +558,28 @@ class _RunMapViewState extends State<RunMapView>
   /// 네이티브가 마커와 같은 타임라인으로 처리해서 카메라와 마커가 따로 놀지
   /// 않는다. 회전 추적(setTrackingRotate)은 켜지 않는다 — 마커가 원형이라 방향이
   /// 없고, 지도가 돌면 코스 폴리라인만 읽기 어려워진다.
-  Future<void> _startTracking(kakao.KakaoMapController controller) async {
+  ///
+  /// 시작·정지를 **기다리지 않는다.** 두 호출이 돌려주는 값은 늘 null이라
+  /// 기다려서 얻는 정보가 없고(추적이 실제로 걸렸는지는 알려주지 않는다),
+  /// 안드로이드 네이티브는 아예 응답을 돌려주지 않아 기다리면 [_redraw]가
+  /// 그 자리에서 영영 멈춘다 — 그러면 이후 코스·정지경로 갱신과 일시정지
+  /// 처리까지 통째로 죽는다.
+  ///
+  /// 같은 채널로 나가는 메시지는 순서가 보장되므로, 정지 요청은 뒤이어 나가는
+  /// 마커 삭제([_clearLive])보다 반드시 먼저 네이티브에 닿는다.
+  void _startTracking(kakao.KakaoMapController controller) {
     final marker = _currentPositionMarker;
     if (_isTracking || marker == null) return;
 
     controller.tracking.poi = marker;
-    await controller.tracking.start();
+    unawaited(controller.tracking.start());
     _isTracking = true;
   }
 
-  Future<void> _stopTracking(kakao.KakaoMapController controller) async {
+  void _stopTracking(kakao.KakaoMapController controller) {
     if (!_isTracking) return;
 
-    await controller.tracking.stop();
+    unawaited(controller.tracking.stop());
     controller.tracking.poi = null;
     _isTracking = false;
   }

@@ -26,6 +26,7 @@ class CourseMapView extends StatefulWidget {
     this.onCourseTap,
     this.onMapTap,
     this.controller,
+    this.initialCenter,
   });
 
   /// 지도에 라벨로 찍을 코스들. [RunningCourse.startPoint]가 없는 코스는 빠진다.
@@ -47,6 +48,13 @@ class CourseMapView extends StatefulWidget {
 
   /// 카메라를 밖에서 움직이기 위한 손잡이.
   final CourseMapController? controller;
+
+  /// 지도를 처음 띄울 중심. 주면 코스 전체를 맞추는 대신 이 자리에서 시작한다.
+  ///
+  /// 지도를 다시 만들 때 쓴다 — 러닝 화면에 갔다 오면 이 위젯은 새로 태어나므로,
+  /// 주지 않으면 코스를 확대해 보던 사람이 제주 전체 화면으로 돌아온다.
+  /// 지도가 만들어질 때 한 번만 읽는다.
+  final GeoPoint? initialCenter;
 
   /// 코스를 아직 하나도 못 받았을 때 보여줄 중심(제주도 한가운데).
   static const GeoPoint jejuCenter = GeoPoint(
@@ -182,8 +190,10 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     return kakao.KakaoMap(
       option: kakao.KakaoMapOption(
-        position: _toLatLng(CourseMapView.jejuCenter),
-        zoomLevel: _islandZoomLevel,
+        position: _toLatLng(widget.initialCenter ?? CourseMapView.jejuCenter),
+        zoomLevel: widget.initialCenter == null
+            ? _islandZoomLevel
+            : _focusZoomLevel,
       ),
       onMapReady: (controller) {
         _controller = controller;
@@ -411,8 +421,11 @@ class _CourseMapViewState extends State<CourseMapView> {
 
   Future<void> _fitOnFirstLoad() async {
     if (_hasFittedCourses || _markers.isEmpty) return;
-
     _hasFittedCourses = true;
+
+    // 처음 볼 자리를 밖에서 정해 줬으면 그 자리를 그대로 둔다.
+    if (widget.initialCenter != null) return;
+
     await fitCourses();
   }
 

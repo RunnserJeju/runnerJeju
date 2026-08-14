@@ -57,6 +57,14 @@ class _RunningScreenState extends State<RunningScreen> {
 
   GeoPoint? _myPosition;
 
+  /// 러닝 화면이 위에 떠 있는 동안인지.
+  ///
+  /// 그동안에는 이 화면의 지도를 트리에서 뺀다. 라우트를 밀어 올려도 아래 화면은
+  /// 살아 있어서, 가만히 두면 카카오맵 네이티브 뷰가 둘이 된다 — 하나는 달리는
+  /// 사람이 보고 있고, 하나는 아무도 못 보는 채로 메모리만 쓴다. 위젯을 떼면
+  /// 네이티브 쪽이 mapView.finish()까지 확실히 정리한다.
+  bool _isRunningScreenOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -198,10 +206,16 @@ class _RunningScreenState extends State<RunningScreen> {
   }
 
   Future<void> _startRun({RunningCourse? course}) async {
+    setState(() => _isRunningScreenOpen = true);
+
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => RunScreen(course: course)),
     );
     if (!mounted) return;
+
+    // 지도는 여기서 새로 만들어진다. 고른 코스·검색어·내 위치는 이 State에
+    // 있어서 그대로 살아 있고, 지도가 다시 잡아야 하는 건 카메라뿐이다.
+    setState(() => _isRunningScreenOpen = false);
 
     // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다.
     await _loadCourses();
@@ -235,15 +249,20 @@ class _RunningScreenState extends State<RunningScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: CourseMapView(
-              controller: _mapController,
-              courses: _visibleCourses,
-              selectedCourseId: selected?.id,
-              selectedPath: _selectedDetail?.path ?? const [],
-              myPosition: _myPosition,
-              onCourseTap: _selectCourse,
-              onMapTap: _clearSelection,
-            ),
+            child: _isRunningScreenOpen
+                ? const ColoredBox(color: AppColors.paper)
+                : CourseMapView(
+                    controller: _mapController,
+                    courses: _visibleCourses,
+                    selectedCourseId: selected?.id,
+                    selectedPath: _selectedDetail?.path ?? const [],
+                    myPosition: _myPosition,
+                    onCourseTap: _selectCourse,
+                    onMapTap: _clearSelection,
+                    // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
+                    // 코스가 있으면 그 자리에서 다시 시작한다.
+                    initialCenter: selected?.startPoint,
+                  ),
           ),
           SafeArea(
             child: Padding(
