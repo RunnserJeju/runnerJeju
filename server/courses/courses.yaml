@@ -19,8 +19,93 @@
 # distance_km은 왕복 기준 km 정수다(GPX 실측값이 아니라 명단에 적힌 안내값).
 # difficulty는 1=★, 2=★★, 3=★★★.
 # tags는 쉼표로 구분한다 — 앱이 쪼개서 칩으로 보여준다.
+#
+# name은 명단 시트의 코스명을 그대로 쓴다(번호 접두사 포함).
+#
+# 파일명과 코스명을 짝지을 때 번호를 믿으면 안 된다. GPX 파일명의 번호가 시트
+# 번호와 어긋나고(7.위미-태웃개 → 시트 No6, 8.새연교 → 시트 No7), 이름 자체가
+# 다른 경우도 있다. 아래는 확인된 짝이다.
+#
+#   시트 코스명              GPX 파일명
+#   이호랜드 러닝코스        알작지-이호
+#   도두봉 서해안로          어영-도두봉
+#   외돌개                   외돌개-러닝코스   (파일 번호 9, 시트 번호 8)
+#   중문                     중문로드          (파일 번호 6, 시트 번호 9)
+#   노꼬메 오름 3peak        궷물노꼬메
+#   함덕 서우봉              함덕-북촌리-러닝코스
+#   거슨세미오름 3peak       거슨안돌밧돌
+#   위미 태웃개              위미-태웃개       (파일 번호 7, 시트 번호 6)
+#   새연교                   새연교-러닝코스   (파일 번호 8, 시트 번호 7)
+#   머체왓 숲길              머체왓
+#   사계 해안도로            사계해안도로 (sagye-coastal.gpx)
+#   댕댕런                   댕댕런 (dangdangrun.gpx)
+#
+# 아직 GPX가 없어서 명단에 없는 코스: 마라도런(No20).
 
 courses:
+  - file: 2.알작지-이호.gpx
+    name: No.1 이호랜드 러닝코스
+    distance_km: 7
+    difficulty: 2
+    tags: 해안도로,제주시
+    address: 제주특별자치도 제주시 내도동 536-1
+
+  - file: 3.어영-도두봉.gpx
+    name: No.2 도두봉 서해안로
+    distance_km: 5
+    difficulty: 1
+    tags: 해안도로,제주시
+    address: 제주 제주시 용담삼동 2396-16
+
+  - file: "3.탑동러닝코스 5.6km.gpx"
+    name: No.3 탑동 러닝 코스
+    distance_km: 6
+    difficulty: 1
+    tags: 해안도로,제주시
+    address: 제주 제주시 중앙로 2
+
+  - file: 4.종달리-해안도로6km.gpx
+    name: No4. 종달리 해안도로
+    distance_km: 6
+    difficulty: 1
+    tags: 해안도로,제주시,동쪽
+    address: 제주특별자치도 제주시 구좌읍 해맞이해안로 2281
+
+  - file: 5.성산-오조포구6.6km.gpx
+    name: No5. 성산 오조포구 러닝코스
+    distance_km: 7
+    difficulty: 1
+    tags: 제주시,동쪽
+    address: 제주 서귀포시 성산읍 고성리 263
+
+  - file: 7.위미-태웃개7km.gpx
+    name: No6. 위미 태웃개
+    distance_km: 7
+    difficulty: 2
+    tags: 해안도로,서귀포,아이싱
+    address: 제주 서귀포시 남원읍 태위로398번길 57 태웃개
+
+  - file: 8.새연교-러닝코스.gpx
+    name: No7. 새연교
+    distance_km: 7
+    difficulty: 1
+    tags: 서귀포,아이싱
+    address: 제주 서귀포시 칠십리로 156-8 정모시쉼터
+
+  - file: 9.외돌개-러닝코스.gpx
+    name: No8. 외돌개
+    distance_km: 7
+    difficulty: 1
+    tags: 서귀포
+    address: 서귀포 칠십리 공원 주차장 서귀포시 서홍동 572
+
+  - file: 6.중문로드.gpx
+    name: No9. 중문
+    distance_km: 7
+    difficulty: 2
+    tags: 서귀포
+    address: 제주 서귀포시 중문관광로 154-17 더클리프 주차장
+
   - file: sagye-coastal.gpx
     name: No10. 사계 해안도로
     distance_km: 6
@@ -31,6 +116,41 @@ courses:
       산방산과 형제섬을 곁에 두고 달리는 해안 코스.
       고도 변화가 거의 없어 첫 러닝으로 좋다.
 
+  - file: 11.궷물노꼬메8km.gpx
+    name: No11. 노꼬메 오름 3peak
+    distance_km: 8
+    difficulty: 3
+    tags: 트레일러닝,제주시
+    address: 궷물오름 주차장 (제주시 애월읍 유수암리 1191-2)
+
+  - file: 12.오라올레길.gpx
+    name: No12. 오라올레길
+    distance_km: 5
+    difficulty: 2
+    tags: 트레일러닝,제주시
+    address: 방선문 입구 (제주시 오라이동 3819-11)
+
+  - file: 13.함덕-북촌리-러닝코스.gpx
+    name: No13. 함덕 서우봉
+    distance_km: 6
+    difficulty: 2
+    tags: 트레일러닝,제주시,동쪽
+    address: 제주시 조천읍 함덕리 산 4
+
+  - file: 14.거슨안돌밧돌.gpx
+    name: No14. 거슨세미오름 3peak
+    distance_km: 6
+    difficulty: 3
+    tags: 트레일러닝,제주시,동쪽
+    address: 제주시 구좌읍 송당리 산 145
+
+  - file: 15.머체왓-6km.gpx
+    name: No15. 머체왓 숲길
+    distance_km: 6
+    difficulty: 2
+    tags: 트레일러닝,서귀포
+    address: 서귀포시 남원읍 서성로 755
+
   - file: dangdangrun.gpx
     name: No16. 댕댕런
     distance_km: 4
@@ -39,3 +159,41 @@ courses:
     address: 제주시 탑동로 5
     description: |
       원도심을 달리며 그리는 강아지 모양 댕댕런
+
+  - file: 17.당근런.gpx
+    name: No17. 당근런
+    distance_km: 4
+    difficulty: 1
+    tags: 아트런,제주시,동쪽
+    address: 제주시 구좌읍 김녕리 2236
+
+  - file: 18.하르방런.gpx
+    name: No18. 하르방런
+    distance_km: 4
+    difficulty: 1
+    tags: 아트런,서귀포
+    address: 서귀포시 김정문화로 57
+
+  # 우도런은 명단에 한 줄("약 10~14km")이지만 GPX는 그룹별로 3개다. 거리가
+  # 10/13/14km로 확실히 달라서 각각 별개 코스로 올린다 — 코스를 고르는 사람
+  # 입장에서 10km와 14km는 같은 코스가 아니다.
+  - file: 러닝아일랜드-우도런_10km.gpx
+    name: No19. 우도런 10km
+    distance_km: 10
+    difficulty: 3
+    tags: 서귀포,해안도로,아이싱
+    address: 제주 제주시 우도면 우도해안길 70
+
+  - file: 러닝아일랜드-우도런_13km.gpx
+    name: No19. 우도런 13km
+    distance_km: 13
+    difficulty: 3
+    tags: 서귀포,해안도로,아이싱
+    address: 제주 제주시 우도면 우도해안길 70
+
+  - file: 러닝아일랜드-우도런_13.7km+소머리오름.gpx
+    name: No19. 우도런 13.7km (소머리오름)
+    distance_km: 14
+    difficulty: 3
+    tags: 서귀포,해안도로,아이싱
+    address: 제주 제주시 우도면 우도해안길 70

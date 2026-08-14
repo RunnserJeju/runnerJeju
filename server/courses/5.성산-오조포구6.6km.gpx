@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" creator="MTK - http://www.toursprung.com" version="1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">
+<metadata>
+<name>성산 오조포구</name>
+<extensions><extra>{}</extra></extensions>
+</metadata>
+
+<trk>
+<name>성산 오조포구</name>
+<trkseg>
+<trkpt lat="33.455174" lon="126.924100" sectionIndex="0" pointIndex="0" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.455950" lon="126.925131" sectionIndex="0" pointIndex="1" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.457187" lon="126.927787" sectionIndex="0" pointIndex="2" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.458368" lon="126.928840" sectionIndex="0" pointIndex="3" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.460208" lon="126.928807" sectionIndex="0" pointIndex="4" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.460703" lon="126.928881" sectionIndex="0" pointIndex="5" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.461109" lon="126.929107" sectionIndex="0" pointIndex="6" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.464059" lon="126.931977" sectionIndex="0" pointIndex="7" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.7</ele></trkpt>
+<trkpt lat="33.464654" lon="126.932073" sectionIndex="0" pointIndex="8" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>0.8</ele></trkpt>
+<trkpt lat="33.465330" lon="126.931879" sectionIndex="0" pointIndex="9" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.0</ele></trkpt>
+<trkpt lat="33.465727" lon="126.931534" sectionIndex="0" pointIndex="10" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.2</ele></trkpt>
+<trkpt lat="33.466474" lon="126.930028" sectionIndex="0" pointIndex="11" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.6</ele></trkpt>
+<trkpt lat="33.467015" lon="126.929113" sectionIndex="0" pointIndex="12" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.9</ele></trkpt>
+<trkpt lat="33.467321" lon="126.928930" sectionIndex="0" pointIndex="13" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.2</ele></trkpt>
+<trkpt lat="33.468547" lon="126.928671" sectionIndex="0" pointIndex="14" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.5</ele></trkpt>
+<trkpt lat="33.468727" lon="126.928004" sectionIndex="0" pointIndex="15" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.9</ele></trkpt>
+<trkpt lat="33.468729" lon="126.925686" sectionIndex="0" pointIndex="16" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>3.2</ele></trkpt>
+<trkpt lat="33.468731" lon="126.923907" sectionIndex="0" pointIndex="17" originalElevation="7.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>3.6</ele></trkpt>
+<trkpt lat="33.468733" lon="126.921743" sectionIndex="0" pointIndex="18" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>4.0</ele></trkpt>
+<trkpt lat="33.468390" lon="126.921775" sectionIndex="0" pointIndex="19" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>4.3</ele></trkpt>
+<trkpt lat="33.468173" lon="126.921625" sectionIndex="0" pointIndex="20" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>4.6</ele></trkpt>
+<trkpt lat="33.467804" lon="126.921517" sectionIndex="0" pointIndex="21" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>4.9</ele></trkpt>
+<trkpt lat="33.467578" lon="126.921561" sectionIndex="0" pointIndex="22" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>5.1</ele></trkpt>
+<trkpt lat="33.467443" lon="126.921453" sectionIndex="0" pointIndex="23" originalElevation="11.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>5.3</ele></trkpt>
+<trkpt lat="33.467046" lon="126.921636" sectionIndex="0" pointIndex="24" originalElevation="11.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>5.4</ele></trkpt>
+<trkpt lat="33.466623" lon="126.921336" sectionIndex="0" pointIndex="25" originalElevation="25.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>5.4</ele></trkpt>
+<trkpt lat="33.466218" lon="126.921336" sectionIndex="0" pointIndex="26" originalElevation="25.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>5.3</ele></trkpt>
+<trkpt lat="33.465306" lon="126.921175" sectionIndex="0" pointIndex="27" originalElevation="15.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>5.2</ele></trkpt>
+<trkpt lat="33.464963" lon="126.920799" sectionIndex="0" pointIndex="28" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>5.0</ele></trkpt>
+<trkpt lat="33.464764" lon="126.920122" sectionIndex="0" pointIndex="29" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>4.7</ele></trkpt>
+<trkpt lat="33.464701" lon="126.919713" sectionIndex="0" pointIndex="30" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>4.4</ele></trkpt>
+<trkpt lat="33.464719" lon="126.918960" sectionIndex="0" pointIndex="31" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>4.1</ele></trkpt>
+<trkpt lat="33.464637" lon="126.918777" sectionIndex="0" pointIndex="32" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>3.8</ele></trkpt>
+<trkpt lat="33.464673" lon="126.918497" sectionIndex="0" pointIndex="33" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>3.4</ele></trkpt>
+<trkpt lat="33.464997" lon="126.917873" sectionIndex="0" pointIndex="34" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>3.1</ele></trkpt>
+<trkpt lat="33.464862" lon="126.917400" sectionIndex="0" pointIndex="35" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.9</ele></trkpt>
+<trkpt lat="33.464564" lon="126.917153" sectionIndex="0" pointIndex="36" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.7</ele></trkpt>
+<trkpt lat="33.463698" lon="126.916680" sectionIndex="0" pointIndex="37" originalElevation="-1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.5</ele></trkpt>
+<trkpt lat="33.463624" lon="126.916336" sectionIndex="0" pointIndex="38" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.4</ele></trkpt>
+<trkpt lat="33.463473" lon="126.916269" sectionIndex="0" pointIndex="39" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.2</ele></trkpt>
+<trkpt lat="33.463308" lon="126.915535" sectionIndex="0" pointIndex="40" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.1</ele></trkpt>
+<trkpt lat="33.462762" lon="126.914831" sectionIndex="0" pointIndex="41" originalElevation="4.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.0</ele></trkpt>
+<trkpt lat="33.462682" lon="126.914307" sectionIndex="0" pointIndex="42" originalElevation="4.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.9</ele></trkpt>
+<trkpt lat="33.462164" lon="126.914493" sectionIndex="0" pointIndex="43" originalElevation="5.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.9</ele></trkpt>
+<trkpt lat="33.462018" lon="126.914883" sectionIndex="0" pointIndex="44" originalElevation="5.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.0</ele></trkpt>
+<trkpt lat="33.461186" lon="126.915379" sectionIndex="0" pointIndex="45" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.1</ele></trkpt>
+<trkpt lat="33.460289" lon="126.915560" sectionIndex="0" pointIndex="46" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.1</ele></trkpt>
+<trkpt lat="33.459609" lon="126.915480" sectionIndex="0" pointIndex="47" originalElevation="4.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.2</ele></trkpt>
+<trkpt lat="33.458770" lon="126.915561" sectionIndex="0" pointIndex="48" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.2</ele></trkpt>
+<trkpt lat="33.458162" lon="126.915793" sectionIndex="0" pointIndex="49" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.2</ele></trkpt>
+<trkpt lat="33.458103" lon="126.916186" sectionIndex="0" pointIndex="50" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.2</ele></trkpt>
+<trkpt lat="33.457729" lon="126.916439" sectionIndex="0" pointIndex="51" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.1</ele></trkpt>
+<trkpt lat="33.457459" lon="126.916772" sectionIndex="0" pointIndex="52" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.1</ele></trkpt>
+<trkpt lat="33.457311" lon="126.917079" sectionIndex="0" pointIndex="53" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.0</ele></trkpt>
+<trkpt lat="33.457270" lon="126.917364" sectionIndex="0" pointIndex="54" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.9</ele></trkpt>
+<trkpt lat="33.457085" lon="126.917461" sectionIndex="0" pointIndex="55" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.9</ele></trkpt>
+<trkpt lat="33.456977" lon="126.917736" sectionIndex="0" pointIndex="56" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.8</ele></trkpt>
+<trkpt lat="33.456725" lon="126.917967" sectionIndex="0" pointIndex="57" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.8</ele></trkpt>
+<trkpt lat="33.455828" lon="126.917715" sectionIndex="0" pointIndex="58" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.7</ele></trkpt>
+<trkpt lat="33.455607" lon="126.917489" sectionIndex="0" pointIndex="59" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.6</ele></trkpt>
+<trkpt lat="33.455354" lon="126.917425" sectionIndex="0" pointIndex="60" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.6</ele></trkpt>
+<trkpt lat="33.455138" lon="126.917560" sectionIndex="0" pointIndex="61" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.6</ele></trkpt>
+<trkpt lat="33.454899" lon="126.918049" sectionIndex="0" pointIndex="62" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.5</ele></trkpt>
+<trkpt lat="33.455094" lon="126.918748" sectionIndex="0" pointIndex="63" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.5</ele></trkpt>
+<trkpt lat="33.455004" lon="126.919012" sectionIndex="0" pointIndex="64" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.5</ele></trkpt>
+<trkpt lat="33.455058" lon="126.919152" sectionIndex="0" pointIndex="65" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.4</ele></trkpt>
+<trkpt lat="33.455004" lon="126.919448" sectionIndex="0" pointIndex="66" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.5</ele></trkpt>
+<trkpt lat="33.454856" lon="126.920050" sectionIndex="0" pointIndex="67" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.5</ele></trkpt>
+<trkpt lat="33.454500" lon="126.920228" sectionIndex="0" pointIndex="68" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.5</ele></trkpt>
+<trkpt lat="33.454360" lon="126.920126" sectionIndex="0" pointIndex="69" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.6</ele></trkpt>
+<trkpt lat="33.454333" lon="126.919830" sectionIndex="0" pointIndex="70" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.6</ele></trkpt>
+<trkpt lat="33.454549" lon="126.919556" sectionIndex="0" pointIndex="71" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.7</ele></trkpt>
+<trkpt lat="33.454616" lon="126.919330" sectionIndex="0" pointIndex="72" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.8</ele></trkpt>
+<trkpt lat="33.454513" lon="126.919211" sectionIndex="0" pointIndex="73" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.8</ele></trkpt>
+<trkpt lat="33.454544" lon="126.919034" sectionIndex="0" pointIndex="74" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>1.9</ele></trkpt>
+<trkpt lat="33.454246" lon="126.918513" sectionIndex="0" pointIndex="75" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.0</ele></trkpt>
+<trkpt lat="33.454187" lon="126.918050" sectionIndex="0" pointIndex="76" originalElevation="1.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.0</ele></trkpt>
+<trkpt lat="33.454047" lon="126.917797" sectionIndex="0" pointIndex="77" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.1</ele></trkpt>
+<trkpt lat="33.453281" lon="126.918019" sectionIndex="0" pointIndex="78" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.2</ele></trkpt>
+<trkpt lat="33.452717" lon="126.917783" sectionIndex="0" pointIndex="79" originalElevation="0.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.3</ele></trkpt>
+<trkpt lat="33.452307" lon="126.917934" sectionIndex="0" pointIndex="80" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.4</ele></trkpt>
+<trkpt lat="33.451653" lon="126.917660" sectionIndex="0" pointIndex="81" originalElevation="7.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.5</ele></trkpt>
+<trkpt lat="33.451132" lon="126.919898" sectionIndex="0" pointIndex="82" originalElevation="4.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.6</ele></trkpt>
+<trkpt lat="33.450330" lon="126.920780" sectionIndex="0" pointIndex="83" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.7</ele></trkpt>
+<trkpt lat="33.450817" lon="126.921662" sectionIndex="0" pointIndex="84" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.7</ele></trkpt>
+<trkpt lat="33.451602" lon="126.922457" sectionIndex="0" pointIndex="85" originalElevation="3.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.8</ele></trkpt>
+<trkpt lat="33.453343" lon="126.923811" sectionIndex="0" pointIndex="86" originalElevation="5.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.8</ele></trkpt>
+<trkpt lat="33.454137" lon="126.924090" sectionIndex="0" pointIndex="87" originalElevation="5.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.9</ele></trkpt>
+<trkpt lat="33.454750" lon="126.923949" sectionIndex="0" pointIndex="88" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>2.9</ele></trkpt>
+<trkpt lat="33.455102" lon="126.924024" sectionIndex="0" pointIndex="89" originalElevation="2.0" isOriginalElevationFromOSM="false" isAnchor="false"><ele>3.0</ele></trkpt>
+</trkseg>
+</trk>
+</gpx>
