@@ -30,8 +30,10 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://runner:runner@db:5432/runner_jeju}
       # 배너 이미지 업로드(Supabase Storage)용. infra/.env.example 참고.
       SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_API_SECRET_KEY: ${SUPABASE_API_SECRET_KEY:-}
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-banners}
+      # 기본값을 두지 않는다. 없으면 app/config_guard.py가 기동을 거부한다.
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
     ports:
       - "8000:8000"
     # 개발 편의: 호스트 소스를 그대로 보고 코드 저장 시 리로드한다.

@@ -1,7 +1,8 @@
 """JWT 발급/검증 유틸.
 
-SECRET_KEY는 반드시 환경변수(JWT_SECRET_KEY)로 덮어써야 한다.
-기본값은 로컬 개발 편의용이고 운영에 쓰면 안 된다.
+SECRET_KEY는 반드시 환경변수(JWT_SECRET_KEY)로 덮어써야 한다. 기본값을 남겨두는
+건 테스트가 환경변수 없이 이 모듈을 임포트할 수 있게 하려는 것뿐이고, 이 값으로
+서버가 뜨는 일은 app.config_guard가 기동 시점에 막는다.
 """
 
 import os
@@ -10,7 +11,9 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-only-insecure-secret-change-me")
+INSECURE_DEFAULT_SECRET = "dev-only-insecure-secret-change-me"
+
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY", INSECURE_DEFAULT_SECRET)
 ALGORITHM = "HS256"
 
 ACCESS_TOKEN_TTL = timedelta(hours=1)

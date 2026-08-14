@@ -4,17 +4,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app import schema_guard
+from app import config_guard, schema_guard
 from app.db import engine
 from app.routers import auth, banners, courses, notices, runs, stamps, verifications
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # DB에 붙기 전에 본다 — 설정이 틀렸으면 연결 에러보다 이쪽을 먼저 보여주는 게 낫다.
+    config_guard.verify()
+
     # 스키마는 Alembic이 관리한다(예전의 create_all은 컬럼 변경을 반영하지 못해
     # 모델과 DB가 조용히 어긋났다). 도커 엔트리포인트가 기동 전에 upgrade를
     # 실행하지만, 그 경로를 우회해 띄웠을 때를 대비해 여기서 한 번 더 확인한다.
     schema_guard.verify(engine)
+
+    # 개발과 운영이 같은 이미지라 로그로 구분할 수단이 없으면 사고가 늦게 발견된다.
+    print(f"▶ DB {config_guard.describe_database(engine)}", flush=True)
     yield
 
 

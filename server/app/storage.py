@@ -1,12 +1,16 @@
 """Supabase Storage 업로드.
 
 배너 이미지처럼 관리자가 앱에서 올리는 파일을 Supabase Storage에 저장한다.
-서버가 `service_role` 키로 REST API를 직접 호출해서 대신 올린다 — 앱이 Storage에
-직접 쓰게 하려면 Supabase Auth로 RLS(업로드 권한) 정책을 걸어야 하는데, 이
-프로젝트는 자체 JWT로 로그인/권한을 관리해서(app.deps.require_admin) 인증
+서버가 secret 키(`sb_secret_...`)로 REST API를 직접 호출해서 대신 올린다 — 앱이
+Storage에 직접 쓰게 하려면 Supabase Auth로 RLS(업로드 권한) 정책을 걸어야 하는데,
+이 프로젝트는 자체 JWT로 로그인/권한을 관리해서(app.deps.require_admin) 인증
 체계가 두 벌로 갈라진다. 백엔드가 대신 올리면 기존 관리자 체크 하나로 충분하고,
-`service_role` 키가 모든 정책을 무시하니 Storage 쪽엔 별도 쓰기 정책이 필요 없다
-(읽기는 버킷을 Public으로 만들어 해결한다).
+secret 키가 BYPASSRLS라 모든 정책을 무시하니 Storage 쪽엔 별도 쓰기 정책이
+필요 없다 (읽기는 버킷을 Public으로 만들어 해결한다).
+
+키는 Authorization과 apikey 양쪽에 **같은 값**으로 보내야 한다. Storage API는
+Authorization을 필수로 요구하고(없으면 400), 새 secret 키는 두 헤더 값이 정확히
+같을 때만 Bearer로 허용된다.
 """
 
 import os
@@ -15,7 +19,7 @@ import uuid
 import httpx
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_API_SECRET_KEY = os.environ.get("SUPABASE_API_SECRET_KEY")
 SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "banners")
 
 
@@ -31,9 +35,9 @@ def upload_image(content: bytes, *, content_type: str, extension: str) -> str:
     피하려고. 옛 오브젝트를 지우는 로직은 아직 없다(배너 개수가 적어서 나중에
     정리해도 됨 — 1GB 프리 티어 기준 참고).
     """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+    if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
         raise StorageUploadError(
-            "이미지 업로드가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)."
+            "이미지 업로드가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_API_SECRET_KEY)."
         )
 
     path = f"{uuid.uuid4()}.{extension}"
@@ -41,8 +45,8 @@ def upload_image(content: bytes, *, content_type: str, extension: str) -> str:
     response = httpx.put(
         f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{path}",
         headers={
-            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
+            "apikey": SUPABASE_API_SECRET_KEY,
             "Content-Type": content_type,
         },
         content=content,
@@ -62,7 +66,7 @@ def delete_image(image_url: str) -> None:
     본목적이고, Storage 정리는 부가적이다. URL 형식이 예상과 달라 경로를 못
     뽑거나 이미 지워진 파일이면 조용히 넘어간다.
     """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+    if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
         return
 
     marker = f"/object/public/{SUPABASE_STORAGE_BUCKET}/"
@@ -74,8 +78,8 @@ def delete_image(image_url: str) -> None:
         httpx.delete(
             f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{path}",
             headers={
-                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
+                "apikey": SUPABASE_API_SECRET_KEY,
             },
             timeout=30,
         )
