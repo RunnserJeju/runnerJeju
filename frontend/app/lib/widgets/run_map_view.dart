@@ -84,8 +84,9 @@ class _RunMapViewState extends State<RunMapView>
   /// 지도에 실제로 올라가 있는 코스. 같은 점이 다시 들어오면 플랫폼 호출을 건너뛴다.
   List<GeoPoint>? _drawnCoursePath;
 
-  /// 정지 화면에서 [RunMapView.runPath]를 그린 선.
-  kakao.Route? _staticRunRoute;
+  /// 정지 화면에서 [RunMapView.runPath]를 그린 선들. 일시정지로 끊긴 자리마다
+  /// 하나씩 나뉘므로 여러 개가 된다.
+  final List<kakao.Route> _staticRunRoutes = [];
   List<GeoPoint>? _drawnStaticRunPath;
 
   /// 러닝 중 자라는 경로.
@@ -116,7 +117,7 @@ class _RunMapViewState extends State<RunMapView>
   /// 마지막으로 돈 [_runFrames]. 라이브 오버레이를 지우기 전에 이걸 기다린다.
   Future<void>? _renderIdle;
 
-  bool _hasFittedCourse = false;
+  bool _hasFittedStaticPath = false;
   bool _disposed = false;
 
   // 러닝 중 카메라에 지정할 배율.
@@ -131,6 +132,10 @@ class _RunMapViewState extends State<RunMapView>
   // 그래야 달리는 중에 축소해서 앞길을 봐도 다음 위치 갱신에 되돌아가지 않는다.
   int _followZoomLevel = _runningZoomLevel;
   bool _isFollowing = false;
+
+  /// 직전 갱신에서 위치를 따라가고 있었는지. false -> true로 바뀌는 순간이
+  /// 러닝 시작 아니면 일시정지에서의 재개다([_syncLivePosition]).
+  bool _wasFollowing = false;
 
   // 네이티브 키 인증에 실패하면 지도는 아무것도 그리지 않은 채 빈 화면으로 남는다.
   // 그대로 두면 키 문제인지, 좌표 문제인지, 빌드 문제인지 구분할 수 없어서
@@ -160,7 +165,7 @@ class _RunMapViewState extends State<RunMapView>
   /// 33ms는 0.1m라 눈에는 연속이고, 플랫폼 호출은 절반이 된다.
   static const Duration _frameInterval = Duration(milliseconds: 33);
 
-  /// 코스 전체를 화면에 맞출 때 가장자리에 두는 여백(px).
+  /// 경로 전체를 화면에 맞출 때 가장자리에 두는 여백(px).
   static const int _fitPadding = 48;
 
   late final kakao.RouteStyle _courseStyle = kakao.RouteStyle(
@@ -307,6 +312,14 @@ class _RunMapViewState extends State<RunMapView>
       return;
     }
 
+    // 일시정지 동안에는 followCurrentPosition이 false다. 다시 true가 되었다면
+    // 재개한 것이고, 멈춰 있는 동안의 이동은 달린 것이 아니므로 선을 이으면
+    // 안 된다. 지금까지 그린 선은 그 자리에 그대로 두고 여기서 끊는다.
+    // (러닝을 막 시작한 경우에도 지나가지만 끊을 선이 없어 아무 일도 없다.)
+    final isResuming = widget.followCurrentPosition && !_wasFollowing;
+    _wasFollowing = widget.followCurrentPosition;
+    if (isResuming) await _breakLiveRoute();
+
     // 위치는 프로퍼티로 한 점씩 들어온다. 한 프레임 안에 두 점이 오면 뒤엣것만
     // 보이지만, 위치는 아무리 빨라야 1m마다(≈300ms) 오고 프레임은 16ms라
     // 실제로는 겹치지 않는다. 백그라운드 기록을 넣으면(Info.plist 참고) 화면이
@@ -338,6 +351,28 @@ class _RunMapViewState extends State<RunMapView>
     _stageFrame(_interpolator.settleAll());
   }
 
+  /// 라이브 경로를 여기서 끊는다. 그려 둔 선은 남기고, 다음 점부터 새 선이 된다.
+  ///
+  /// 보간기까지 비우는 이유는, 남겨 두면 끊기기 전 마지막 점과 재개 후 첫 점
+  /// 사이를 "이동 중"으로 보고 그 사이를 채워 그리기 때문이다.
+  Future<void> _breakLiveRoute() async {
+    final live = _liveRoute;
+    if (live == null) return;
+
+    // 일시정지 때 흘려보낸 점들이 아직 그려지는 중일 수 있다. 그 점들은 끊기기
+    // 전 구간에 속하므로, 다 그려진 뒤에 끊어야 새 구간으로 넘어가지 않는다.
+    await _renderIdle;
+    if (_disposed || !identical(_liveRoute, live)) return;
+
+    _interpolator.clear();
+    _pendingSettled.clear();
+    _pendingPosition = null;
+    _lastSample = null;
+    _renderedPosition = null;
+
+    await live.breakHere();
+  }
+
   /// 러닝이 초기화됐다(현위치가 사라졌다). 라이브 렌더에 딸린 것을 전부 되돌린다.
   Future<void> _clearLive(kakao.KakaoMapController controller) async {
     if (_lastSample == null && _liveRoute == null) return;
@@ -355,6 +390,7 @@ class _RunMapViewState extends State<RunMapView>
     _pendingPosition = null;
     _lastSample = null;
     _renderedPosition = null;
+    _wasFollowing = false;
 
     final marker = _currentPositionMarker;
     if (marker != null) {
@@ -387,6 +423,13 @@ class _RunMapViewState extends State<RunMapView>
 
   /// 정지 화면의 경로. 라이브 위치가 있으면 [_GrowingRoute]가 대신 그리므로
   /// 여기서는 지운다.
+  ///
+  /// 일시정지로 끊긴 자리에서 선을 나눠 그린다([GeoPoint.startsNewSegment]).
+  /// 이어 그리면 멈춰 있는 동안 이동한 구간이 달린 길처럼 보이는데, 거리에도
+  /// 서버 검증에도 안 들어가는 구간이라 기록과 그림이 어긋난다.
+  ///
+  /// 코스와 달리 여기서는 선을 제자리 갱신하지 않고 지웠다 다시 그린다. 정지
+  /// 화면의 경로는 화면을 열 때 한 번 정해지고 끝이라 아낄 갱신이 없다.
   Future<void> _drawStaticRunPath(kakao.KakaoMapController controller) async {
     final points = widget.currentPosition == null
         ? widget.runPath
@@ -396,15 +439,42 @@ class _RunMapViewState extends State<RunMapView>
         _isSamePath(_drawnStaticRunPath!, points)) {
       return;
     }
-
-    _staticRunRoute = await _syncRoute(
-      controller,
-      existing: _staticRunRoute,
-      points: points,
-      style: _runStyle,
-      zOrder: _runZOrder,
-    );
     _drawnStaticRunPath = points;
+
+    for (final route in _staticRunRoutes) {
+      await controller.routeLayer.removeRoute(route);
+    }
+    _staticRunRoutes.clear();
+
+    for (final segment in _splitAtBreaks(points)) {
+      // 선이 되려면 점이 둘 이상 필요하다. 재개하자마자 끝난 구간은 건너뛴다.
+      if (segment.length < 2) continue;
+
+      _staticRunRoutes.add(
+        await controller.routeLayer.addRoute(
+          segment.map(_toLatLng).toList(),
+          _runStyle,
+          zOrder: _runZOrder,
+        ),
+      );
+    }
+  }
+
+  /// 기록이 끊긴 자리에서 경로를 나눈다.
+  static List<List<GeoPoint>> _splitAtBreaks(List<GeoPoint> points) {
+    final segments = <List<GeoPoint>>[];
+    var current = <GeoPoint>[];
+
+    for (final point in points) {
+      if (point.startsNewSegment && current.isNotEmpty) {
+        segments.add(current);
+        current = [];
+      }
+      current.add(point);
+    }
+
+    if (current.isNotEmpty) segments.add(current);
+    return segments;
   }
 
   /// 선 하나를 현재 [points] 상태에 맞춘다. 점이 부족하면 지우고, 이미 있으면
@@ -457,15 +527,26 @@ class _RunMapViewState extends State<RunMapView>
     _isFollowing = false;
     await _stopTracking(controller);
 
-    // 코스를 처음 받아왔을 때 한 번만 전체가 보이도록 맞춘다.
-    if (!_hasFittedCourse && widget.coursePath.length >= 2) {
-      _hasFittedCourse = true;
-      await controller.moveCamera(
-        kakao.CameraUpdate.fitMapPoints(
-          widget.coursePath.map(_toLatLng).toList(),
-          padding: _fitPadding,
-        ),
-      );
+    // 그릴 것을 처음 받았을 때 한 번만 전체가 보이도록 맞춘다.
+    //
+    // 코스뿐 아니라 **달린 경로도** 대상이다. 예전에는 코스만 봐서, 코스 없이
+    // 달린 기록을 보여주는 결과 화면([RunResultScreen])은 초기 배율(16)에
+    // 경로 한가운데만 잡힌 채 그대로 있었다. 6km를 달렸으면 화면에는 400m쯤이
+    // 보이고 경로는 사방으로 삐져나갔다.
+    //
+    // 라이브 위치가 있는 동안에는 하지 않는다. 러닝 중에는 현위치를 따라가야
+    // 하고, 일시정지했다고 카메라가 갑자기 전체 경로로 물러나면 곤란하다.
+    if (!_hasFittedStaticPath && widget.currentPosition == null) {
+      final points = [...widget.coursePath, ...widget.runPath];
+      if (points.length >= 2) {
+        _hasFittedStaticPath = true;
+        await controller.moveCamera(
+          kakao.CameraUpdate.fitMapPoints(
+            points.map(_toLatLng).toList(),
+            padding: _fitPadding,
+          ),
+        );
+      }
     }
   }
 
@@ -673,6 +754,24 @@ class _GrowingRoute {
       _isTailVisible = true;
       await tail.show();
     }
+  }
+
+  /// 여기서 선을 끊는다. 지금까지 그린 것은 그대로 두고, 다음에 들어오는 점부터
+  /// 새 선으로 이어 그린다.
+  ///
+  /// 끊긴 자리에서 [_chunks]를 비우지 않는 것이 요점이다 — 그려 둔 선은 화면에
+  /// 남아야 하고, [clear]가 나중에 한꺼번에 걷어간다.
+  Future<void> breakHere() async {
+    // 꼬리는 확정 구간 끝에서 현위치까지를 잇는 임시선이라, 끊긴 자리에서는
+    // 이을 곳이 없다. 감춰 두면 다음 구간에서 그대로 다시 쓴다.
+    if (_isTailVisible) {
+      _isTailVisible = false;
+      await _tail?.hide();
+    }
+
+    _open = null;
+    _openPoints = [];
+    _lastPoint = null;
   }
 
   Future<void> clear() async {
