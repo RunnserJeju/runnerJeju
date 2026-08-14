@@ -52,14 +52,16 @@ class CourseCoverageTracker {
 
   /// GPS 점 하나를 반영한다. RunTracker가 경로에 점을 추가할 때마다 부른다.
   ///
-  /// 일시정지로 점이 끊겼다 이어져도 그냥 연결해서 본다 — 서버도 저장된 경로의
-  /// 연속한 두 점을 구분 없이 선분으로 보므로, 여기서 끊으면 서버보다 적게
-  /// 커버되어 실시간 %가 최종 결과와 어긋난다.
+  /// [GeoPoint.startsNewSegment]가 붙은 점(일시정지에서 재개한 첫 점)은 직전 점과
+  /// **잇지 않는다.** 일시정지 동안 이동한 구간은 달린 것이 아니므로 그 사이를
+  /// 선분으로 이으면 지나가지도 않은 코스 점이 커버된 것으로 잡힌다. 서버도
+  /// 같은 표시를 보고 같은 자리에서 끊으므로(verification.to_segments) 실시간
+  /// %와 최종 match_rate는 여전히 같은 값이다.
   void add(GeoPoint point) {
     if (_course.isEmpty) return;
 
     final p = _toXy(point);
-    final prev = _last;
+    final prev = point.startsNewSegment ? null : _last;
     _last = p;
 
     final tolSq = toleranceMeters * toleranceMeters;

@@ -50,7 +50,13 @@ def create_run(
         ended_at=payload.ended_at,
         distance_meters=payload.distance_meters,
         duration_sec=payload.duration_sec,
-        path=[point.model_dump(mode="json") for point in payload.path],
+        # 기본값인 필드는 빼고 저장한다. 경로 한 벌이 천 점을 넘는데, 그중
+        # 대부분은 고도도 없고 끊긴 자리도 아니다 — 그 빈 값을 점마다 실어 두면
+        # 그대로 저장 용량이 된다. 읽을 때는 스키마 기본값으로 다시 채워진다.
+        path=[
+            point.model_dump(mode="json", exclude_defaults=True)
+            for point in payload.path
+        ],
     )
 
     db.add(run)

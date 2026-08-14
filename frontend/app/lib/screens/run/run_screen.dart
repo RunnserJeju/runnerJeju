@@ -9,6 +9,7 @@ import '../../services/service_locator.dart';
 import '../../test/simulation_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../utils/transient_messenger.dart';
 import '../../widgets/metric_tile.dart';
 import '../../widgets/run_map_view.dart';
 import 'run_result_screen.dart';
@@ -27,6 +28,8 @@ class RunScreen extends StatefulWidget {
 
 class _RunScreenState extends State<RunScreen> {
   RunTracker get _tracker => Services.instance.runTracker;
+
+  final TransientMessenger _messenger = TransientMessenger();
 
   GeoPoint? _initialCenter;
 
@@ -110,53 +113,12 @@ class _RunScreenState extends State<RunScreen> {
     );
   }
 
+  /// 러닝을 끝내고 결과 화면으로 넘어간다.
+  ///
+  /// 되묻지 않는다. 종료 버튼은 일시정지 상태에서만 나오므로 여기까지 오려면
+  /// 이미 한 번 멈추기로 마음먹고 버튼을 두 번 누른 뒤다. 거기서 한 번 더
+  /// 물으면 확인 절차가 아니라 달리고 온 사람 앞을 막는 문이 된다.
   Future<void> _finish() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        // 크기와 모양은 같게 두고 색으로만 구분한다. 
-        Widget action(String label, bool result, {Color? background}) =>
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: background,
-                  minimumSize: const Size.fromHeight(44),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  textStyle: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                onPressed: () => Navigator.of(dialogContext).pop(result),
-                child: Text(label, maxLines: 1),
-              ),
-            );
-
-        return AlertDialog(
-          title: const Text('러닝을 종료할까요?'),
-          content: const Text('기록을 저장하고 결과 화면으로 이동해요.'),
-          actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-          actions: [
-            Row(
-              children: [
-                action('계속 달리기', false),
-                const SizedBox(width: 12),
-                action('종료', true, background: AppColors.danger),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    await _completeRun();
-  }
-
-  /// 러닝을 끝내고 결과 화면으로 넘어간다. 수동 종료(확인 다이얼로그 뒤)와
-  /// 완주 자동 종료가 공유하는 경로다.
-  Future<void> _completeRun() async {
     _tracker.finish();
     final record = _tracker.buildRecord();
     if (record == null || !mounted) return;
@@ -167,12 +129,13 @@ class _RunScreenState extends State<RunScreen> {
   }
 
   /// 러닝 중에는 뒤로가기로 화면을 벗어나지 못하게 막는다.
+  ///
+  /// 뒤로가기는 연달아 눌리기 쉬워서, 안내를 그냥 띄우면 같은 문장이 누른
+  /// 횟수만큼 줄을 선다([TransientMessenger] 참고).
   Future<void> _handlePop(bool didPop) async {
     if (didPop) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('러닝 중이에요. 종료하려면 정지 버튼을 눌러주세요.')),
-    );
+    _messenger.show(context, '러닝 중이에요. 종료하려면 정지 버튼을 눌러주세요.');
   }
 
   @override

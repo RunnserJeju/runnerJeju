@@ -122,23 +122,43 @@ def coverage_ratio(
     run_path: list[Point],
     tolerance: float = DEFAULT_TOLERANCE_METERS,
 ) -> float:
+    """끊긴 곳 없는 경로 하나에 대한 [segmented_coverage_ratio]."""
+    return segmented_coverage_ratio(course_path, [run_path], tolerance)
+
+
+def segmented_coverage_ratio(
+    course_path: list[Point],
+    run_segments: list[list[Point]],
+    tolerance: float = DEFAULT_TOLERANCE_METERS,
+) -> float:
     """코스 지점 중 러닝 경로가 tolerance 이내로 지나간 지점의 비율 (0.0 ~ 1.0).
 
     코스 경로는 등록 시 균등 간격으로 리샘플되어 있으므로(gpx.RESAMPLE_INTERVAL_METERS)
     이 비율은 곧 "코스 거리의 몇 %를 지나갔는가"다. 비교 대상은 러닝 기록의 점이
     아니라 점들을 이은 꺾은선이다(_near_polyline 참고).
 
+    러닝 경로가 **구간 목록**인 이유는 일시정지 때문이다. 일시정지 동안 이동한
+    구간은 달린 것이 아니므로 그 사이를 선분으로 이으면 안 된다 — 이으면 지나가지도
+    않은 코스 점이 그 직선 근처라는 이유로 커버된 것으로 잡힌다. 구간을 따로 두고
+    "어느 한 구간에라도 가까우면 커버"로 본다.
+
     방향은 보지 않는다. 역주행도 같은 코스를 달린 것으로 인정한다.
     """
-    if not course_path or not run_path:
+    if not course_path:
+        return 0.0
+
+    segments = [segment for segment in run_segments if segment]
+    if not segments:
         return 0.0
 
     ref = course_path[0]
     course_xy = _to_local_xy(course_path, ref)
-    run_xy = _to_local_xy(run_path, ref)
+    segments_xy = [_to_local_xy(segment, ref) for segment in segments]
 
     covered = sum(
-        1 for px, py in course_xy if _near_polyline(px, py, run_xy, tolerance)
+        1
+        for px, py in course_xy
+        if any(_near_polyline(px, py, xy, tolerance) for xy in segments_xy)
     )
     return covered / len(course_path)
 
@@ -148,9 +168,31 @@ def path_length_meters(path: list[Point]) -> float:
     return sum(distance_meters(path[i], path[i + 1]) for i in range(len(path) - 1))
 
 
+def segments_length_meters(segments: list[list[Point]]) -> float:
+    """구간 길이의 합(m). 구간 사이(일시정지 중 이동)는 세지 않는다."""
+    return sum(path_length_meters(segment) for segment in segments)
+
+
 def verify(
     course_path: list[Point],
     run_path: list[Point],
+    tolerance: float = DEFAULT_TOLERANCE_METERS,
+    threshold: float = DEFAULT_MATCH_THRESHOLD,
+    min_distance_ratio: float = DEFAULT_MIN_DISTANCE_RATIO,
+) -> VerificationOutcome:
+    """끊긴 곳 없는 경로 하나에 대한 [verify_segments]."""
+    return verify_segments(
+        course_path,
+        [run_path],
+        tolerance=tolerance,
+        threshold=threshold,
+        min_distance_ratio=min_distance_ratio,
+    )
+
+
+def verify_segments(
+    course_path: list[Point],
+    run_segments: list[list[Point]],
     tolerance: float = DEFAULT_TOLERANCE_METERS,
     threshold: float = DEFAULT_MATCH_THRESHOLD,
     min_distance_ratio: float = DEFAULT_MIN_DISTANCE_RATIO,
@@ -172,14 +214,15 @@ def verify(
             detail="코스에 경로 데이터가 없어 검증할 수 없어요.",
         )
 
-    if not run_path:
+    segments = [segment for segment in run_segments if segment]
+    if not segments:
         return VerificationOutcome(
             status="failed",
             match_rate=None,
             detail="러닝 경로가 비어 있어 검증할 수 없어요.",
         )
 
-    rate = coverage_ratio(course_path, run_path, tolerance)
+    rate = segmented_coverage_ratio(course_path, segments, tolerance)
 
     if rate < threshold:
         return VerificationOutcome(
@@ -190,7 +233,7 @@ def verify(
         )
 
     course_length = path_length_meters(course_path)
-    run_length = path_length_meters(run_path)
+    run_length = segments_length_meters(segments)
 
     if course_length > 0 and run_length < course_length * min_distance_ratio:
         return VerificationOutcome(
@@ -214,3 +257,32 @@ def to_points(raw_path: list[dict]) -> list[Point]:
         for item in raw_path
         if item.get("lat") is not None and item.get("lng") is not None
     ]
+
+
+def to_segments(raw_path: list[dict]) -> list[list[Point]]:
+    """저장된 러닝 경로를 **끊긴 자리에서 나눈** 구간 목록으로 바꾼다.
+
+    일시정지 동안 이동한 구간은 달린 것이 아니라서 앞뒤를 이으면 안 된다.
+    클라이언트가 재개 직후의 점에 `segment_break`를 적어 보내고(RunTracker),
+    여기서 그 표시를 보고 끊는다.
+
+    표시가 없는 기록(이 필드가 생기기 전에 저장된 것)은 구간 하나로 나오므로
+    예전과 결과가 같다.
+    """
+    segments: list[list[Point]] = []
+    current: list[Point] = []
+
+    for item in raw_path:
+        if item.get("lat") is None or item.get("lng") is None:
+            continue
+
+        if item.get("segment_break") and current:
+            segments.append(current)
+            current = []
+
+        current.append((float(item["lat"]), float(item["lng"])))
+
+    if current:
+        segments.append(current)
+
+    return segments

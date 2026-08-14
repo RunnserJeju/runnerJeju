@@ -47,13 +47,6 @@ class RunTracker extends ChangeNotifier {
   /// 촘촘하게, 기록은 이 게이트를 지난 점만.
   static const double _commitMeters = 5;
 
-  /// 인정에 필요한 커버리지와 주행 거리 비율. 서버 판정과 **같은 값이어야 한다**
-  /// (verification.DEFAULT_MATCH_THRESHOLD / DEFAULT_MIN_DISTANCE_RATIO).
-  /// [hasReachedCourseGoal]이 서버가 matched를 줄 상태를 정확히 미러링해야,
-  /// 완주 버튼을 눌렀는데 서버가 거절하는 배신이 구조적으로 불가능해진다.
-  static const double _matchThreshold = 0.85;
-  static const double _minDistanceRatio = 0.85;
-
   RunStatus get status => _status;
   List<GeoPoint> get path => List.unmodifiable(_path);
   double get distanceMeters => _distanceMeters;
@@ -108,19 +101,6 @@ class RunTracker extends ChangeNotifier {
     final distanceRatio = _distanceRatio;
     if (coverage == null || distanceRatio == null) return null;
     return math.min(coverage, distanceRatio).clamp(0.0, 1.0);
-  }
-
-  /// 서버가 matched를 줄 조건(커버리지 85% + 거리 85%)을 채웠는지.
-  ///
-  /// 이 값이 true가 되면 화면에 완주(종료) 버튼이 나타난다. 자동으로 종료하지는
-  /// 않는다 — 더 달리고 싶은 사람을 끊어버리고, 조건 판정의 잔버그가 곧바로
-  /// "종료를 못 하는 버그"가 되기 때문이다. 종료는 항상 사용자의 버튼으로만.
-  bool get hasReachedCourseGoal {
-    final coverage = courseCoverage;
-    final distanceRatio = _distanceRatio;
-    if (coverage == null || distanceRatio == null) return false;
-
-    return coverage >= _matchThreshold && distanceRatio >= _minDistanceRatio;
   }
 
   /// 러닝 시작. [course]를 주면 코스를 따라 달리는 러닝이 된다.
@@ -218,9 +198,15 @@ class RunTracker extends ChangeNotifier {
     final anchor = _commitAnchor;
     if (anchor == null) {
       // 러닝 시작 직후, 또는 일시정지에서 막 돌아온 첫 점. 기준점만 잡는다.
+      //
+      // 재개한 경우라면 직전 점과 이 점 사이가 "일시정지 동안 이동한 구간"이다.
+      // 그 구간은 거리에 넣지 않는데(그게 일시정지의 뜻이다), 예전에는 표시 없이
+      // 경로에만 넣어서 서버가 경로를 다시 잴 때 그 구간까지 달린 것으로 셌다.
+      // 앱은 2km, 서버는 5km로 보는 식이었다. 끊긴 자리를 점에 적어 함께 올린다.
+      final committed = _path.isEmpty ? point : point.asSegmentStart();
       _commitAnchor = point;
-      _path.add(point);
-      _coverage?.add(point);
+      _path.add(committed);
+      _coverage?.add(committed);
     } else {
       final moved = GeoUtils.distanceBetween(anchor, point);
       if (moved >= _commitMeters) {

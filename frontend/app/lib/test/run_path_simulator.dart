@@ -119,7 +119,7 @@ class RunPathSimulator {
   double get totalMeters => _cumulative.last;
 
   /// 코스 끝에 닿았는지. 닿은 뒤에는 제자리에서 흔들리기만 한다.
-  /// 도착점 반경 안에 머물러야 완주 판정(`RunTracker.hasReachedCourseGoal`)을
+  /// 도착점 반경 안에 머물러야 서버 검증에 걸리는 커버리지·거리를 채운 상태를
   /// 확인할 수 있어서, 관측 자체를 멈추지는 않는다.
   bool get isFinished => _traveled >= totalMeters;
 

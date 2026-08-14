@@ -85,9 +85,11 @@ def request_verification(
     if existing is not None:
         return _to_out(db, existing, user_id)
 
-    outcome = verification_logic.verify(
+    # 러닝 경로만 구간으로 나눈다. 일시정지 동안 이동한 구간을 달린 것으로 세지
+    # 않으려는 것이고(to_segments), 코스 경로는 끊기는 자리가 없다.
+    outcome = verification_logic.verify_segments(
         course_path=verification_logic.to_points(course.path or []),
-        run_path=verification_logic.to_points(run.path or []),
+        run_segments=verification_logic.to_segments(run.path or []),
     )
 
     record = Verification(

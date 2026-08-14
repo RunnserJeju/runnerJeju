@@ -4,11 +4,13 @@ import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/transient_messenger.dart';
 import '../../widgets/admin_only.dart';
 import '../../widgets/course_map_view.dart';
 import '../../widgets/sheet_handle.dart';
 import '../course/gpx_upload_screen.dart';
 import '../run/run_screen.dart';
+import 'course_list_sheet.dart';
 import 'course_preview_sheet.dart';
 
 /// '러닝' 탭: 지도에서 코스를 고르거나, 고르지 않고 바로 자유 러닝을 시작한다.
@@ -28,6 +30,10 @@ class _RunningScreenState extends State<RunningScreen> {
   final CourseMapController _mapController = CourseMapController();
   final TextEditingController _searchController = TextEditingController();
 
+  /// 짧은 안내는 겹쳐 쌓이지 않게 이쪽을 거친다. '준비 중' 버튼들은 연달아
+  /// 눌리기 쉬워서, 그냥 띄우면 같은 문장이 누른 횟수만큼 줄을 선다.
+  final TransientMessenger _messenger = TransientMessenger();
+
   List<RunningCourse> _courses = const [];
   bool _isLoadingCourses = true;
   Object? _coursesError;
@@ -44,6 +50,10 @@ class _RunningScreenState extends State<RunningScreen> {
   /// 상세 요청의 순번. 코스를 빠르게 옮겨 누르면 먼저 보낸 요청이 나중에 도착할
   /// 수 있어서, 마지막으로 보낸 것 말고는 버린다.
   int _detailRequestId = 0;
+
+  /// 경로 탐색 시트를 펼쳐 둔 상태인지. 코스 선택과는 배타적이다 — 목록에서
+  /// 코스를 고르면 목록이 닫히고 그 코스의 상세 시트가 그 자리에 온다.
+  bool _isExploring = false;
 
   GeoPoint? _myPosition;
 
@@ -104,6 +114,7 @@ class _RunningScreenState extends State<RunningScreen> {
 
   Future<void> _selectCourse(RunningCourse course) async {
     setState(() {
+      _isExploring = false;
       _selected = course;
       _selectedDetail = null;
       _detailError = null;
@@ -123,12 +134,25 @@ class _RunningScreenState extends State<RunningScreen> {
     }
   }
 
+  /// 지도 바닥을 눌렀을 때. 아래에 떠 있는 것을 모두 걷는다.
   void _clearSelection() {
-    if (_selected == null) return;
+    if (_selected == null && !_isExploring) return;
 
     // 순번을 올려 두면 아직 오는 중인 상세 응답이 도착해도 무시된다.
     _detailRequestId++;
     setState(() {
+      _isExploring = false;
+      _selected = null;
+      _selectedDetail = null;
+      _detailError = null;
+    });
+  }
+
+  /// 경로 탐색 목록을 연다. 코스 상세가 떠 있었다면 그 자리를 목록이 대신한다.
+  void _openExplore() {
+    _detailRequestId++;
+    setState(() {
+      _isExploring = true;
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
@@ -196,11 +220,7 @@ class _RunningScreenState extends State<RunningScreen> {
 
   void _showComingSoon(String label) => _showMessage('$label 기능은 준비 중이에요.');
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
+  void _showMessage(String message) => _messenger.show(context, message);
 
   // ---------------------------------------------------------------------------
   // 화면
@@ -243,7 +263,7 @@ class _RunningScreenState extends State<RunningScreen> {
                       Expanded(child: _statusPill()),
                       _SideActions(
                         onTapFavorite: () => _showComingSoon('찜'),
-                        onTapExplore: () => _showComingSoon('경로 탐색'),
+                        onTapExplore: _openExplore,
                         onTapPartner: () => _showComingSoon('협력업체'),
                         onTapMyLocation: _moveToMyLocation,
                         onTapUploadGpx: _openGpxUpload,
@@ -254,7 +274,17 @@ class _RunningScreenState extends State<RunningScreen> {
               ),
             ),
           ),
-          if (selected == null)
+          if (_isExploring)
+            CourseListSheet(
+              courses: _visibleCourses,
+              isLoading: _isLoadingCourses,
+              hasError: _coursesError != null,
+              isFiltered: _query.trim().isNotEmpty,
+              onSelect: _selectCourse,
+              onClose: () => setState(() => _isExploring = false),
+              onRetry: _loadCourses,
+            )
+          else if (selected == null)
             Align(
               alignment: Alignment.bottomCenter,
               child: _FreeRunPanel(onStart: () => _startRun()),

@@ -20,6 +20,10 @@ class GeoPointSchema(BaseModel):
     altitude: float | None = None
     recorded_at: datetime | None = None
 
+    # 이 점 앞에서 기록이 끊겼는지(일시정지 동안 이동한 구간). 러닝 경로에만
+    # 붙고, 검증이 그 구간을 빼고 재는 근거가 된다 — verification.to_segments 참고.
+    segment_break: bool = False
+
 
 # --- 인증 ----------------------------------------------------------------
 
