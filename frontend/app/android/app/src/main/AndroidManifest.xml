@@ -3,6 +3,14 @@
     <!-- 러닝 경로 기록을 위한 위치 권한 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- 화면을 꺼도 러닝 세션 위치가 계속 들어오게 하는 포그라운드 서비스.
+         상시 알림이 뜨는 사용자 시작 서비스라 ACCESS_BACKGROUND_LOCATION은
+         넣지 않는다(넣으면 Play 심사에서 별도 소명 필요).
+         geolocator_android가 <service> 선언을 자기 매니페스트에 갖고 있어
+         우리는 권한만 연다. 근거는 docs/background-tracking.md 참고. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- Android 14(API 34)+ 위치형 포그라운드 서비스에 필수 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <application
         android:label="runners_jeju"
         android:name="${applicationName}"

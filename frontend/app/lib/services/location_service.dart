@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:geolocator/geolocator.dart';
 
 import '../models/geo_point.dart';
@@ -39,10 +41,42 @@ class LocationService {
   /// 화면 갱신용 해상도다. 이 값이 크면 현위치 마커가 그만큼 띄엄띄엄 움직인다.
   /// 대신 1m 간격은 GPS 지터를 그대로 물고 오므로, 거리·커버리지 누적은
   /// [RunTracker]가 따로 5m 게이트를 걸어 거른다.
-  static const LocationSettings _trackingSettings = LocationSettings(
-    accuracy: LocationAccuracy.best,
-    distanceFilter: 1,
-  );
+  ///
+  /// 플랫폼별로 갈라야 백그라운드 수집이 유지된다 — 공통 [LocationSettings]만
+  /// 쓰면 앱을 내리거나 화면을 끄는 순간 스트림이 멈춘다.
+  /// - Android: [AndroidSettings.foregroundNotificationConfig]가 포그라운드
+  ///   서비스를 띄워 OS가 서비스를 죽이지 않게 한다(상시 알림 동반).
+  /// - iOS: [AppleSettings.allowBackgroundLocationUpdates]로 백그라운드 콜백을
+  ///   유지한다("앱 사용 중" 권한 + Info.plist의 UIBackgroundModes=location 전제).
+  ///
+  /// 근거는 docs/background-tracking.md 참고.
+  static LocationSettings get _trackingSettings {
+    if (Platform.isAndroid) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 1,
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: '러닝 기록 중',
+          notificationText: '경로와 거리를 기록하고 있어요',
+          enableWakeLock: true, // 화면이 꺼져도 CPU를 깨워 위치 콜백을 받는다.
+        ),
+      );
+    }
+    if (Platform.isIOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 1,
+        allowBackgroundLocationUpdates: true, // 백그라운드에서도 콜백 유지.
+        showBackgroundLocationIndicator: true, // 상단 파란 표시줄.
+        pauseLocationUpdatesAutomatically: false, // iOS가 임의로 멈추지 않게.
+        activityType: ActivityType.fitness,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 1,
+    );
+  }
 
   /// 권한 상태를 확인하고, 필요하면 사용자에게 요청한다.
   Future<LocationAvailability> ensurePermission() async {
