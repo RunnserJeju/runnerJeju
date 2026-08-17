@@ -21,11 +21,28 @@ class AppConfig {
   static const String googleServerClientId =
       '425895001003-ih0unh7qark9fa1sadp45g78cobjftob.apps.googleusercontent.com';
 
-  /// 서버 주소. --dart-define=API_BASE_URL 로 덮어쓸 수 있고, 없으면 플랫폼별
-  /// 로컬 개발 서버를 가리킨다.
+  /// 운영 API 서버(Cloud Run, 서울). debug가 아닌 빌드(release·profile)가 본다.
+  static const String prodApiBaseUrl =
+      'https://runners-jeju-api-1090471391353.asia-northeast3.run.app';
+
+  /// 서버 주소.
+  ///
+  /// debug가 아니면 운영을, debug면 로컬을 본다. --dart-define=API_BASE_URL 로
+  /// 덮어쓸 수 있지만(스테이징 등), 개발 빌드로 운영에 붙는 건 막는다 — 테스트
+  /// 계정·러닝 기록이 운영 DB에 섞이는 걸 방지한다.
   static String get apiBaseUrl {
     const injected = String.fromEnvironment('API_BASE_URL');
-    if (injected.isNotEmpty) return injected;
+
+    if (!kDebugMode) {
+      return injected.isNotEmpty ? injected : prodApiBaseUrl;
+    }
+
+    if (injected.isNotEmpty) {
+      if (injected == prodApiBaseUrl) {
+        throw StateError('debug 빌드로는 운영 서버에 붙을 수 없어요 ($injected).');
+      }
+      return injected;
+    }
 
     // 안드로이드 에뮬레이터만 호스트를 10.0.2.2라는 별도 주소로 본다.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
