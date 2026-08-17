@@ -324,11 +324,22 @@ class _RunMapViewState extends State<RunMapView>
 
     // 위치는 프로퍼티로 한 점씩 들어온다. 한 프레임 안에 두 점이 오면 뒤엣것만
     // 보이지만, 위치는 아무리 빨라야 1m마다(≈300ms) 오고 프레임은 16ms라
-    // 실제로는 겹치지 않는다. 백그라운드 기록을 넣으면(Info.plist 참고) 화면이
-    // 멈춘 동안 점이 쌓이므로, 그때는 여기서 밀린 점을 받아와야 한다.
+    // 실제로는 겹치지 않는다.
+    //
+    // 예외가 백그라운드다. 화면이 꺼지면 iOS가 Flutter 프레임을 멈춰 이 위젯은
+    // 점을 못 받지만, 위치 스트림은 계속 돌아 tracker.path에는 점이 쌓인다
+    // (Info.plist의 UIBackgroundModes 참고). 복귀하면 최신 점 하나만 들어오는데,
+    // 그대로 이으면 화면 끈 지점→켠 지점이 직선이 된다. 그 사이 확정 점들을 실제
+    // 경로대로 먼저 이어 그리고([_fillLiveGap]), 보간기는 최신 점에서 다시 시작한다.
     if (!identical(_lastSample, position)) {
+      final previousSample = _lastSample;
       _lastSample = position;
       if (!_renderClock.isRunning) _renderClock.start();
+
+      if (previousSample != null &&
+          _hasBackgroundGap(previousSample, position)) {
+        await _fillLiveGap(previousSample, position);
+      }
       _interpolator.add(position, _renderClock.elapsed);
     }
 
@@ -373,6 +384,50 @@ class _RunMapViewState extends State<RunMapView>
     _renderedPosition = null;
 
     await live.breakHere();
+  }
+
+  /// 정상 위치 갱신은 1m마다(≈300ms) 온다. 두 샘플 시각이 이보다 한참 벌어졌으면
+  /// 그 사이 화면 프레임이 멈춰 있었다는 뜻(대개 백그라운드)이라, 놓친 구간을
+  /// 채워야 한다.
+  static const Duration _backgroundGapThreshold = Duration(seconds: 3);
+
+  bool _hasBackgroundGap(GeoPoint previous, GeoPoint current) {
+    final from = previous.recordedAt;
+    final to = current.recordedAt;
+    if (from == null || to == null) return false;
+    return to.difference(from) > _backgroundGapThreshold;
+  }
+
+  /// 화면이 멈춰 있던 동안 tracker.path에 쌓인 확정 점들([from]과 [to] 사이)을
+  /// 라이브 경로에 실제 순서대로 이어 그린다. 직선 대신 진짜 경로가 남는다.
+  ///
+  /// 이어 그린 뒤 보간기를 비우는 게 요점이다. 안 그러면 곧이어 들어가는 최신 점을
+  /// 보간기가 [from]에서부터 이어 [from]→[to]를 다시 직선으로 긋는다. 비워 두면
+  /// 최신 점이 방금 그린 마지막 점에서 자연스럽게 이어진다.
+  Future<void> _fillLiveGap(GeoPoint from, GeoPoint to) async {
+    final live = _liveRoute;
+    if (live == null) return;
+
+    final fromAt = from.recordedAt;
+    final toAt = to.recordedAt;
+    if (fromAt == null || toAt == null) return;
+
+    // 이미 위젯에 들어와 있는 tracker.path에서 두 샘플 사이 구간만 고른다
+    // (새 데이터를 만들지 않는다). 정상 갱신이면 사이에 낀 점이 없어 비어 있다.
+    final gap = <GeoPoint>[
+      for (final point in widget.runPath)
+        if (point.recordedAt case final at?)
+          if (at.isAfter(fromAt) && at.isBefore(toAt)) point,
+    ];
+    if (gap.isEmpty) return;
+
+    // 렌더 루프가 오버레이를 만지는 중이면 끝나길 기다린 뒤 잇는다
+    // ([_breakLiveRoute]와 같은 이유 — 그 사이 러닝이 초기화되면 손 뗀다).
+    await _renderIdle;
+    if (_disposed || !identical(_liveRoute, live)) return;
+
+    await live.append(gap);
+    _interpolator.clear();
   }
 
   /// 러닝이 초기화됐다(현위치가 사라졌다). 라이브 렌더에 딸린 것을 전부 되돌린다.
