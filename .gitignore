@@ -20,3 +20,7 @@ app/.flutter-plugin-dependencies
 
 # IDE
 .idea/
+
+# Android 릴리즈 서명
+frontend/app/android/key.properties
+*.jks

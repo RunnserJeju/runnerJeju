@@ -1,7 +1,20 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// 릴리즈 서명 정보. 실제 값(키스토어 경로·비밀번호)은 git에 안 올라가는
+// android/key.properties에 둔다. 파일이 없는 개발자는 release가 debug 키로
+// 서명되어 빌드만 되게 둔다(아래 buildTypes 참고) — 로그인은 안 되지만
+// `flutter run --release` 자체는 통과한다.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -36,6 +49,17 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+
+        // key.properties가 있을 때만 만든다. 없으면 참조 자체가 없어야 하므로
+        // (없는 서명 설정을 release가 가리키면 빌드가 깨진다) 조건부로 생성한다.
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
     }
 
     buildTypes {
@@ -46,9 +70,14 @@ android {
         }
 
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // key.properties가 있으면 진짜 릴리즈 키로 서명한다. 없으면 debug 키로
+            // 폴백해서 빌드만 통과시킨다(키스토어가 없는 개발자의 로컬 release 빌드용).
+            // 스토어에 올릴 바이너리는 반드시 key.properties가 있는 환경에서 빌드할 것.
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
 
             // 코드 축소는 아직 켜지 않았지만, 켜는 시점에 카카오맵 keep 규칙이
             // 빠져 릴리즈에서만 지도가 죽는 일이 없도록 미리 연결해둔다.
