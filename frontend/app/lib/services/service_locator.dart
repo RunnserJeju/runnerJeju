@@ -28,9 +28,20 @@ class Services {
 
   late final TokenStorage tokenStorage = TokenStorage();
 
+  /// refresh 요청 전용 클라이언트. 인증 인터셉터가 없어야 /auth/refresh가 401을 내도
+  /// 다시 refresh를 시도하는 재귀에 빠지지 않는다.
+  late final AuthApi _refreshApi = AuthApi(
+    ApiClient(baseUrl: AppConfig.apiBaseUrl),
+  );
+
   late final ApiClient apiClient = ApiClient(
     baseUrl: AppConfig.apiBaseUrl,
-    getAccessToken: tokenStorage.readAccessToken,
+    readAccessToken: tokenStorage.readAccessToken,
+    readRefreshToken: tokenStorage.readRefreshToken,
+    refreshAccessToken: (refreshToken) => _refreshApi.refresh(refreshToken),
+    saveAccessToken: tokenStorage.saveAccessToken,
+    // refresh도 실패하면(=30일 지났거나 폐기됨) 저장된 토큰을 지워 재로그인을 유도한다.
+    onRefreshFailed: tokenStorage.clear,
   );
 
   late final AuthService auth = AuthService(AuthApi(apiClient), tokenStorage);

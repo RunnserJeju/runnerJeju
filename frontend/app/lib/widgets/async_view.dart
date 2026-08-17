@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../exceptions/app_exception.dart';
 import '../screens/auth/login_screen.dart';
-import '../services/service_locator.dart';
 
 /// 서버 데이터를 그리는 화면의 로딩/에러/빈 상태를 한 곳에서 처리한다.
 ///
@@ -86,9 +85,9 @@ bool _isUnauthorized(Object? error) {
   return cause is DioException && cause.response?.statusCode == 401;
 }
 
-Future<void> _goToLogin(BuildContext context) async {
-  await Services.instance.tokenStorage.clear();
-  if (!context.mounted) return;
+void _goToLogin(BuildContext context) {
+  // 토큰 정리는 AuthInterceptor.onRefreshFailed가 책임진다. 여기까지 401이 올라왔다는
+  // 건 refresh가 이미 실패해 토큰이 지워졌다는 뜻이므로, 화면만 로그인으로 돌린다.
   Navigator.of(context).pushAndRemoveUntil(
     MaterialPageRoute(builder: (_) => const LoginScreen()),
     (route) => false,
