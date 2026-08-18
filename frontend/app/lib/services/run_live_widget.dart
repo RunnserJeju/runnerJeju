@@ -191,6 +191,10 @@ class RunLiveWidget {
         _iosData(data),
         // 앱이 죽으면 시스템이 활동도 걷게 한다 — 유령 위젯 방지.
         removeWhenAppIsKilled: true,
+        // 푸시로 원격 갱신하지 않는다 — 앱에서 직접 update한다. true(기본)면
+        // Push Notifications capability가 필요하고, 없으면 Activity.request가
+        // ActivityKit.ActivityInput error 0으로 실패한다.
+        iOSEnableRemoteUpdates: false,
       );
     } catch (_) {
       _activityId = null;

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- 러닝 상태를 잠금화면/Dynamic Island에 띄우는 Live Activity를 허용한다.
+	     실제 위젯 UI는 RunActivityWidget 위젯 확장 타겟에 있다(ios/RunActivityWidget). -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

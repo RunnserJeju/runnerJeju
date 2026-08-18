@@ -7,6 +7,7 @@ import '../../widgets/async_view.dart';
 import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
 import '../connection_test_screen.dart';
+import '../run/run_detail_screen.dart';
 
 /// 프로필: 누적 기록 요약 + 최근 러닝 목록.
 class ProfileScreen extends StatefulWidget {
@@ -160,62 +161,72 @@ class _RecordTile extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(
-              record.isCourseRun
-                  ? Icons.route_rounded
-                  : Icons.directions_run_rounded,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => RunDetailScreen(record: record)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(
+                record.isCourseRun
+                    ? Icons.route_rounded
+                    : Icons.directions_run_rounded,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      record.courseName ?? '자유 러닝',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      Formatters.dateTime(record.startedAt),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.55,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    record.courseName ?? '자유 러닝',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    '${Formatters.distanceKm(record.distanceMeters)}km',
                     style: const TextStyle(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       fontSize: 15,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    Formatters.dateTime(record.startedAt),
+                    Formatters.pace(record.paceSecondsPerKm),
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.55,
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${Formatters.distanceKm(record.distanceMeters)}km',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  Formatters.pace(record.paceSecondsPerKm),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
