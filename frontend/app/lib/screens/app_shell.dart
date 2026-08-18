@@ -38,6 +38,11 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // 탭 안에 지도(카카오맵 PlatformView)를 쓰는 화면이 있다(RunningScreen).
+      // 이 바깥 Scaffold가 키보드에 맞춰 body를 리사이즈하면 그 안의
+      // IndexedStack 전체가 줄어들면서 지도가 함께 리사이즈돼 렌더링이
+      // 깨진다. 리사이즈 대신 키보드가 위에 그냥 덮이게 둔다.
+      resizeToAvoidBottomInset: false,
       body: IndexedStack(index: _index, children: _tabs),
       bottomNavigationBar: BottomAppBar(
         color: Colors.white,

@@ -122,6 +122,10 @@ class _RunMapViewState extends State<RunMapView>
   bool _hasFittedStaticPath = false;
   bool _disposed = false;
 
+  /// 마지막으로 카메라를 옮긴 [RunMapView.initialCenter]. GPS 조회가 지도 생성
+  /// 뒤에 늦게 끝나는 경우(자유 러닝) 그 값이 뒤늦게 들어오면 한 번 더 옮긴다.
+  GeoPoint? _appliedInitialCenter;
+
   // 러닝 중 카메라에 지정할 배율.
   //
   // 매번 명시적인 값을 넘겨야 한다. CameraUpdate.newCenterPosition의 zoomLevel을
@@ -186,6 +190,14 @@ class _RunMapViewState extends State<RunMapView>
   );
 
   @override
+  void initState() {
+    super.initState();
+    // 지도를 만들 때 이미 값이 있었다면 KakaoMapOption.position(build 참고)이
+    // 그 자리로 이미 잡아 준다 — _syncInitialCenter가 또 옮길 필요가 없다.
+    _appliedInitialCenter = widget.initialCenter;
+  }
+
+  @override
   void didUpdateWidget(covariant RunMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
     // 러닝 화면은 경과 시간 때문에 1초마다 rebuild된다. 지도에 넣을 값이 그대로면
@@ -197,6 +209,7 @@ class _RunMapViewState extends State<RunMapView>
   bool _hasMapInputChanged(RunMapView old) =>
       old.followCurrentPosition != widget.followCurrentPosition ||
       !identical(_lastSample, widget.currentPosition) ||
+      !identical(old.initialCenter, widget.initialCenter) ||
       !_isSamePath(old.coursePath, widget.coursePath) ||
       !_isSamePath(old.runPath, widget.runPath);
 
@@ -285,6 +298,7 @@ class _RunMapViewState extends State<RunMapView>
 
         // 순서가 중요하다. 현위치와 카메라는 점 하나만 보내면 되지만 코스는
         // 점이 쌓일수록 무거워진다. 가벼운 쪽을 앞에 둔다.
+        await _syncInitialCenter(controller);
         await _syncLivePosition(controller);
         await _moveCamera(controller);
         await _drawCourse(controller);
@@ -293,6 +307,31 @@ class _RunMapViewState extends State<RunMapView>
     } finally {
       _isRedrawing = false;
     }
+  }
+
+  /// 자유 러닝에서 GPS 조회가 지도 생성보다 늦게 끝나는 경우를 보정한다.
+  ///
+  /// [RunScreen]은 화면을 열자마자 현위치를 비동기로 조회해 [initialCenter]에
+  /// 채워 넣는다([RunMapView.initialCenter] 참고). 그런데 지도는 그 값이
+  /// 도착하기 전에 이미 기본 중심(제주시청)으로 만들어지는 경우가 흔하고,
+  /// [build]의 [kakao.KakaoMapOption.position]은 최초 생성 때 한 번만 읽혀서
+  /// 그 뒤로 [initialCenter]가 바뀌어도 카메라가 저절로 따라가지 않는다.
+  /// 여기서 늦게 도착한 값을 감지해 한 번 옮겨 준다.
+  Future<void> _syncInitialCenter(kakao.KakaoMapController controller) async {
+    final center = widget.initialCenter;
+    if (center == null || identical(_appliedInitialCenter, center)) return;
+    _appliedInitialCenter = center;
+
+    // 이미 달리는 중이면 곧이어 _moveCamera가 현위치로 카메라를 잡으므로
+    // 여기서 옮기면 그 이동과 겹쳐 화면이 한 번 더 튄다.
+    if (widget.followCurrentPosition) return;
+
+    await controller.moveCamera(
+      kakao.CameraUpdate.newCenterPosition(
+        _toLatLng(center),
+        zoomLevel: _initialZoomLevel,
+      ),
+    );
   }
 
   /// 새 위치를 보간기에 넣고, 마커를 만들고, 렌더 루프를 켠다.
