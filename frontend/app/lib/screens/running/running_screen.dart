@@ -246,6 +246,11 @@ class _RunningScreenState extends State<RunningScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.paper,
+      // 검색창은 화면 상단에 있어 키보드에 가려지지 않는다. body를 키보드
+      // 높이만큼 리사이즈하게 두면 그 안의 카카오맵 네이티브 뷰(PlatformView)가
+      // 함께 리사이즈되면서 렌더링이 깨진다(입력을 시작하자마자 지도가 깨지는
+      // 증상). 지도가 리사이즈될 일이 없도록 막아 둔다.
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(
