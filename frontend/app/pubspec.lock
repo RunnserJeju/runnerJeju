@@ -485,7 +485,7 @@ packages:
     description:
       path: "."
       ref: runners-jeju-main
-      resolved-ref: "71512bc601f93998a03be0d94c349d3ca8fc5e6b"
+      resolved-ref: a0cc8853c5fead2e71afa962591430d38067ee68
       url: "https://github.com/RunnserJeju/flutter_kakao_maps.git"
     source: git
     version: "1.2.6"
