@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../services/location_service.dart';
+import '../../services/run_live_widget.dart';
 import '../../services/run_tracker.dart';
 import '../../services/service_locator.dart';
 import '../../test/simulation_launcher.dart';
@@ -28,6 +31,7 @@ class RunScreen extends StatefulWidget {
 
 class _RunScreenState extends State<RunScreen> {
   RunTracker get _tracker => Services.instance.runTracker;
+  RunLiveWidget get _liveWidget => Services.instance.runLiveWidget;
 
   final TransientMessenger _messenger = TransientMessenger();
 
@@ -46,8 +50,19 @@ class _RunScreenState extends State<RunScreen> {
   @override
   void dispose() {
     _tracker.removeListener(_onTrackerChanged);
+    // 화면을 벗어나면 잠금화면 위젯도 걷어낸다 — 유령 위젯이 남지 않게.
+    // (정상 종료는 _finish에서 이미 걷지만, 여기서 한 번 더 안전망을 둔다.)
+    unawaited(_liveWidget.stop());
     super.dispose();
   }
+
+  /// tracker의 현재 값으로 위젯에 보낼 한 컷을 만든다.
+  RunWidgetData _snapshot() => RunWidgetData(
+    distanceMeters: _tracker.distanceMeters,
+    elapsed: _tracker.elapsed,
+    paceSecondsPerKm: _tracker.paceSecondsPerKm,
+    paused: _tracker.status == RunStatus.paused,
+  );
 
   void _onTrackerChanged() {
     if (!mounted) return;
@@ -60,6 +75,9 @@ class _RunScreenState extends State<RunScreen> {
       _notifiedInterruption = interruption;
       if (interruption != null) _messenger.show(context, interruption.message);
     }
+
+    // 잠금화면 위젯도 같은 값으로 갱신한다(throttle은 위젯 계층이 담당).
+    if (_tracker.isActive) unawaited(_liveWidget.update(_snapshot()));
 
     setState(() {});
   }
@@ -85,6 +103,10 @@ class _RunScreenState extends State<RunScreen> {
       course: widget.course,
       source: source,
     );
+    if (availability.isReady) {
+      // 잠금화면 위젯을 띄운다(Android 상시 알림 / iOS Live Activity).
+      unawaited(_liveWidget.start(_snapshot()));
+    }
     if (availability.isReady || !mounted) return;
 
     _showPermissionSheet(availability);
@@ -134,6 +156,8 @@ class _RunScreenState extends State<RunScreen> {
   /// 물으면 확인 절차가 아니라 달리고 온 사람 앞을 막는 문이 된다.
   Future<void> _finish() async {
     _tracker.finish();
+    // 러닝이 끝났으니 잠금화면 위젯을 걷는다.
+    unawaited(_liveWidget.stop());
     final record = _tracker.buildRecord();
     if (record == null || !mounted) return;
 

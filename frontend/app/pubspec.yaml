@@ -45,6 +45,8 @@ dependencies:
   sign_in_with_apple: ^6.1.4
   google_sign_in: ^7.2.0
   flutter_svg: ^2.3.0
+  flutter_local_notifications: ^22.3.0
+  live_activities: ^2.5.1
 
 # 포크를 쓴다. pub 1.2.6의 iOS 래퍼에 크래시가 있어 직접 고치면서 사용해야 할 것 같다..
 # 실제로 받는 커밋은 pubspec.lock에 박히므로 팀원은 모두 같은 코드를 쓴다.

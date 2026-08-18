@@ -24,6 +24,9 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications(잠금화면 러닝 위젯)가 요구하는 core library
+        // desugaring. 옛 Android에서도 최신 java.time 등을 쓰게 해준다.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -93,6 +96,11 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // isCoreLibraryDesugaringEnabled을 켜면 반드시 함께 있어야 하는 런타임.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {
