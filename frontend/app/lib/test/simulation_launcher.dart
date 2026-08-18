@@ -1,11 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/geo_point.dart';
 import '../services/location_service.dart';
 import 'simulated_location_service.dart';
 
-/// 디버그 빌드에서만 보이는 "시뮬레이션으로 달리기" 버튼. (kDebugMode로 판별 가능)
+/// "시뮬레이션으로 달리기" 버튼. 노출 여부는 호출부의 [AdminOnly]가 정한다
+/// (admin 계정에게만 보인다).
 class SimulationStartButton extends StatelessWidget {
   const SimulationStartButton({
     super.key,
@@ -21,11 +21,9 @@ class SimulationStartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return const SizedBox.shrink();
-
     return IconButton.filledTonal(
       icon: const Icon(Icons.science_outlined),
-      tooltip: '시뮬레이션으로 달리기 (디버그 전용)',
+      tooltip: '시뮬레이션으로 달리기 (admin 전용)',
       onPressed: () => _pickProfile(context),
     );
   }
