@@ -108,6 +108,9 @@ class _RunMapViewState extends State<RunMapView>
   /// 지금 화면에 그려져 있는 좌표. 마커와 경로 끝이 공유한다.
   GeoPoint? _renderedPosition;
 
+  /// 마커를 마지막으로 옮긴 렌더 시각. 다음 이동에 줄 애니메이션 시간을 여기서 잰다.
+  Duration? _lastMovedAt;
+
   // 아직 지도에 반영하지 못한 프레임. 플랫폼 호출이 진행 중일 때 여기 쌓였다가
   // [_flushFrame]의 루프가 이어서 처리한다. 좌표는 최신 것만 의미가 있어서
   // 덮어쓰지만, 확정된 점은 경로에 빠짐없이 들어가야 하므로 모아 둔다.
@@ -170,6 +173,10 @@ class _RunMapViewState extends State<RunMapView>
   /// 화면의 60fps를 전부 플랫폼으로 넘길 이유는 없다. 러닝 속도(3m/s)에서
   /// 33ms는 0.1m라 눈에는 연속이고, 플랫폼 호출은 절반이 된다.
   static const Duration _frameInterval = Duration(milliseconds: 33);
+
+  /// 마커 이동 애니메이션의 상한(ms). 프레임이 이보다 크게 벌어진 뒤라면
+  /// 그 간격을 그대로 애니메이션에 쓰기보다 따라잡는 편이 낫다.
+  static const int _maxMoveMillis = 200;
 
   /// 경로 전체를 화면에 맞출 때 가장자리에 두는 여백(px).
   static const int _fitPadding = 48;
@@ -421,6 +428,7 @@ class _RunMapViewState extends State<RunMapView>
     _pendingPosition = null;
     _lastSample = null;
     _renderedPosition = null;
+    _lastMovedAt = null;
 
     await live.breakHere();
   }
@@ -486,6 +494,7 @@ class _RunMapViewState extends State<RunMapView>
     _pendingPosition = null;
     _lastSample = null;
     _renderedPosition = null;
+    _lastMovedAt = null;
     _wasFollowing = false;
 
     final marker = _currentPositionMarker;
@@ -747,7 +756,10 @@ class _RunMapViewState extends State<RunMapView>
         //
         // 호출 사이마다 상태를 다시 본다. await 동안 화면이 사라지거나 러닝이
         // 초기화되면 이미 걷어낸 오버레이를 이어서 건드리게 된다.
-        await marker.move(_toLatLng(position));
+        await marker.move(
+          _toLatLng(position),
+          _moveMillisAt(_renderClock.elapsed),
+        );
         if (!_isLiveCurrent(live, marker)) break;
 
         if (settled.isNotEmpty) await live.append(settled);
@@ -759,6 +771,20 @@ class _RunMapViewState extends State<RunMapView>
     } finally {
       _isRendering = false;
     }
+  }
+
+  /// 마커를 옮길 때 네이티브에 줄 애니메이션 시간(ms).
+  ///
+  /// 시간을 빼고 좌표만 넘기면 네이티브는 마커를 순간이동시킨다
+  int _moveMillisAt(Duration now) {
+    final previous = _lastMovedAt;
+    _lastMovedAt = now;
+    if (previous == null) return _frameInterval.inMilliseconds;
+
+    return (now - previous).inMilliseconds.clamp(
+      _frameInterval.inMilliseconds,
+      _maxMoveMillis,
+    );
   }
 
   /// 프레임을 시작할 때 잡아 둔 오버레이가 아직 화면에 살아 있는지.
