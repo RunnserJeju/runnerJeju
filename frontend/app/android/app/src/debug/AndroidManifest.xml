@@ -4,4 +4,13 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- 개발용 로컬 서버(http://10.0.2.2:8000)에 붙기 위한 평문 http 허용.
+         Android 9(API 28)부터 평문 통신은 기본 차단이라 이게 없으면 debug 빌드가
+         서버에 연결하지 못한다(AppConfig.apiBaseUrl 참고).
+
+         release는 Cloud Run을 https로만 보므로 필요 없다. main이 아니라 여기에
+         두는 이유가 그것이다 — 매니페스트 병합이 빌드 타입별로 합쳐 주므로
+         디버그 빌드에만 들어가고 배포본에는 이 문이 열리지 않는다. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

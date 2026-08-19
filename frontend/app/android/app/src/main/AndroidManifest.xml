@@ -19,10 +19,9 @@
          Android 13(API 33)+ 는 런타임 요청도 필요하다(RunLiveWidget에서 요청). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="runners_jeju"
+        android:label="러너스 제주"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
