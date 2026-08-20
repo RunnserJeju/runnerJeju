@@ -20,8 +20,12 @@ class RunPathInterpolator {
   Duration? _lastAt;
   bool _hasEmittedFirst = false;
 
-  /// 렌더 지연의 하한. 프레임 몇 개는 채울 수 있어야 한다.
-  static const int _minDelayMillis = 150;
+  /// 직전 프레임에 다음 점이 없어 마지막 점에 멈춰 있었는지.
+  bool _stalled = false;
+
+  /// 렌더 지연의 하한. 실 GPS 배차(≈1초)의 지터를 흡수할 만큼은 잡아야
+  /// 보간이 다음 점 도착 전에 끝나 멈추는 일이 드물다.
+  static const int _minDelayMillis = 500;
 
   /// 렌더 지연의 상한. 이보다 뒤처지면 "현위치"라고 부르기 어렵다.
   static const int _maxDelayMillis = 1500;
@@ -74,6 +78,7 @@ class RunPathInterpolator {
     _intervalMillis = null;
     _lastAt = null;
     _hasEmittedFirst = false;
+    _stalled = false;
   }
 
   /// 렌더 시계를 [now]까지 진행시키고 이번 프레임에 그릴 것을 돌려준다.
@@ -87,6 +92,14 @@ class RunPathInterpolator {
     final settled = _emitFirst();
     final renderTime = now - delay;
 
+    // 멈춰 있던 중에 새 점이 도착했다. 시각 그대로 보간하면 t가 이미 커져 있어
+    // 구간 중간까지 순간이동하므로, 구간 시작 시각을 지금으로 리베이스해서
+    // 멈춘 지점부터 미끄러져 따라잡는다.
+    if (_stalled && _samples.length > 1 && renderTime > _samples.first.at) {
+      _samples[0] = _Sample(_samples.first.point, renderTime);
+    }
+    _stalled = false;
+
     // 렌더 시각이 다음 점을 지났으면 그 점을 확정하고 보간 구간을 한 칸 민다.
     // 직전 점 하나는 보간의 시작점으로 남겨 둔다.
     while (_samples.length > 1 && _samples[1].at <= renderTime) {
@@ -98,6 +111,7 @@ class RunPathInterpolator {
     // 다음 점이 아직 안 왔으면 마지막 점에 머문다. 신호가 끊겼을 때 위치를
     // 지어내는 것보다 멈춰 있는 편이 정직하다.
     if (_samples.length == 1) {
+      _stalled = true;
       return (settled: settled, position: from.point);
     }
 
@@ -121,6 +135,7 @@ class RunPathInterpolator {
       settled.add(_samples.first.point);
     }
 
+    _stalled = false;
     return (settled: settled, position: _samples.first.point);
   }
 
