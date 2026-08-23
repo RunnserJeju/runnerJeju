@@ -6,10 +6,12 @@ import 'package:flutter/scheduler.dart';
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 
 import '../config/app_config.dart';
+import '../models/course_facility.dart';
 import '../models/geo_point.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
 import '../utils/run_path_interpolator.dart';
+import 'facility_marker.dart';
 import 'map_status_views.dart';
 
 /// 카카오맵을 감싸는 러닝 전용 지도.
@@ -20,6 +22,8 @@ class RunMapView extends StatefulWidget {
   const RunMapView({
     super.key,
     this.coursePath = const [],
+    this.parkings = const [],
+    this.restrooms = const [],
     this.runPath = const [],
     this.currentPosition,
     this.initialCenter,
@@ -28,6 +32,11 @@ class RunMapView extends StatefulWidget {
 
   /// 따라 달릴 코스 경로. 강조색 실선으로 그린다.
   final List<GeoPoint> coursePath;
+
+  /// 코스 주차장/화장실. 달리는 중에도 근처 시설이 보이도록 배지로 찍는다.
+  /// 러닝 내내 바뀌지 않는 정적 마커라 시작할 때 한 번만 그린다.
+  final List<CourseFacility> parkings;
+  final List<CourseFacility> restrooms;
 
   /// 이미 끝난 러닝의 경로. 결과 화면처럼 정지 화면에서 쓴다.
   ///
@@ -85,6 +94,13 @@ class _RunMapViewState extends State<RunMapView>
 
   /// 지도에 실제로 올라가 있는 코스. 같은 점이 다시 들어오면 플랫폼 호출을 건너뛴다.
   List<GeoPoint>? _drawnCoursePath;
+
+  /// 코스 시설(주차장/화장실) 배지. 정적이라 한 번만 그리고 그대로 둔다.
+  final List<kakao.Poi> _facilityMarkers = [];
+  List<CourseFacility>? _drawnParkings;
+  List<CourseFacility>? _drawnRestrooms;
+  kakao.PoiStyle? _parkingStyle;
+  kakao.PoiStyle? _restroomStyle;
 
   /// 정지 화면에서 [RunMapView.runPath]를 그린 선들. 일시정지로 끊긴 자리마다
   /// 하나씩 나뉘므로 여러 개가 된다.
@@ -211,7 +227,9 @@ class _RunMapViewState extends State<RunMapView>
       !identical(_lastSample, widget.currentPosition) ||
       !identical(old.initialCenter, widget.initialCenter) ||
       !_isSamePath(old.coursePath, widget.coursePath) ||
-      !_isSamePath(old.runPath, widget.runPath);
+      !_isSamePath(old.runPath, widget.runPath) ||
+      !identical(old.parkings, widget.parkings) ||
+      !identical(old.restrooms, widget.restrooms);
 
   /// 경로는 뒤에 점이 붙기만 하므로 길이와 마지막 점만 보면 같은지 알 수 있다.
   /// (GeoPoint는 값 비교를 정의하지 않아 identical로 본다 — 점이 추가되면
@@ -302,6 +320,7 @@ class _RunMapViewState extends State<RunMapView>
         await _syncLivePosition(controller);
         await _moveCamera(controller);
         await _drawCourse(controller);
+        await _drawFacilities(controller);
         await _drawStaticRunPath(controller);
       } while (_needsRedraw && !_disposed);
     } finally {
@@ -515,6 +534,69 @@ class _RunMapViewState extends State<RunMapView>
       zOrder: _courseZOrder,
     );
     _drawnCoursePath = points;
+  }
+
+  /// 코스 주차장(파란 'P')·화장실(초록 'WC') 배지를 좌표에 찍는다. 러닝 중 안
+  /// 바뀌는 정적 마커라 처음 한 번만 그린다(CourseMapView와 같은 배지를 쓴다).
+  Future<void> _drawFacilities(kakao.KakaoMapController controller) async {
+    if (identical(_drawnParkings, widget.parkings) &&
+        identical(_drawnRestrooms, widget.restrooms)) {
+      return;
+    }
+
+    for (final marker in _facilityMarkers) {
+      await marker.remove();
+      if (_disposed) return;
+    }
+    _facilityMarkers.clear();
+
+    final parkingStyle = await _ensureParkingStyle();
+    final restroomStyle = await _ensureRestroomStyle();
+    if (parkingStyle == null || restroomStyle == null || _disposed) return;
+
+    Future<void> place(CourseFacility facility, kakao.PoiStyle style) async {
+      final poi = await controller.labelLayer.addPoi(
+        _toLatLng(GeoPoint(latitude: facility.lat, longitude: facility.lng)),
+        style: style,
+      );
+      if (_disposed) {
+        await poi.remove();
+        return;
+      }
+      _facilityMarkers.add(poi);
+    }
+
+    for (final facility in widget.parkings) {
+      await place(facility, parkingStyle);
+      if (_disposed) return;
+    }
+    for (final facility in widget.restrooms) {
+      await place(facility, restroomStyle);
+      if (_disposed) return;
+    }
+
+    _drawnParkings = widget.parkings;
+    _drawnRestrooms = widget.restrooms;
+  }
+
+  Future<kakao.PoiStyle?> _ensureParkingStyle() async {
+    if (_parkingStyle != null) return _parkingStyle;
+    final icon = await buildFacilityBadge(parkingBadgeColor, parkingBadgeLabel);
+    if (_disposed) return null;
+    return _parkingStyle = kakao.PoiStyle(
+      anchor: const kakao.KPoint(0.5, 0.5),
+      icon: icon,
+    );
+  }
+
+  Future<kakao.PoiStyle?> _ensureRestroomStyle() async {
+    if (_restroomStyle != null) return _restroomStyle;
+    final icon = await buildFacilityBadge(restroomBadgeColor, restroomBadgeLabel);
+    if (_disposed) return null;
+    return _restroomStyle = kakao.PoiStyle(
+      anchor: const kakao.KPoint(0.5, 0.5),
+      icon: icon,
+    );
   }
 
   /// 정지 화면의 경로. 라이브 위치가 있으면 [_GrowingRoute]가 대신 그리므로

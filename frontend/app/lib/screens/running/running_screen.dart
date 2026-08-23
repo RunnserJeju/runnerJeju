@@ -276,6 +276,14 @@ class _RunningScreenState extends State<RunningScreen> {
                     courses: _visibleCourses,
                     selectedCourseId: selected?.id,
                     selectedPath: _selectedDetail?.path ?? const [],
+                    // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
+                    // 좌표 포함)을 쓰고, 오면 상세 값으로 바뀐다.
+                    selectedParkings: selected == null
+                        ? const []
+                        : (_selectedDetail ?? selected).parkings,
+                    selectedRestrooms: selected == null
+                        ? const []
+                        : (_selectedDetail ?? selected).restrooms,
                     myPosition: _myPosition,
                     onCourseTap: _selectCourse,
                     onMapTap: _clearSelection,

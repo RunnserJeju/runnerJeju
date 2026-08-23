@@ -191,6 +191,8 @@ class _RunScreenState extends State<RunScreen> {
             Positioned.fill(
               child: RunMapView(
                 coursePath: widget.course?.path ?? const [],
+                parkings: widget.course?.parkings ?? const [],
+                restrooms: widget.course?.restrooms ?? const [],
                 runPath: tracker.path,
                 currentPosition: tracker.currentPosition,
                 initialCenter: _initialCenter,
