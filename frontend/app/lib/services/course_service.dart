@@ -1,5 +1,6 @@
 import '../api/course_api.dart';
 import '../exceptions/app_exception.dart';
+import '../models/course_facility.dart';
 import '../models/running_course.dart';
 
 /// 비즈니스 로직 계층: 코스 조회/등록. UI가 이해할 수 있는 형태로 오류를 바꿔준다.
@@ -33,8 +34,8 @@ class CourseService {
     required CourseDifficulty difficulty,
     required String address,
     String? tags,
-    String? parkingAddress,
-    String? restroomAddress,
+    List<CourseFacility> parkings = const [],
+    List<CourseFacility> restrooms = const [],
     String? description,
   }) async {
     if (bytes.isEmpty) {
@@ -50,8 +51,8 @@ class CourseService {
         difficulty: difficulty,
         address: address,
         tags: tags,
-        parkingAddress: parkingAddress,
-        restroomAddress: restroomAddress,
+        parkings: parkings,
+        restrooms: restrooms,
         description: description,
       );
     } catch (e) {

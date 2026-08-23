@@ -1,6 +1,7 @@
 import '../api/auth_api.dart';
 import '../api/banner_api.dart';
 import '../api/course_api.dart';
+import '../api/geo_api.dart';
 import '../api/notice_api.dart';
 import '../api/run_api.dart';
 import '../api/stamp_api.dart';
@@ -10,6 +11,7 @@ import '../network/api_client.dart';
 import 'auth_service.dart';
 import 'banner_service.dart';
 import 'course_service.dart';
+import 'geo_service.dart';
 import 'location_service.dart';
 import 'notice_service.dart';
 import 'run_live_widget.dart';
@@ -47,6 +49,7 @@ class Services {
 
   late final AuthService auth = AuthService(AuthApi(apiClient), tokenStorage);
   late final CourseService course = CourseService(CourseApi(apiClient));
+  late final GeoService geo = GeoService(GeoApi(apiClient));
   late final RunService run = RunService(RunApi(apiClient));
   late final StampService stamp = StampService(StampApi(apiClient));
   late final VerificationService verification = VerificationService(

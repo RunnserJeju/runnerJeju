@@ -92,6 +92,23 @@ class AccessTokenOut(BaseModel):
 # --- 코스 ---------------------------------------------------------------
 
 
+class Facility(BaseModel):
+    """주차장/화장실 한 곳. courses.parkings/restrooms JSONB의 원소 하나와 1:1이고,
+    Flutter CourseFacility.fromJson/toJson과도 1:1이다.
+
+    lat/lng는 필수다 — 등록 화면의 "확인"(GET /geo/geocode)으로 좌표를 채운 뒤
+    보내야 한다는 뜻이다. 좌표 없이 주소만 오면 422로 거른다.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # 표시용 이름(예: "송악산 공영주차장"). 없으면 주소만 보여준다.
+    name: str | None = None
+    address: str = Field(min_length=1)
+    lat: float
+    lng: float
+
+
 class CourseListItem(BaseModel):
     """목록용. 카드에 필요한 것만 담고 경로 좌표는 뺀다.
 
@@ -111,8 +128,16 @@ class CourseListItem(BaseModel):
     tags: str | None
 
     address: str
+
+    # 옛 단일 주소 필드. parkings/restrooms(아래)로 대체되는 중이라 새 코스에선
+    # 늘 None이다 — 옛 코스와의 호환을 위해 컬럼 drop(0010) 전까지만 남겨둔다.
     parking_address: str | None
     restroom_address: str | None
+
+    # 코스당 여러 개. 각 원소는 좌표까지 포함(app/geocoding.py로 변환해 저장).
+    parkings: list[Facility]
+    restrooms: list[Facility]
+
     description: str | None
     completed_count: int
     is_completed_by_me: bool
@@ -127,6 +152,27 @@ class CourseSummary(CourseListItem):
     """상세/등록 응답. 지도에 그릴 경로 좌표까지 포함한다."""
 
     path: list[GeoPointSchema]
+
+
+# --- 지오코딩 ------------------------------------------------------------
+
+
+class GeocodeResult(BaseModel):
+    """주소 후보 하나. 필드는 geocoding.GeocodeResult(dataclass)와 1:1이다."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # 지번 주소(항상 있음), 도로명 주소(카카오가 매칭했을 때만).
+    address: str
+    road_address: str | None
+    lat: float
+    lng: float
+
+
+class GeocodeResponse(BaseModel):
+    """빈 results는 '주소를 못 찾음'이다 — 호출 실패(502)와 구분된다."""
+
+    results: list[GeocodeResult]
 
 
 # --- 러닝 기록 ------------------------------------------------------------

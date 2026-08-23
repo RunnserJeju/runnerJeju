@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -8,13 +9,17 @@ from app import gpx
 from app.db import get_db
 from app.deps import current_user_id, require_admin
 from app.models import Course, Stamp
-from app.schemas import CourseListItem, CourseSummary, Difficulty
+from app.schemas import CourseListItem, CourseSummary, Difficulty, Facility
 
 router = APIRouter(tags=["courses"])
 
 # 업로드 가능한 GPX 최대 크기. 6.2km 코스가 36KB이므로 넉넉하다.
 # 제한이 없으면 거대한 파일 하나로 워커 메모리를 채울 수 있다.
 MAX_GPX_BYTES = 5 * 1024 * 1024
+
+# 멀티파트 폼에 파일과 함께 실려오는 parkings/restrooms를 검증한다. 폼 필드라
+# JSON 문자열로 오므로 validate_json으로 파싱한다(각 원소는 Facility = 좌표 포함).
+_facility_list = TypeAdapter(list[Facility])
 
 
 def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) -> dict:
@@ -29,6 +34,8 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "address": course.address,
         "parking_address": course.parking_address,
         "restroom_address": course.restroom_address,
+        "parkings": course.parkings or [],
+        "restrooms": course.restrooms or [],
         "description": course.description,
         "path": path,
         # 목록 응답(CourseListItem)에는 path가 빠지므로, 지도에 라벨을 찍을 점은
@@ -121,8 +128,8 @@ def create_course_from_gpx_bytes(
     difficulty: int,
     address: str,
     tags: str | None,
-    parking_address: str | None,
-    restroom_address: str | None,
+    parkings: list[dict] | None = None,
+    restrooms: list[dict] | None = None,
     description: str | None,
     created_by: str | None,
 ) -> Course:
@@ -131,6 +138,11 @@ def create_course_from_gpx_bytes(
     `POST /courses/gpx`(HTTP)와 `tools/push_courses.py`(DB 직접 접근)가 공유하는
     단일 진입점이다. 검증 규칙이 한 곳에만 있어야, 스크립트가 API를 거치지 않고
     DB에 바로 써도 규칙이 두 벌로 갈라지지 않는다.
+
+    parkings/restrooms는 각 원소가 {"name", "address", "lat", "lng"}인 dict 목록이다.
+    좌표 변환은 호출하는 쪽 책임이다 — HTTP는 클라이언트가 "확인"으로 채워 보내고,
+    스크립트는 push 시점에 geocode한다. 이 함수는 좌표를 그대로 저장만 하므로
+    네트워크에 의존하지 않는다(테스트가 쉬워진다).
 
     같은 GPX를 다시 올리면 코스가 하나 더 생긴다 — 갱신이 아니다. 코스를 고칠
     일은 DB에서 직접 처리하기로 했으므로, 다시 올릴 때는 먼저 지우면 된다.
@@ -155,8 +167,8 @@ def create_course_from_gpx_bytes(
         difficulty=difficulty,
         address=address,
         tags=tags,
-        parking_address=parking_address,
-        restroom_address=restroom_address,
+        parkings=parkings or [],
+        restrooms=restrooms or [],
         description=description,
         # 원본 GPX 점이 아니라 균등 간격으로 리샘플한 경로를 저장한다.
         # 검증 매칭률이 "코스 거리의 몇 %"와 일치하려면 점 밀도가 균등해야 하고,
@@ -180,8 +192,13 @@ def create_course_from_gpx(
     address: str = Form(..., min_length=1, description="코스 시작 지점 주소"),
     name: str | None = Form(default=None, description="생략하면 GPX의 <name>을 쓴다"),
     tags: str | None = Form(default=None, description='쉼표로 구분 — "해안도로,제주시"'),
-    parking_address: str | None = Form(default=None, description="근처 주차장 주소"),
-    restroom_address: str | None = Form(default=None, description="근처 화장실 주소"),
+    parkings: str = Form(
+        default="[]",
+        description='주차장 목록 JSON. 각 원소 {name?, address, lat, lng} — 좌표는 "확인"으로 채운다',
+    ),
+    restrooms: str = Form(
+        default="[]", description="화장실 목록 JSON. 형식은 parkings와 같다"
+    ),
     description: str | None = Form(default=None),
     db: Session = Depends(get_db),
     user_id: str = Depends(require_admin),
@@ -190,6 +207,9 @@ def create_course_from_gpx(
 
     거리·난이도·주소는 GPX에서 알 수 없으므로 폼으로 받는다. 특히 거리는 GPX를
     실측한 값이 아니라 코스 명단에 적힌 왕복 안내값이다.
+
+    주차장/화장실은 좌표까지 포함한 JSON 목록으로 받는다. 좌표는 등록 화면의
+    "확인"(GET /geo/geocode)이 미리 채워 보낸다 — 여기서 다시 변환하지 않는다.
     """
     content = file.file.read(MAX_GPX_BYTES + 1)
     if len(content) > MAX_GPX_BYTES:
@@ -197,6 +217,15 @@ def create_course_from_gpx(
             status_code=413,
             detail=f"GPX 파일이 너무 커요. {MAX_GPX_BYTES // (1024 * 1024)}MB 이하여야 해요.",
         )
+
+    try:
+        parsed_parkings = _facility_list.validate_json(parkings)
+        parsed_restrooms = _facility_list.validate_json(restrooms)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="주차장/화장실 형식이 올바르지 않아요(좌표가 빠졌을 수 있어요).",
+        ) from exc
 
     try:
         course = create_course_from_gpx_bytes(
@@ -207,8 +236,8 @@ def create_course_from_gpx(
             difficulty=difficulty,
             address=address,
             tags=tags,
-            parking_address=parking_address,
-            restroom_address=restroom_address,
+            parkings=[facility.model_dump() for facility in parsed_parkings],
+            restrooms=[facility.model_dump() for facility in parsed_restrooms],
             description=description,
             created_by=user_id,
         )

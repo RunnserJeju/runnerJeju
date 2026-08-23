@@ -107,8 +107,17 @@ class Course(Base):
     address: Mapped[str] = mapped_column(String(300))
 
     # 명단에 값이 없는 코스가 있어서 둘 다 nullable이다.
+    #
+    # 아래 parkings/restrooms(JSONB)로 대체되는 중이다(단계적 교체 — 0009 마이그레이션
+    # 주석 참고). 코드가 새 컬럼으로 완전히 넘어가면 옛 컬럼은 0010에서 지운다.
     parking_address: Mapped[str | None] = mapped_column(String(300), default=None)
     restroom_address: Mapped[str | None] = mapped_column(String(300), default=None)
+
+    # 주차장/화장실을 코스당 여러 개 담는다. 각 원소는
+    # {"name": str|null, "address": str, "lat": float, "lng": float}.
+    # 좌표는 등록 시점에 주소를 변환(app/geocoding.py)해 넣는다. path와 같은 JSONB 전략.
+    parkings: Mapped[list] = mapped_column(JSONB, default=list)
+    restrooms: Mapped[list] = mapped_column(JSONB, default=list)
 
     description: Mapped[str | None] = mapped_column(String(2000), default=None)
 

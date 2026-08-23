@@ -14,7 +14,16 @@
 # 돌리면 코스가 두 벌 생긴다. 다시 올릴 때는 courses 테이블을 먼저 비울 것.
 #
 # 필수: file, name, distance_km, difficulty, address
-# 선택: tags, parking_address, restroom_address, description
+# 선택: tags, description, parkings, restrooms
+#
+# parkings/restrooms는 주소 목록이다(코스당 여러 개 가능). 좌표는 push 시점에
+# 자동 변환하므로(KAKAO_REST_API_KEY 필요) 주소만 적으면 된다. name은 선택.
+#   parkings:
+#     - name: 송악산 공영주차장   # 생략 가능
+#       address: 제주특별자치도 서귀포시 대정읍 상모리 4165-123
+#   restrooms:
+#     - address: 제주특별자치도 서귀포시 대정읍 송악관광로 42
+# 변환 못 하는 주소(번지 틀림 등)가 있으면 seed가 멈춘다 — 그 주소만 고치면 된다.
 #
 # distance_km은 왕복 기준 km 정수다(GPX 실측값이 아니라 명단에 적힌 안내값).
 # difficulty는 1=★, 2=★★, 3=★★★.

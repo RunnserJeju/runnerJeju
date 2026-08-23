@@ -25,7 +25,7 @@ from pathlib import Path
 import yaml
 from sqlalchemy.orm import Session
 
-from app import gpx
+from app import geocoding, gpx
 from app.db import SessionLocal
 from app.routers.courses import CourseUploadError, create_course_from_gpx_bytes
 
@@ -33,15 +33,14 @@ COURSES_DIR = Path(__file__).resolve().parent.parent / "courses"
 MANIFEST = COURSES_DIR / "courses.yaml"
 
 # courses.yaml에서 create_course_from_gpx_bytes에 그대로 넘기는 키.
-# 경로 좌표는 GPX에서 나오므로 여기에 없다.
+# 경로 좌표는 GPX에서 나온다. 주차장/화장실(parkings/restrooms)은 좌표 변환이
+# 필요해서 여기에 없고 _resolve_facilities로 따로 처리한다.
 FORM_FIELDS = (
     "name",
     "distance_km",
     "difficulty",
     "address",
     "tags",
-    "parking_address",
-    "restroom_address",
     "description",
 )
 
@@ -90,18 +89,54 @@ def describe(entry: dict) -> str:
     )
 
 
+def _resolve_facilities(specs: list | None, kind: str, course: str) -> list[dict]:
+    """yaml의 주소 목록을 좌표까지 채운 dict 목록으로 바꾼다.
+
+    각 spec은 {name?, address}다. HTTP 등록은 클라이언트가 "확인"으로 좌표를
+    채워 보내지만, 명단(yaml)에는 좌표가 없으므로 여기서 geocode한다. 주소를
+    못 찾으면(빈 결과) 좌표를 만들 수 없으니 명단을 고치라고 멈춘다.
+    """
+    resolved = []
+    for spec in specs or []:
+        address = (spec.get("address") or "").strip()
+        if not address:
+            raise SystemExit(f"[{course}] {kind} 항목에 address가 없어요: {spec}")
+
+        try:
+            results = geocoding.geocode(address)
+        except geocoding.GeocodingError as exc:
+            raise SystemExit(f"[{course}] {kind} 좌표 변환 실패: {exc}") from exc
+
+        if not results:
+            raise SystemExit(
+                f"[{course}] {kind} 주소를 좌표로 변환하지 못했어요(명단을 확인하세요): {address}"
+            )
+
+        top = results[0]
+        resolved.append(
+            {"name": spec.get("name"), "address": address, "lat": top.lat, "lng": top.lng}
+        )
+
+    return resolved
+
+
 def push(db: Session, entry: dict) -> str:
     path = COURSES_DIR / entry["file"]
     if not path.exists():
         raise SystemExit(f"GPX 파일이 없어요: {path}")
 
     kwargs = {key: entry.get(key) for key in FORM_FIELDS}
+    course_label = entry.get("name") or entry["file"]
+    parkings = _resolve_facilities(entry.get("parkings"), "주차장", course_label)
+    restrooms = _resolve_facilities(entry.get("restrooms"), "화장실", course_label)
 
     try:
         course = create_course_from_gpx_bytes(
             db,
             path.read_bytes(),
             created_by="seed-script",
+            parkings=parkings,
+            restrooms=restrooms,
             **kwargs,
         )
     except CourseUploadError as exc:

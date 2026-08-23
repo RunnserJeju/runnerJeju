@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
+import '../models/course_facility.dart';
 import '../models/running_course.dart';
 import '../network/api_client.dart';
 
@@ -41,8 +44,8 @@ class CourseApi {
     required CourseDifficulty difficulty,
     required String address,
     String? tags,
-    String? parkingAddress,
-    String? restroomAddress,
+    List<CourseFacility> parkings = const [],
+    List<CourseFacility> restrooms = const [],
     String? description,
   }) async {
     final formData = FormData.fromMap({
@@ -51,8 +54,9 @@ class CourseApi {
       'difficulty': difficulty.value,
       'address': address,
       'tags': ?tags,
-      'parking_address': ?parkingAddress,
-      'restroom_address': ?restroomAddress,
+      // 좌표까지 포함한 JSON 목록으로 보낸다. 서버가 Facility로 검증한다.
+      'parkings': jsonEncode(parkings.map((f) => f.toJson()).toList()),
+      'restrooms': jsonEncode(restrooms.map((f) => f.toJson()).toList()),
       'description': ?description,
       'file': MultipartFile.fromBytes(bytes, filename: filename),
     });

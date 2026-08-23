@@ -1,3 +1,4 @@
+import 'course_facility.dart';
 import 'geo_point.dart';
 
 /// 코스 난이도. [value]는 서버 `courses.difficulty`(SMALLINT)와 같은 값이어야 한다.
@@ -30,6 +31,8 @@ class RunningCourse {
     this.tags,
     this.parkingAddress,
     this.restroomAddress,
+    this.parkings = const [],
+    this.restrooms = const [],
     this.description,
     this.completedCount = 0,
     this.isCompletedByMe = false,
@@ -51,8 +54,15 @@ class RunningCourse {
   /// 코스 시작 지점 주소.
   final String address;
 
+  /// 옛 단일 주소 필드. [parkings]/[restrooms]로 대체되는 중이라 새 코스에선
+  /// 늘 null이다(서버 컬럼 drop 전까지만 유지).
   final String? parkingAddress;
   final String? restroomAddress;
+
+  /// 근처 주차장/화장실. 코스당 여러 개이고 좌표를 포함해 지도에 마커로 찍는다.
+  final List<CourseFacility> parkings;
+  final List<CourseFacility> restrooms;
+
   final String? description;
 
   /// 코스를 이루는 좌표 목록. 지도에 그대로 폴리라인으로 그린다.
@@ -92,6 +102,8 @@ class RunningCourse {
     address: json['address'] as String,
     parkingAddress: json['parking_address'] as String?,
     restroomAddress: json['restroom_address'] as String?,
+    parkings: _facilities(json['parkings']),
+    restrooms: _facilities(json['restrooms']),
     description: json['description'] as String?,
     path: ((json['path'] as List?) ?? const [])
         .map((e) => GeoPoint.fromJson(e as Map<String, dynamic>))
@@ -103,3 +115,8 @@ class RunningCourse {
         : GeoPoint.fromJson(json['start_point'] as Map<String, dynamic>),
   );
 }
+
+/// 목록/상세 응답의 parkings·restrooms(둘 다 없을 수 있음)를 파싱한다.
+List<CourseFacility> _facilities(dynamic raw) => ((raw as List?) ?? const [])
+    .map((e) => CourseFacility.fromJson(e as Map<String, dynamic>))
+    .toList();
