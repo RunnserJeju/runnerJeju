@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/running_course.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/admin_only.dart';
 import '../../widgets/sheet_handle.dart';
 
 /// 지도에서 코스 라벨을 눌렀을 때 아래에서 올라오는 시트.
@@ -22,6 +23,7 @@ class CoursePreviewSheet extends StatelessWidget {
     required this.onClose,
     required this.onRetryDetail,
     required this.onStart,
+    required this.onEdit,
   });
 
   /// 목록에서 온 코스. 이름·거리처럼 시트에 바로 보여줄 값은 여기 다 있다.
@@ -35,6 +37,9 @@ class CoursePreviewSheet extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onRetryDetail;
   final VoidCallback onStart;
+
+  /// 관리자 전용 코스 수정. AdminOnly로 감싸 일반 사용자에겐 안 보인다.
+  final VoidCallback onEdit;
 
   /// 접힌 높이. 시작 버튼까지는 끌어올리지 않아도 보여야 한다.
   static const double _collapsedSize = 0.36;
@@ -80,6 +85,16 @@ class CoursePreviewSheet extends StatelessWidget {
                 hasError: detailError != null,
                 onStart: onStart,
                 onRetry: onRetryDetail,
+              ),
+              AdminOnly(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    label: const Text('코스 수정'),
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               const Divider(height: 1, color: Color(0xFFEDEFF2)),

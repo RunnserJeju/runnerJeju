@@ -69,4 +69,34 @@ class CourseApi {
 
     return RunningCourse.fromJson(response.data as Map<String, dynamic>);
   }
+
+  /// 코스 메타데이터를 수정한다 (관리자 전용). 경로(GPX)는 바꾸지 않으므로
+  /// 파일 없이 JSON으로 보낸다. 서버가 CourseUpdate로 검증한다.
+  Future<RunningCourse> updateCourse({
+    required String courseId,
+    required String name,
+    required int distanceKm,
+    required CourseDifficulty difficulty,
+    required String address,
+    String? tags,
+    List<CourseFacility> parkings = const [],
+    List<CourseFacility> restrooms = const [],
+    String? description,
+  }) async {
+    final response = await _client.dio.patch(
+      '/courses/$courseId',
+      data: {
+        'name': name,
+        'distance_km': distanceKm,
+        'difficulty': difficulty.value,
+        'address': address,
+        'tags': ?tags,
+        'parkings': parkings.map((f) => f.toJson()).toList(),
+        'restrooms': restrooms.map((f) => f.toJson()).toList(),
+        'description': ?description,
+      },
+    );
+
+    return RunningCourse.fromJson(response.data as Map<String, dynamic>);
+  }
 }

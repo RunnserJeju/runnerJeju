@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:runners_jeju/models/course_facility.dart';
+import 'package:runners_jeju/models/running_course.dart';
 import 'package:runners_jeju/screens/course/gpx_upload_screen.dart';
 
 /// 등록 화면의 주차장/화장실 동적 목록 UI만 본다. "확인"/제출은 네트워크(geo)를
@@ -47,5 +49,39 @@ void main() {
 
     // 주차장 행이 지워져 이름 필드가 1개(화장실만) 남는다.
     expect(find.text('이름 (선택)'), findsNWidgets(1));
+  });
+
+  testWidgets('수정 모드: 기존 값 프리필 + GPX 섹션 숨김 + 확인됨 상태', (tester) async {
+    useTallView(tester);
+    const course = RunningCourse(
+      id: 'c1',
+      name: '테스트 코스',
+      distanceKm: 7,
+      address: '제주시 어딘가',
+      difficulty: CourseDifficulty.hard,
+      tags: '해안,서쪽',
+      parkings: [
+        CourseFacility(name: '주차장A', address: '제주 A', lat: 33.5, lng: 126.5),
+      ],
+      restrooms: [],
+      path: [],
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(home: GpxUploadScreen(existing: course)),
+    );
+    await tester.pumpAndSettle();
+
+    // 제목·버튼이 수정용으로 바뀐다.
+    expect(find.text('코스 수정'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '수정 완료'), findsOneWidget);
+    // 기존 값이 채워진다(이름·주소).
+    expect(find.text('테스트 코스'), findsOneWidget);
+    expect(find.text('제주시 어딘가'), findsOneWidget);
+    // 경로는 못 바꾸므로 GPX 파일 칸은 없다.
+    expect(find.text('GPX 파일'), findsNothing);
+    expect(find.text('파일 선택'), findsNothing);
+    // 기존 주차장은 좌표가 있으니 다시 확인하지 않아도 "확인됨"으로 시작한다.
+    expect(find.text('✓ 좌표 확인됨'), findsOneWidget);
   });
 }

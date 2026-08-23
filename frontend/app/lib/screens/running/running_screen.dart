@@ -232,6 +232,21 @@ class _RunningScreenState extends State<RunningScreen> {
     await _loadCourses();
   }
 
+  /// 코스 수정(관리자 전용). 등록 화면을 수정 모드로 열고, 저장하고 돌아오면
+  /// 목록을 새로고침한다 — 열려 있던 프리뷰가 있으면 갱신된 값으로 바꿔 끼운다.
+  Future<void> _editCourse(RunningCourse course) async {
+    final updated = await Navigator.of(context).push<RunningCourse>(
+      MaterialPageRoute(builder: (_) => GpxUploadScreen(existing: course)),
+    );
+    if (!mounted) return;
+
+    await _loadCourses();
+
+    if (updated != null && _selected?.id == updated.id) {
+      setState(() => _selected = updated);
+    }
+  }
+
   void _showComingSoon(String label) => _showMessage('$label 기능은 준비 중이에요.');
 
   void _showMessage(String message) => _messenger.show(context, message);
@@ -307,6 +322,7 @@ class _RunningScreenState extends State<RunningScreen> {
               onSelect: _selectCourse,
               onClose: () => setState(() => _isExploring = false),
               onRetry: _loadCourses,
+              onEdit: _editCourse,
             )
           else if (selected == null)
             Align(
@@ -323,6 +339,7 @@ class _RunningScreenState extends State<RunningScreen> {
               onClose: _clearSelection,
               onRetryDetail: () => _selectCourse(selected),
               onStart: () => _startRun(course: _selectedDetail),
+              onEdit: () => _editCourse(_selectedDetail ?? selected),
             ),
         ],
       ),

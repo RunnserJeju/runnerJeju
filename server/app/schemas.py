@@ -154,6 +154,23 @@ class CourseSummary(CourseListItem):
     path: list[GeoPointSchema]
 
 
+class CourseUpdate(BaseModel):
+    """코스 수정(PATCH /courses/{id}) 요청. **메타데이터만** 바꾼다.
+
+    경로(path)는 여기 없다 — GPX로 정해지고, 이미 그 코스를 달린 사람의 검증·진행률
+    기준이라 수정 대상에서 뺐다. 등록 화면과 같은 필드를 쓰므로 값 규칙도 같다.
+    """
+
+    name: str = Field(min_length=1)
+    distance_km: int = Field(ge=1)
+    difficulty: Difficulty
+    address: str = Field(min_length=1)
+    tags: str | None = None
+    description: str | None = None
+    parkings: list[Facility] = Field(default_factory=list)
+    restrooms: list[Facility] = Field(default_factory=list)
+
+
 # --- 지오코딩 ------------------------------------------------------------
 
 

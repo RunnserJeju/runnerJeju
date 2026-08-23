@@ -14,8 +14,15 @@ import 'course_detail_screen.dart';
 /// 주차장/화장실은 코스당 여러 개일 수 있어 동적 목록으로 입력받는다. 각 주소는
 /// "확인"(GET /geo/geocode)으로 좌표를 확보해야 등록된다 — 좌표 없는 시설은
 /// 지도에 마커로 찍을 수 없기 때문이다.
+///
+/// [existing]을 주면 **수정 모드**가 된다 — 필드를 그 코스 값으로 채우고, 경로는
+/// 바꿀 수 없으므로(이미 달린 사람의 검증 기준) GPX 파일 칸을 숨긴다. 제출하면
+/// 업로드 대신 PATCH로 메타데이터만 수정하고, 수정된 코스를 pop으로 돌려준다.
 class GpxUploadScreen extends StatefulWidget {
-  const GpxUploadScreen({super.key});
+  const GpxUploadScreen({super.key, this.existing});
+
+  /// 수정할 코스. null이면 신규 등록.
+  final RunningCourse? existing;
 
   @override
   State<GpxUploadScreen> createState() => _GpxUploadScreenState();
@@ -36,12 +43,41 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
   PlatformFile? _pickedFile;
   bool _submitting = false;
 
+  bool get _isEdit => widget.existing != null;
+
   @override
   void initState() {
     super.initState();
-    // 빈 줄 하나씩 미리 둔다 — 대부분 코스가 주차장/화장실을 하나는 갖는다.
-    _parkingRows.add(_FacilityRow());
-    _restroomRows.add(_FacilityRow());
+
+    final existing = widget.existing;
+    if (existing != null) {
+      _nameController.text = existing.name;
+      _distanceController.text = existing.distanceKm.toString();
+      _addressController.text = existing.address;
+      _tagsController.text = existing.tags ?? '';
+      _descriptionController.text = existing.description ?? '';
+      _difficulty = existing.difficulty;
+      _parkingRows.addAll(_rowsFrom(existing.parkings));
+      _restroomRows.addAll(_rowsFrom(existing.restrooms));
+    } else {
+      // 빈 줄 하나씩 미리 둔다 — 대부분 코스가 주차장/화장실을 하나는 갖는다.
+      _parkingRows.add(_FacilityRow());
+      _restroomRows.add(_FacilityRow());
+    }
+  }
+
+  /// 기존 시설 목록을 입력 행으로 바꾼다. 좌표가 이미 있으니 "확인됨" 상태로 시작해
+  /// 다시 확인하지 않아도 저장된다. 비어 있으면 빈 줄 하나를 둔다.
+  List<_FacilityRow> _rowsFrom(List<CourseFacility> facilities) {
+    if (facilities.isEmpty) return [_FacilityRow()];
+    return [
+      for (final facility in facilities)
+        (_FacilityRow()
+          ..nameController.text = facility.name ?? ''
+          ..addressController.text = facility.address
+          ..confirmed = facility
+          ..status = _CheckStatus.confirmed),
+    ];
   }
 
   @override
@@ -133,15 +169,16 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    // 등록일 때만 GPX 파일이 필요하다. 수정은 경로를 바꾸지 않는다.
     final file = _pickedFile;
-    if (file == null) {
+    if (!_isEdit && file == null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('GPX 파일을 선택해 주세요.')));
       return;
     }
 
-    // 좌표 미확인 시설이 있으면 여기서 막는다(업로드 전에).
+    // 좌표 미확인 시설이 있으면 여기서 막는다(제출 전에).
     final List<CourseFacility> parkings;
     final List<CourseFacility> restrooms;
     try {
@@ -157,27 +194,42 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
     setState(() => _submitting = true);
 
     try {
-      final bytes = await file.readAsBytes();
-      final course = await Services.instance.course.uploadGpxFile(
-        bytes: bytes,
-        filename: file.name,
-        name: _nameController.text.trim(),
-        distanceKm: int.parse(_distanceController.text.trim()),
-        difficulty: _difficulty,
-        address: _addressController.text.trim(),
-        tags: _optional(_tagsController),
-        parkings: parkings,
-        restrooms: restrooms,
-        description: _optional(_descriptionController),
-      );
-
-      if (!mounted) return;
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => CourseDetailScreen(courseId: course.id),
-        ),
-      );
+      if (_isEdit) {
+        final course = await Services.instance.course.updateCourse(
+          courseId: widget.existing!.id,
+          name: _nameController.text.trim(),
+          distanceKm: int.parse(_distanceController.text.trim()),
+          difficulty: _difficulty,
+          address: _addressController.text.trim(),
+          tags: _optional(_tagsController),
+          parkings: parkings,
+          restrooms: restrooms,
+          description: _optional(_descriptionController),
+        );
+        if (!mounted) return;
+        // 수정한 코스를 호출한 화면에 돌려준다(지도/목록이 갱신하도록).
+        Navigator.of(context).pop(course);
+      } else {
+        final bytes = await file!.readAsBytes();
+        final course = await Services.instance.course.uploadGpxFile(
+          bytes: bytes,
+          filename: file.name,
+          name: _nameController.text.trim(),
+          distanceKm: int.parse(_distanceController.text.trim()),
+          difficulty: _difficulty,
+          address: _addressController.text.trim(),
+          tags: _optional(_tagsController),
+          parkings: parkings,
+          restrooms: restrooms,
+          description: _optional(_descriptionController),
+        );
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => CourseDetailScreen(courseId: course.id),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -194,7 +246,7 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      appBar: AppBar(title: const Text('GPX로 코스 등록')),
+      appBar: AppBar(title: Text(_isEdit ? '코스 수정' : 'GPX로 코스 등록')),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -293,6 +345,8 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
               onSelectionChanged: (selection) =>
                   setState(() => _difficulty = selection.first),
             ),
+            // 수정 모드에선 경로(GPX)를 바꾸지 않으므로 파일 칸을 숨긴다.
+            if (!_isEdit) ...[
             const SizedBox(height: 20),
             const Text(
               'GPX 파일',
@@ -350,10 +404,15 @@ class _GpxUploadScreenState extends State<GpxUploadScreen> {
                 ),
               ),
             ),
+            ],
             const SizedBox(height: 28),
             FilledButton(
               onPressed: _submitting ? null : _submit,
-              child: Text(_submitting ? '등록 중...' : '코스 등록하기'),
+              child: Text(
+                _submitting
+                    ? (_isEdit ? '저장 중...' : '등록 중...')
+                    : (_isEdit ? '수정 완료' : '코스 등록하기'),
+              ),
             ),
           ],
         ),

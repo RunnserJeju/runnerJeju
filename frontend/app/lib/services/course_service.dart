@@ -59,4 +59,33 @@ class CourseService {
       throw AppException('GPX 업로드에 실패했어요.', e);
     }
   }
+
+  /// 코스 메타데이터를 수정한다 (관리자용). 경로는 그대로 두고 정보만 바꾼다.
+  Future<RunningCourse> updateCourse({
+    required String courseId,
+    required String name,
+    required int distanceKm,
+    required CourseDifficulty difficulty,
+    required String address,
+    String? tags,
+    List<CourseFacility> parkings = const [],
+    List<CourseFacility> restrooms = const [],
+    String? description,
+  }) async {
+    try {
+      return await _courseApi.updateCourse(
+        courseId: courseId,
+        name: name,
+        distanceKm: distanceKm,
+        difficulty: difficulty,
+        address: address,
+        tags: tags,
+        parkings: parkings,
+        restrooms: restrooms,
+        description: description,
+      );
+    } catch (e) {
+      throw AppException('코스 수정에 실패했어요.', e);
+    }
+  }
 }

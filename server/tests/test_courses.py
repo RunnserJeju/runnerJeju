@@ -14,12 +14,13 @@ import uuid
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app import geocoding
 from app.models import Course
 from app.routers import courses as courses_router
-from app.schemas import Facility
+from app.schemas import CourseUpdate, Facility
 from tools import push_courses
 
 SAGYE = Path(__file__).resolve().parent.parent / "courses" / "sagye-coastal.gpx"
@@ -146,6 +147,130 @@ class TestFacilitySchema:
 
         assert facility.name is None
         assert (facility.lat, facility.lng) == (33.5, 126.5)
+
+
+class _EmptyResult:
+    """완주자 수/내 완주 조회가 비어 있는 것으로 흉내낸다(수정 로직만 볼 것이므로)."""
+
+    def all(self):
+        return []
+
+    def scalars(self):
+        return []
+
+
+class UpdateFakeSession:
+    def __init__(self, course: Course | None):
+        self._course = course
+        self.committed = False
+
+    def get(self, _model, course_id):
+        if self._course is not None and self._course.id == course_id:
+            return self._course
+        return None
+
+    def execute(self, _stmt):
+        return _EmptyResult()
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, _obj):
+        pass
+
+
+def _course(**overrides) -> Course:
+    fields = dict(
+        id=uuid.uuid4(),
+        name="옛 이름",
+        distance_km=6,
+        difficulty=2,
+        address="옛 주소",
+        tags="옛,태그",
+        description="옛 설명",
+        path=[{"lat": 33.5, "lng": 126.5}, {"lat": 33.6, "lng": 126.6}],
+        parkings=[],
+        restrooms=[],
+    )
+    fields.update(overrides)
+    return Course(**fields)
+
+
+class TestUpdateCourse:
+    def _payload(self, **overrides) -> CourseUpdate:
+        fields = dict(
+            name="새 이름",
+            distance_km=9,
+            difficulty=3,
+            address="새 주소",
+            tags="새,태그",
+            description="새 설명",
+            parkings=[PARKING],
+            restrooms=[],
+        )
+        fields.update(overrides)
+        return CourseUpdate(**fields)
+
+    def test_updates_metadata_fields(self):
+        course = _course()
+        db = UpdateFakeSession(course)
+
+        result = courses_router.update_course(course.id, self._payload(), db, "admin")
+
+        assert course.name == "새 이름"
+        assert course.distance_km == 9
+        assert course.difficulty == 3
+        assert course.address == "새 주소"
+        assert course.tags == "새,태그"
+        assert course.description == "새 설명"
+        assert db.committed is True
+        # 응답에도 반영된다.
+        assert result["name"] == "새 이름"
+
+    def test_replaces_facilities(self):
+        course = _course(parkings=[{"name": "옛주차장", "address": "옛", "lat": 1, "lng": 2}])
+        db = UpdateFakeSession(course)
+
+        courses_router.update_course(
+            course.id, self._payload(parkings=[PARKING], restrooms=[RESTROOM]), db, "admin"
+        )
+
+        assert course.parkings == [PARKING]
+        assert course.restrooms == [RESTROOM]
+
+    def test_does_not_touch_path(self):
+        course = _course()
+        original_path = list(course.path)
+        db = UpdateFakeSession(course)
+
+        courses_router.update_course(course.id, self._payload(), db, "admin")
+
+        assert course.path == original_path
+
+    def test_404_when_course_missing(self):
+        db = UpdateFakeSession(None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            courses_router.update_course(uuid.uuid4(), self._payload(), db, "admin")
+
+        assert exc_info.value.status_code == 404
+        assert db.committed is False
+
+
+class TestCourseUpdateSchema:
+    def test_rejects_zero_distance(self):
+        with pytest.raises(ValidationError):
+            CourseUpdate(name="x", distance_km=0, difficulty=2, address="제주")
+
+    def test_rejects_out_of_range_difficulty(self):
+        with pytest.raises(ValidationError):
+            CourseUpdate(name="x", distance_km=5, difficulty=4, address="제주")
+
+    def test_facilities_default_to_empty(self):
+        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, address="제주")
+
+        assert payload.parkings == []
+        assert payload.restrooms == []
 
 
 class TestPushCoursesResolveFacilities:

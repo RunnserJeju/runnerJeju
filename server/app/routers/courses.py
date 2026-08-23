@@ -9,7 +9,13 @@ from app import gpx
 from app.db import get_db
 from app.deps import current_user_id, require_admin
 from app.models import Course, Stamp
-from app.schemas import CourseListItem, CourseSummary, Difficulty, Facility
+from app.schemas import (
+    CourseListItem,
+    CourseSummary,
+    CourseUpdate,
+    Difficulty,
+    Facility,
+)
 
 router = APIRouter(tags=["courses"])
 
@@ -108,6 +114,40 @@ def get_course(
     course = db.get(Course, course_id)
     if course is None:
         raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+
+    counts = _completed_counts(db, [course.id])
+    mine = _my_completed_course_ids(db, user_id, [course.id])
+
+    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
+
+
+@router.patch("/courses/{course_id}", response_model=CourseSummary)
+def update_course(
+    course_id: uuid.UUID,
+    payload: CourseUpdate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(require_admin),
+):
+    """코스의 메타데이터를 수정한다. **관리자 전용.**
+
+    경로(path)·완주 기록·작성자는 건드리지 않는다. 주차장/화장실은 좌표까지
+    포함한 목록으로 통째로 교체한다(등록과 같은 규칙 — 좌표는 "확인"으로 채운다).
+    """
+    course = db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+
+    course.name = payload.name
+    course.distance_km = payload.distance_km
+    course.difficulty = payload.difficulty
+    course.address = payload.address
+    course.tags = payload.tags
+    course.description = payload.description
+    course.parkings = [facility.model_dump() for facility in payload.parkings]
+    course.restrooms = [facility.model_dump() for facility in payload.restrooms]
+
+    db.commit()
+    db.refresh(course)
 
     counts = _completed_counts(db, [course.id])
     mine = _my_completed_course_ids(db, user_id, [course.id])

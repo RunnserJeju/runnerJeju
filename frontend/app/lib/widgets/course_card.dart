@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../models/running_course.dart';
 import '../theme/app_theme.dart';
+import 'admin_only.dart';
 
 /// 코스 목록/홈에서 쓰는 코스 요약 카드.
 class CourseCard extends StatelessWidget {
-  const CourseCard({super.key, required this.course, this.onTap});
+  const CourseCard({super.key, required this.course, this.onTap, this.onEdit});
 
   final RunningCourse course;
   final VoidCallback? onTap;
+
+  /// 주면 카드 헤더에 관리자 전용 수정 버튼이 붙는다(AdminOnly로 게이팅).
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +44,17 @@ class CourseCard extends StatelessWidget {
                       Icons.verified_rounded,
                       size: 20,
                       color: AppColors.success,
+                    ),
+                  if (onEdit != null)
+                    AdminOnly(
+                      child: IconButton(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit_rounded, size: 18),
+                        tooltip: '코스 수정',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
                     ),
                 ],
               ),
