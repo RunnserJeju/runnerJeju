@@ -169,16 +169,11 @@ class RunTracker extends ChangeNotifier {
   }
 
   void _subscribeToPositions(LocationService location) {
-    _positionSubscription?.cancel();
+    _positionSubscription?.cancel(); //재구독 방어 
     _positionSubscription = location.trackPosition().listen(
       _onPosition,
-      // 에러를 받지 않으면 스트림이 조용히 끊긴다. 그러면 상태는 running인 채로
-      // 시계만 계속 돌고 거리·경로는 영영 멈춘 상태가 되는데, 화면에는 아무
-      // 신호도 없어서 달리는 사람은 기록되고 있다고 믿는다.
-      onError: (Object error) =>
-          _handlePositionLost(location.interruptionFrom(error)),
-      // 스트림이 정상 종료되는 경우도 결과는 같다(우리가 취소한 경우에는 불리지
-      // 않으므로 종료·초기화와 부딪히지 않는다).
+      // 에러를 받지 않으면 스트림이 끊긴 채로 앱이 진행되기 때문에 사용자가 에러가 난 줄도 모른다.  
+      onError: (Object error) => _handlePositionLost(location.interruptionFrom(error)),
       onDone: () => _handlePositionLost(LocationInterruption.lost),
     );
   }
@@ -292,12 +287,9 @@ class RunTracker extends ChangeNotifier {
 
     final anchor = _commitAnchor;
     if (anchor == null) {
-      // 러닝 시작 직후, 또는 일시정지에서 막 돌아온 첫 점. 기준점만 잡는다.
-      //
-      // 재개한 경우라면 직전 점과 이 점 사이가 "일시정지 동안 이동한 구간"이다.
-      // 그 구간은 거리에 넣지 않는데(그게 일시정지의 뜻이다), 예전에는 표시 없이
-      // 경로에만 넣어서 서버가 경로를 다시 잴 때 그 구간까지 달린 것으로 셌다.
-      // 앱은 2km, 서버는 5km로 보는 식이었다. 끊긴 자리를 점에 적어 함께 올린다.
+      // 러닝 시작 후, 또는 일시정지 해제 후 첫 point인 경우  
+      // 재개한 경우라면 직전 점과 이 점 사이가 "일시정지 동안 이동한 구간"이다.  
+      // 그 구간은 거리에 넣지 않는다.  
       final committed = _path.isEmpty ? point : point.asSegmentStart();
       _commitAnchor = point;
       _path.add(committed);

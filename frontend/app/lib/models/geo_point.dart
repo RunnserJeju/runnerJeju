@@ -6,6 +6,8 @@ class GeoPoint {
     this.altitude,
     this.recordedAt,
     this.startsNewSegment = false,
+    this.accuracy,
+    this.speed,
   });
 
   final double latitude;
@@ -27,12 +29,20 @@ class GeoPoint {
   /// 러닝 경로에서만 의미가 있다. 코스 경로는 끊기는 자리가 없다.
   final bool startsNewSegment;
 
+  // 오차범위 
+  final double? accuracy;
+
+  // 이동 속도(m/s). GPS가 직접 내주는 값이라 좌표 차이로 계산한 것보다 안정적이다.
+  final double? speed;
+
   /// 같은 좌표에 [startsNewSegment] 표시만 붙인 사본.
   GeoPoint asSegmentStart() => GeoPoint(
     latitude: latitude,
     longitude: longitude,
     altitude: altitude,
     recordedAt: recordedAt,
+    accuracy: accuracy,
+    speed: speed,
     startsNewSegment: true,
   );
 
