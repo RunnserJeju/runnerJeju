@@ -197,6 +197,7 @@ class _RunScreenState extends State<RunScreen> {
                 currentPosition: tracker.currentPosition,
                 initialCenter: _initialCenter,
                 followCurrentPosition: tracker.status == RunStatus.running,
+                showCourseDirection: isActive,
               ),
             ),
             SafeArea(

@@ -11,6 +11,7 @@ import '../models/geo_point.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
 import '../utils/run_path_interpolator.dart';
+import 'course_direction_arrow.dart';
 import 'facility_marker.dart';
 import 'map_status_views.dart';
 
@@ -28,6 +29,7 @@ class RunMapView extends StatefulWidget {
     this.currentPosition,
     this.initialCenter,
     this.followCurrentPosition = false,
+    this.showCourseDirection = false,
   });
 
   /// 따라 달릴 코스 경로. 강조색 실선으로 그린다.
@@ -52,6 +54,10 @@ class RunMapView extends StatefulWidget {
 
   /// true면 현재 위치를 따라 지도 중심을 이동한다.
   final bool followCurrentPosition;
+
+  /// true면 코스 선에 진행방향 화살표를 얹는다. 달리는 중에만 필요한 안내라
+  /// 시작 전에는 코스 모양만 깔끔하게 보여준다.
+  final bool showCourseDirection;
 
   /// 위치를 아직 모를 때 쓰는 기본 중심(제주시청).
   static const GeoPoint defaultCenter = GeoPoint(
@@ -94,6 +100,11 @@ class _RunMapViewState extends State<RunMapView>
 
   /// 지도에 실제로 올라가 있는 코스. 같은 점이 다시 들어오면 플랫폼 호출을 건너뛴다.
   List<GeoPoint>? _drawnCoursePath;
+
+  /// 지금 그려져 있는 코스에 화살표가 얹혀 있는지. 러닝 시작/종료에 따라 바뀐다.
+  bool? _drawnCourseDirection;
+  kakao.RouteStyle? _plainCourseStyle;
+  kakao.RouteStyle? _arrowCourseStyle;
 
   /// 코스 시설(주차장/화장실) 배지. 정적이라 한 번만 그리고 그대로 둔다.
   final List<kakao.Poi> _facilityMarkers = [];
@@ -179,7 +190,15 @@ class _RunMapViewState extends State<RunMapView>
   static const int _runningZoomLevel = 18;
 
   /// 현재 위치 마커의 화면 크기(dp). 지도 배율과 무관하게 일정하다.
-  static const int _currentPositionMarkerSize = 12;
+  static const int _currentPositionMarkerSize = 14;
+
+  /// 선 굵기(dp). 코스를 조금 더 굵게 둬서, 달린 경로가 위에 얹혀도 양옆으로
+  /// 코스가 비어져 나온다 — 코스를 벗어났는지 달리면서 바로 보인다.
+  static const double _courseLineWidth = 10;
+  static const double _runLineWidth = 9;
+
+  /// 코스 진행방향 화살표를 찍는 간격(px). 화면 기준이라 배율과 무관하다.
+  static const double _arrowSpacing = 40;
 
   /// 지도 갱신 주기(≈30Hz).
   ///
@@ -190,11 +209,10 @@ class _RunMapViewState extends State<RunMapView>
   /// 경로 전체를 화면에 맞출 때 가장자리에 두는 여백(px).
   static const int _fitPadding = 48;
 
-  late final kakao.RouteStyle _courseStyle = kakao.RouteStyle(
-    AppColors.accent,
-    6,
+  late final kakao.RouteStyle _runStyle = kakao.RouteStyle(
+    AppColors.ink,
+    _runLineWidth,
   );
-  late final kakao.RouteStyle _runStyle = kakao.RouteStyle(AppColors.ink, 7);
   late final kakao.PoiStyle _currentPositionStyle = kakao.PoiStyle(
     // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
     anchor: const kakao.KPoint(0.5, 0.5),
@@ -224,6 +242,7 @@ class _RunMapViewState extends State<RunMapView>
 
   bool _hasMapInputChanged(RunMapView old) =>
       old.followCurrentPosition != widget.followCurrentPosition ||
+      old.showCourseDirection != widget.showCourseDirection ||
       !identical(_lastSample, widget.currentPosition) ||
       !identical(old.initialCenter, widget.initialCenter) ||
       !_isSamePath(old.coursePath, widget.coursePath) ||
@@ -522,18 +541,48 @@ class _RunMapViewState extends State<RunMapView>
     // 코스는 러닝 내내 바뀌지 않는다. 매 갱신마다 전체 점을 다시 보내면
     // 코스가 길수록 그대로 낭비다.
     final points = widget.coursePath;
-    if (_drawnCoursePath != null && _isSamePath(_drawnCoursePath!, points)) {
+    final withArrows = widget.showCourseDirection;
+    if (_drawnCoursePath != null &&
+        _isSamePath(_drawnCoursePath!, points) &&
+        _drawnCourseDirection == withArrows) {
       return;
     }
+
+    final style = await _ensureCourseStyle(withArrows);
+    if (style == null || _disposed) return;
 
     _courseRoute = await _syncRoute(
       controller,
       existing: _courseRoute,
       points: points,
-      style: _courseStyle,
+      style: style,
       zOrder: _courseZOrder,
     );
     _drawnCoursePath = points;
+    _drawnCourseDirection = withArrows;
+  }
+
+  /// 코스 선 스타일. 화살표 유무로 둘을 따로 만들어 두고 갈아 끼운다.
+  ///
+  /// 하나를 고쳐 쓰지 않는 이유: 스타일은 지도에 처음 쓰일 때 한 번만 네이티브에
+  /// 등록되고, 같은 id로 다시 등록하면 iOS·안드로이드 모두 건너뛴다 — 나중에
+  /// pattern 필드를 고쳐 봐야 화면에 반영되지 않는다.
+  Future<kakao.RouteStyle?> _ensureCourseStyle(bool withArrows) async {
+    if (!withArrows) {
+      return _plainCourseStyle ??= kakao.RouteStyle(
+        AppColors.accent,
+        _courseLineWidth,
+      );
+    }
+
+    if (_arrowCourseStyle != null) return _arrowCourseStyle;
+    final arrow = await buildCourseDirectionArrow();
+    if (_disposed) return null;
+    return _arrowCourseStyle = kakao.RouteStyle(
+      AppColors.accent,
+      _courseLineWidth,
+      pattern: kakao.RoutePattern(arrow, _arrowSpacing),
+    );
   }
 
   /// 코스 주차장(파란 'P')·화장실(초록 'WC') 배지를 좌표에 찍는다. 러닝 중 안
@@ -677,6 +726,9 @@ class _RunMapViewState extends State<RunMapView>
       return controller.routeLayer.addRoute(latLngs, style, zOrder: zOrder);
     }
 
+    // changePoint는 선에 저장된 스타일을 그대로 다시 보낸다. 스타일이 바뀌었으면
+    // 따로 갈아 끼워야 한다.
+    if (!identical(existing.style, style)) await existing.changeStyle(style);
     await existing.changePoint(latLngs);
     return existing;
   }
