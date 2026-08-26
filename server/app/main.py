@@ -47,7 +47,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(banners.router)
 app.include_router(courses.router)
-app.include_router(geo.router)
+app.include_router(favorites.router)
 app.include_router(runs.router)
 app.include_router(verifications.router)
 app.include_router(stamps.router)
