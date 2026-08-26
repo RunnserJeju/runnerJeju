@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app import geocoding
+from app.admin import courses as admin_courses_router
 from app.models import Course
 from app.routers import courses as courses_router
 from app.schemas import CourseUpdate, Facility
@@ -215,7 +216,7 @@ class TestUpdateCourse:
         course = _course()
         db = UpdateFakeSession(course)
 
-        result = courses_router.update_course(course.id, self._payload(), db, "admin")
+        result = admin_courses_router.update_course(course.id, self._payload(), db, "admin")
 
         assert course.name == "새 이름"
         assert course.distance_km == 9
@@ -231,7 +232,7 @@ class TestUpdateCourse:
         course = _course(parkings=[{"name": "옛주차장", "address": "옛", "lat": 1, "lng": 2}])
         db = UpdateFakeSession(course)
 
-        courses_router.update_course(
+        admin_courses_router.update_course(
             course.id, self._payload(parkings=[PARKING], restrooms=[RESTROOM]), db, "admin"
         )
 
@@ -243,7 +244,7 @@ class TestUpdateCourse:
         original_path = list(course.path)
         db = UpdateFakeSession(course)
 
-        courses_router.update_course(course.id, self._payload(), db, "admin")
+        admin_courses_router.update_course(course.id, self._payload(), db, "admin")
 
         assert course.path == original_path
 
@@ -251,7 +252,7 @@ class TestUpdateCourse:
         db = UpdateFakeSession(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            courses_router.update_course(uuid.uuid4(), self._payload(), db, "admin")
+            admin_courses_router.update_course(uuid.uuid4(), self._payload(), db, "admin")
 
         assert exc_info.value.status_code == 404
         assert db.committed is False

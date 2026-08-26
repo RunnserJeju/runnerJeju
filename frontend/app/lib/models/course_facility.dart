@@ -1,5 +1,5 @@
 /// 코스 근처 편의시설 한 곳(주차장 또는 화장실). 서버 `Facility`(schemas.py)와
-/// 1:1이다 — 좌표는 등록 시점에 주소를 변환(GET /geo/geocode)해 채운 값이라
+/// 1:1이다 — 좌표는 등록 시점에 주소를 변환(GET /admin/geo/geocode)해 채운 값이라
 /// 지도에 그대로 마커로 찍을 수 있다.
 class CourseFacility {
   const CourseFacility({

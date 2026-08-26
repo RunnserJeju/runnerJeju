@@ -1,6 +1,6 @@
 import '../network/api_client.dart';
 
-/// 주소 좌표 변환 결과 후보 하나(GET /geo/geocode 응답의 results 원소).
+/// 주소 좌표 변환 결과 후보 하나(GET /admin/geo/geocode 응답의 results 원소).
 class GeoCandidate {
   const GeoCandidate({
     required this.address,
@@ -35,7 +35,7 @@ class GeoApi {
   /// (서버가 200 + results:[]로 내려준다). 호출 자체가 실패하면(502 등) throw.
   Future<List<GeoCandidate>> geocode(String address) async {
     final response = await _client.dio.get(
-      '/geo/geocode',
+      '/admin/geo/geocode',
       queryParameters: {'address': address},
     );
 

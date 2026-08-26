@@ -16,6 +16,7 @@ import pytest
 from fastapi import HTTPException
 
 from app import storage
+from app.admin import banners as admin_banners_router
 from app.models import Banner
 from app.routers import banners as banners_router
 
@@ -93,7 +94,7 @@ class TestCreateBanner:
         db = FakeSession()
         file = FakeUploadFile(b"fake-image-bytes", content_type="image/png")
 
-        result = banners_router.create_banner(
+        result = admin_banners_router.create_banner(
             file=file, sort_order=2, db=db, user_id=str(uuid.uuid4())
         )
 
@@ -106,7 +107,7 @@ class TestCreateBanner:
         file = FakeUploadFile(b"not-an-image", content_type="text/plain")
 
         with pytest.raises(HTTPException) as exc_info:
-            banners_router.create_banner(
+            admin_banners_router.create_banner(
                 file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
             )
 
@@ -117,7 +118,7 @@ class TestCreateBanner:
         file = FakeUploadFile(b"", content_type="image/jpeg")
 
         with pytest.raises(HTTPException) as exc_info:
-            banners_router.create_banner(
+            admin_banners_router.create_banner(
                 file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
             )
 
@@ -125,11 +126,11 @@ class TestCreateBanner:
 
     def test_rejects_oversized_file(self):
         db = FakeSession()
-        oversized = b"x" * (banners_router.MAX_BANNER_IMAGE_BYTES + 1)
+        oversized = b"x" * (admin_banners_router.MAX_BANNER_IMAGE_BYTES + 1)
         file = FakeUploadFile(oversized, content_type="image/jpeg")
 
         with pytest.raises(HTTPException) as exc_info:
-            banners_router.create_banner(
+            admin_banners_router.create_banner(
                 file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
             )
 
@@ -144,7 +145,7 @@ class TestCreateBanner:
         file = FakeUploadFile(b"fake-image-bytes", content_type="image/jpeg")
 
         with pytest.raises(HTTPException) as exc_info:
-            banners_router.create_banner(
+            admin_banners_router.create_banner(
                 file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
             )
 
@@ -159,9 +160,7 @@ class TestDeleteBanner:
         banner = Banner(id=uuid.uuid4(), image_url="https://cdn/x.jpg", sort_order=0)
         db = FakeSession(banners=[banner])
 
-        banners_router.delete_banner(
-            banner_id=banner.id, db=db, user_id=str(uuid.uuid4())
-        )
+        admin_banners_router.delete_banner(banner_id=banner.id, db=db)
 
         assert banner in db.deleted
         assert deleted_urls == ["https://cdn/x.jpg"]
@@ -170,8 +169,6 @@ class TestDeleteBanner:
         db = FakeSession()
 
         with pytest.raises(HTTPException) as exc_info:
-            banners_router.delete_banner(
-                banner_id=uuid.uuid4(), db=db, user_id=str(uuid.uuid4())
-            )
+            admin_banners_router.delete_banner(banner_id=uuid.uuid4(), db=db)
 
         assert exc_info.value.status_code == 404

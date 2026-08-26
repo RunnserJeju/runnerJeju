@@ -8,6 +8,7 @@ TestRequireAdmin에서 따로 검증한다.
 
 import uuid
 
+from app.admin import notices as admin_notices_router
 from app.models import Notice
 from app.routers import notices as notices_router
 from app.schemas import NoticeCreate
@@ -67,7 +68,7 @@ class TestCreateNotice:
         db = FakeSession()
         payload = NoticeCreate(title="새 공지", body="공지 내용입니다")
 
-        result = notices_router.create_notice(payload, db, user_id=str(uuid.uuid4()))
+        result = admin_notices_router.create_notice(payload, db)
 
         assert result.title == "새 공지"
         assert result.body == "공지 내용입니다"
@@ -78,7 +79,7 @@ class TestCreateNotice:
         db = FakeSession()
         payload = NoticeCreate(title="공지", body="내용")
 
-        notices_router.create_notice(payload, db, user_id=str(uuid.uuid4()))
+        admin_notices_router.create_notice(payload, db)
         result = notices_router.list_notices(db, user_id=str(uuid.uuid4()))
 
         assert len(result) == 1

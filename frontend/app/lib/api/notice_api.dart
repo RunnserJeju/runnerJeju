@@ -17,7 +17,7 @@ class NoticeApi {
 
   Future<Notice> createNotice({required String title, required String body}) async {
     final response = await _client.dio.post(
-      '/notices',
+      '/admin/notices',
       data: {'title': title, 'body': body},
     );
     return Notice.fromJson(response.data as Map<String, dynamic>);

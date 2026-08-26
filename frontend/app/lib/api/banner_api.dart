@@ -27,7 +27,7 @@ class BannerApi {
     });
 
     final response = await _client.dio.post(
-      '/banners',
+      '/admin/banners',
       data: formData,
       options: Options(sendTimeout: const Duration(seconds: 30)),
     );
@@ -37,6 +37,6 @@ class BannerApi {
 
   /// **관리자 전용**(서버가 require_admin으로 막는다).
   Future<void> deleteBanner(String id) async {
-    await _client.dio.delete('/banners/$id');
+    await _client.dio.delete('/admin/banners/$id');
   }
 }

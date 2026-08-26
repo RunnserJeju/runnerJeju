@@ -5,13 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app import config_guard, schema_guard
+from app.admin import admin_router
 from app.db import engine
 from app.routers import (
     auth,
     banners,
     courses,
     favorites,
-    geo,
     notices,
     runs,
     stamps,
@@ -47,12 +47,14 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(banners.router)
 app.include_router(courses.router)
-app.include_router(favorites.router)
 app.include_router(geo.router)
 app.include_router(runs.router)
 app.include_router(verifications.router)
 app.include_router(stamps.router)
 app.include_router(notices.router)
+
+# 운영자 전용 — /admin/* 아래, 라우터 레벨에서 require_admin으로 보호(app/admin/__init__.py)
+app.include_router(admin_router)
 
 
 @app.get("/ping")

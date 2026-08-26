@@ -62,7 +62,7 @@ class CourseApi {
     });
 
     final response = await _client.dio.post(
-      '/courses/gpx',
+      '/admin/courses/gpx',
       data: formData,
       options: Options(sendTimeout: const Duration(seconds: 30)),
     );
@@ -84,7 +84,7 @@ class CourseApi {
     String? description,
   }) async {
     final response = await _client.dio.patch(
-      '/courses/$courseId',
+      '/admin/courses/$courseId',
       data: {
         'name': name,
         'distance_km': distanceKm,

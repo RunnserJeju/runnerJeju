@@ -3,9 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import current_user_id, require_admin
+from app.deps import current_user_id
 from app.models import Notice
-from app.schemas import NoticeCreate, NoticeOut
+from app.schemas import NoticeOut
 
 router = APIRouter(tags=["notices"])
 
@@ -18,18 +18,3 @@ def list_notices(
     return list(
         db.execute(select(Notice).order_by(Notice.created_at.desc())).scalars()
     )
-
-
-@router.post("/notices", response_model=NoticeOut, status_code=201)
-def create_notice(
-    payload: NoticeCreate,
-    db: Session = Depends(get_db),
-    user_id: str = Depends(require_admin),
-):
-    notice = Notice(title=payload.title, body=payload.body)
-
-    db.add(notice)
-    db.commit()
-    db.refresh(notice)
-
-    return notice
