@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'community/community_screen.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
 import 'running/running_screen.dart';
@@ -23,6 +24,7 @@ class _AppShellState extends State<AppShell> {
 
   static const _tabs = <Widget>[
     HomeScreen(),
+    CommunityScreen(),
     RunningScreen(),
     StampScreen(),
     ProfileScreen(),
@@ -30,6 +32,7 @@ class _AppShellState extends State<AppShell> {
 
   static const _items = <({IconData icon, String label})>[
     (icon: Icons.home_rounded, label: '홈'),
+    (icon: Icons.groups_rounded, label: '커뮤니티'),
     (icon: Icons.map_rounded, label: '러닝'),
     (icon: Icons.workspace_premium_rounded, label: '스탬프'),
     (icon: Icons.person_rounded, label: '마이페이지'),

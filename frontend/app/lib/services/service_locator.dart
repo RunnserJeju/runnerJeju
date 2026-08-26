@@ -1,6 +1,7 @@
 import '../api/auth_api.dart';
 import '../api/banner_api.dart';
 import '../api/course_api.dart';
+import '../api/favorite_api.dart';
 import '../api/geo_api.dart';
 import '../api/notice_api.dart';
 import '../api/run_api.dart';
@@ -11,9 +12,11 @@ import '../network/api_client.dart';
 import 'auth_service.dart';
 import 'banner_service.dart';
 import 'course_service.dart';
+import 'favorite_service.dart';
 import 'geo_service.dart';
 import 'location_service.dart';
 import 'notice_service.dart';
+import 'program_service.dart';
 import 'run_live_widget.dart';
 import 'run_service.dart';
 import 'run_tracker.dart';
@@ -49,6 +52,12 @@ class Services {
 
   late final AuthService auth = AuthService(AuthApi(apiClient), tokenStorage);
   late final CourseService course = CourseService(CourseApi(apiClient));
+
+  /// 코스 찜(서버 저장). 기기를 바꿔도 찜이 유지된다.
+  late final FavoriteService favorite = FavoriteService(FavoriteApi(apiClient));
+
+  /// 러닝 프로그램(커뮤니티/마이페이지). 아직 서버 API가 없어 빈 목록만 준다.
+  late final ProgramService program = const ProgramService();
   late final GeoService geo = GeoService(GeoApi(apiClient));
   late final RunService run = RunService(RunApi(apiClient));
   late final StampService stamp = StampService(StampApi(apiClient));

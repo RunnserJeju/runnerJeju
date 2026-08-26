@@ -47,6 +47,9 @@ class _RunningScreenState extends State<RunningScreen> {
   RunningCourse? _selectedDetail;
   Object? _detailError;
 
+  /// 고른 코스의 찜 여부. 프리뷰 시트의 하트가 이 값을 따른다.
+  bool _selectedIsFavorite = false;
+
   /// 상세 요청의 순번. 코스를 빠르게 옮겨 누르면 먼저 보낸 요청이 나중에 도착할
   /// 수 있어서, 마지막으로 보낸 것 말고는 버린다.
   int _detailRequestId = 0;
@@ -126,12 +129,19 @@ class _RunningScreenState extends State<RunningScreen> {
       _selected = course;
       _selectedDetail = null;
       _detailError = null;
+      _selectedIsFavorite = false;
     });
 
     final start = course.startPoint;
     if (start != null) _mapController.moveTo(start);
 
+    // 찜 여부는 로컬 저장이라 금방 온다. 다른 코스로 옮겨 눌렀으면 버린다.
     final requestId = ++_detailRequestId;
+    Services.instance.favorite.isFavorite(course.id).then((isFavorite) {
+      if (!mounted || requestId != _detailRequestId) return;
+      setState(() => _selectedIsFavorite = isFavorite);
+    });
+
     try {
       final detail = await Services.instance.course.loadCourse(course.id);
       if (!mounted || requestId != _detailRequestId) return;
@@ -140,6 +150,17 @@ class _RunningScreenState extends State<RunningScreen> {
       if (!mounted || requestId != _detailRequestId) return;
       setState(() => _detailError = error);
     }
+  }
+
+  /// 고른 코스의 찜을 토글하고 상태를 갱신한다.
+  Future<void> _toggleSelectedFavorite() async {
+    final course = _selected;
+    if (course == null) return;
+
+    final nowFavorite = await Services.instance.favorite.toggle(course.id);
+    if (!mounted || _selected?.id != course.id) return;
+    setState(() => _selectedIsFavorite = nowFavorite);
+    _showMessage(nowFavorite ? '찜한 코스에 담았어요.' : '찜을 해제했어요.');
   }
 
   /// 지도 바닥을 눌렀을 때. 아래에 떠 있는 것을 모두 걷는다.
@@ -344,6 +365,8 @@ class _RunningScreenState extends State<RunningScreen> {
               course: selected,
               detail: _selectedDetail,
               detailError: _detailError,
+              isFavorite: _selectedIsFavorite,
+              onToggleFavorite: _toggleSelectedFavorite,
               onClose: _clearSelection,
               onRetryDetail: () => _selectCourse(selected),
               onStart: () => _startRun(course: _selectedDetail),

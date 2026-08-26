@@ -220,6 +220,30 @@ class Stamp(Base):
     course: Mapped[Course] = relationship(back_populates="stamps")
 
 
+class Favorite(Base):
+    """사용자가 찜한 코스. (user_id, course_id)로 유일 — 같은 코스를 두 번 찜해도
+    행은 하나다. 서버에 저장하므로 기기를 바꿔도 찜이 유지된다."""
+
+    __tablename__ = "favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "course_id", name="uq_favorite_user_course"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Stamp/Run과 같게 토큰 sub(문자열)를 그대로 담는다.
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("courses.id"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    course: Mapped[Course] = relationship()
+
+
 class Banner(Base):
     """홈 화면 상단 이미지 배너. 관리자가 앱에서 직접 올린다.
 

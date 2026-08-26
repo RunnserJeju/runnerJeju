@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../models/run_record.dart';
+import '../../models/running_course.dart';
+import '../../models/running_program.dart';
 import '../../services/service_locator.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
+import '../../widgets/course_card.dart';
 import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
 import '../connection_test_screen.dart';
+import '../course/course_detail_screen.dart';
 import '../run/run_detail_screen.dart';
 
-/// 프로필: 누적 기록 요약 + 최근 러닝 목록.
+/// 프로필: 최근 한 달 러닝 요약 + 찜한 코스 + 참여한 프로그램.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -18,7 +22,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late Future<List<RunRecord>> _future;
+  late Future<_ProfileData> _future;
 
   @override
   void initState() {
@@ -27,12 +31,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _load() {
-    _future = Services.instance.run.loadMyRecords(limit: 50);
+    _future = _ProfileData.load();
   }
 
   Future<void> _refresh() async {
     setState(_load);
-    await _future.catchError((_) => <RunRecord>[]);
+    await _future.catchError((_) => _ProfileData.empty);
   }
 
   Future<void> _logout() async {
@@ -67,16 +71,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
-        child: FutureBuilder<List<RunRecord>>(
+        child: FutureBuilder<_ProfileData>(
           future: _future,
-          builder: (context, snapshot) => AsyncView<List<RunRecord>>(
+          builder: (context, snapshot) => AsyncView<_ProfileData>(
             snapshot: snapshot,
             onRetry: _refresh,
-            isEmpty: (records) => records.isEmpty,
-            emptyTitle: '아직 러닝 기록이 없어요',
-            emptyMessage: '첫 러닝을 시작해 보세요',
-            emptyIcon: Icons.directions_run_rounded,
-            builder: (context, records) => _ProfileBody(records: records),
+            builder: (context, data) => _ProfileBody(data: data),
           ),
         ),
       ),
@@ -84,18 +84,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class _ProfileBody extends StatelessWidget {
-  const _ProfileBody({required this.records});
+/// 마이페이지가 그리는 세 갈래 데이터. 서로 독립이라 한 번에 받아 둔다.
+class _ProfileData {
+  const _ProfileData({
+    required this.recentRuns,
+    required this.favorites,
+    required this.programs,
+  });
 
-  final List<RunRecord> records;
+  /// 최근 한 달 러닝만. 요약과 목록이 같은 집합을 본다.
+  final List<RunRecord> recentRuns;
+  final List<RunningCourse> favorites;
+  final List<RunningProgram> programs;
+
+  static const empty = _ProfileData(
+    recentRuns: [],
+    favorites: [],
+    programs: [],
+  );
+
+  static Future<_ProfileData> load() async {
+    final results = await Future.wait([
+      Services.instance.run.loadMyRecords(limit: 50),
+      Services.instance.favorite.loadFavoriteCourses(),
+      Services.instance.program.loadMyPrograms(),
+    ]);
+
+    final since = DateTime.now().subtract(const Duration(days: 30));
+    final recentRuns = (results[0] as List<RunRecord>)
+        .where((r) => r.startedAt.isAfter(since))
+        .toList();
+
+    return _ProfileData(
+      recentRuns: recentRuns,
+      favorites: results[1] as List<RunningCourse>,
+      programs: results[2] as List<RunningProgram>,
+    );
+  }
+}
+
+class _ProfileBody extends StatelessWidget {
+  const _ProfileBody({required this.data});
+
+  final _ProfileData data;
 
   @override
   Widget build(BuildContext context) {
-    final totalDistance = records.fold<double>(
+    final runs = data.recentRuns;
+    final totalDistance = runs.fold<double>(
       0,
       (sum, r) => sum + r.distanceMeters,
     );
-    final totalDuration = records.fold<Duration>(
+    final totalDuration = runs.fold<Duration>(
       Duration.zero,
       (sum, r) => sum + r.duration,
     );
@@ -124,7 +164,7 @@ class _ProfileBody extends StatelessWidget {
                 Expanded(
                   child: MetricTile(
                     label: '러닝',
-                    value: '${records.length}',
+                    value: '${runs.length}',
                     unit: '회',
                   ),
                 ),
@@ -133,21 +173,167 @@ class _ProfileBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 28),
-        const Text(
-          '최근 러닝',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.4,
-          ),
-        ),
+        const _SectionTitle('최근 한 달 러닝'),
         const SizedBox(height: 12),
-        for (final record in records) ...[
-          _RecordTile(record: record),
-          const SizedBox(height: 10),
-        ],
+        if (runs.isEmpty)
+          const _EmptyNote(
+            icon: Icons.directions_run_rounded,
+            message: '최근 한 달 러닝 기록이 없어요',
+          )
+        else
+          for (final record in runs) ...[
+            _RecordTile(record: record),
+            const SizedBox(height: 10),
+          ],
+        const SizedBox(height: 28),
+        const _SectionTitle('찜한 코스'),
+        const SizedBox(height: 12),
+        if (data.favorites.isEmpty)
+          const _EmptyNote(
+            icon: Icons.favorite_border_rounded,
+            message: '찜한 코스가 없어요',
+          )
+        else
+          for (final course in data.favorites) ...[
+            CourseCard(
+              course: course,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => CourseDetailScreen(courseId: course.id),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        const SizedBox(height: 28),
+        const _SectionTitle('참여한 프로그램'),
+        const SizedBox(height: 12),
+        if (data.programs.isEmpty)
+          const _EmptyNote(
+            icon: Icons.groups_rounded,
+            message: '참여한 프로그램이 없어요',
+          )
+        else
+          for (final program in data.programs) ...[
+            _ProgramTile(program: program),
+            const SizedBox(height: 10),
+          ],
       ],
     );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.4,
+      ),
+    );
+  }
+}
+
+/// 섹션이 비었을 때의 짧은 안내. 화면 전체를 덮는 대신 자리만 채운다.
+class _EmptyNote extends StatelessWidget {
+  const _EmptyNote({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurface.withValues(
+      alpha: 0.45,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20, color: muted),
+          const SizedBox(width: 8),
+          Text(
+            message,
+            style: TextStyle(fontSize: 14, color: muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgramTile extends StatelessWidget {
+  const _ProgramTile({required this.program});
+
+  final RunningProgram program;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final period = _period(program);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(
+              Icons.groups_rounded,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    program.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (period != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      period,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.55,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 진행 기간. 둘 다 없으면(상시 모집) 표기하지 않는다.
+  String? _period(RunningProgram program) {
+    final start = program.startDate;
+    final end = program.endDate;
+    if (start == null && end == null) return null;
+    if (start != null && end != null) {
+      return '${Formatters.date(start)} ~ ${Formatters.date(end)}';
+    }
+    return Formatters.date((start ?? end)!);
   }
 }
 

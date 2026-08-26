@@ -20,6 +20,8 @@ class CoursePreviewSheet extends StatelessWidget {
     required this.course,
     required this.detail,
     required this.detailError,
+    required this.isFavorite,
+    required this.onToggleFavorite,
     required this.onClose,
     required this.onRetryDetail,
     required this.onStart,
@@ -33,6 +35,10 @@ class CoursePreviewSheet extends StatelessWidget {
   final RunningCourse? detail;
 
   final Object? detailError;
+
+  /// 찜 상태·토글은 부모(running_screen)가 들고 있다.
+  final bool isFavorite;
+  final VoidCallback onToggleFavorite;
 
   final VoidCallback onClose;
   final VoidCallback onRetryDetail;
@@ -76,7 +82,12 @@ class CoursePreviewSheet extends StatelessWidget {
             children: [
               const Center(child: SheetHandle()),
               const SizedBox(height: 14),
-              _Header(course: course, onClose: onClose),
+              _Header(
+                course: course,
+                isFavorite: isFavorite,
+                onToggleFavorite: onToggleFavorite,
+                onClose: onClose,
+              ),
               const SizedBox(height: 12),
               _MetaChips(course: course),
               const SizedBox(height: 16),
@@ -154,9 +165,16 @@ class CoursePreviewSheet extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.course, required this.onClose});
+  const _Header({
+    required this.course,
+    required this.isFavorite,
+    required this.onToggleFavorite,
+    required this.onClose,
+  });
 
   final RunningCourse course;
+  final bool isFavorite;
+  final VoidCallback onToggleFavorite;
   final VoidCallback onClose;
 
   @override
@@ -191,6 +209,22 @@ class _Header extends StatelessWidget {
                       color: AppColors.success,
                     ),
                   ],
+                  // 찜 버튼은 이름 옆에 둔다 — 무엇을 찜하는지 바로 옆에서 보여준다.
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: onToggleFavorite,
+                    icon: Icon(
+                      isFavorite ? Icons.favorite : Icons.favorite_border,
+                      size: 22,
+                      color: isFavorite
+                          ? AppColors.accent
+                          : const Color(0xFF7A8593),
+                    ),
+                    tooltip: isFavorite ? '찜 해제' : '찜하기',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
