@@ -110,9 +110,50 @@ class TestRealCourseResampled:
         )
         assert resampled_length == pytest.approx(parsed.distance_meters, rel=0.005)
 
-    def test_json_has_no_altitude(self, parsed):
-        # 보간한 점의 고도는 추정치라 싣지 않는다. 코스 고도는 elevation_gain 하나로 충분.
-        assert set(parsed.resampled_points[0].to_json()) == {"lat", "lng"}
+    def test_carries_altitude(self, parsed):
+        # 앱의 코스 고도 그래프가 이 값을 그린다. 하나라도 비면 그래프가 끊긴다.
+        altitudes = [p.altitude for p in parsed.resampled_points]
+        assert all(value is not None for value in altitudes)
+        # 원본 고도 범위(2.5~6.8m) 밖으로 나가면 보간이 아니라 외삽이라는 뜻이다.
+        assert min(altitudes) >= 2.5
+        assert max(altitudes) <= 6.8
+
+    def test_json_keys_match_client_contract(self, parsed):
+        # 리샘플 점에는 <time>이 없으므로 recorded_at이 붙지 않는다.
+        assert set(parsed.resampled_points[0].to_json()) == {"lat", "lng", "altitude"}
+
+
+class TestUnusableElevation:
+    """고도를 통째로 버려야 하는 GPX. 코스 등록 자체는 막지 않는다."""
+
+    def _with_elevations(self, elevations: list[float | None]) -> gpx.ParsedCourse:
+        inner = "".join(
+            f'<trkpt lat="{lat}" lon="{lng}">'
+            + ("" if ele is None else f"<ele>{ele}</ele>")
+            + "</trkpt>"
+            for (lat, lng), ele in zip(JEJU_POINTS, elevations)
+        )
+        return gpx.parse(wrap(f"<trk><trkseg>{inner}</trkseg></trk>"))
+
+    def test_drops_elevation_when_a_point_has_none(self):
+        parsed = self._with_elevations([10.0, None, 12.0])
+
+        assert parsed.elevation_gain_meters is None
+        assert all(p.altitude is None for p in parsed.resampled_points)
+
+    def test_drops_elevation_when_a_value_is_implausible(self):
+        # 우도런 GPX가 이 경우다 — 한 구간이 -6757m로 튄다.
+        parsed = self._with_elevations([10.0, -6757.8, 12.0])
+
+        assert parsed.elevation_gain_meters is None
+        assert all(p.altitude is None for p in parsed.resampled_points)
+
+    def test_still_registers_the_course(self):
+        # 고도가 없다고 코스를 못 올리게 하지는 않는다.
+        parsed = self._with_elevations([10.0, -6757.8, 12.0])
+
+        assert len(parsed.points) == 3
+        assert parsed.distance_meters > 0
 
 
 class TestNamespaces:

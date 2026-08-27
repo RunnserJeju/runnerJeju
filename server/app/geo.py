@@ -113,16 +113,31 @@ def resample_path(path: list[Point], interval_meters: float) -> list[Point]:
     구면 오차는 무시할 수준). 시작점과 끝점은 원본 그대로 보존하므로 순환 판정과
     시작/종료 지점 확인에 그대로 쓸 수 있다. 마지막 구간만 interval보다 짧을 수 있다.
     """
+    return [point for point, _, _ in resample_path_positions(path, interval_meters)]
+
+
+def resample_path_positions(
+    path: list[Point], interval_meters: float
+) -> list[tuple[Point, int, float]]:
+    """[resample_path]와 같은 리샘플이되, 새 점이 **원본의 어디서 왔는지**까지 준다.
+
+    원소는 `(새 점, 세그먼트 인덱스 i, 비율 t)`이고 새 점은 `path[i]`와 `path[i+1]`
+    사이 t 지점이다(t는 0~1, 끝점 보존으로 붙는 마지막 점은 `(len-1, 0.0)`).
+
+    좌표만 필요하면 [resample_path]를 쓴다. 이 함수는 좌표와 **나란히 딸린 값**
+    — 지금은 고도 — 을 같은 자리에서 보간해야 하는 호출자를 위한 것이다. 걷는
+    로직을 두 벌로 두면 좌표와 고도가 서로 다른 점을 가리키게 되므로 한 벌만 둔다.
+    """
     if interval_meters <= 0:
         raise ValueError("interval_meters는 양수여야 한다.")
     if len(path) < 2:
-        return list(path)
+        return [(point, index, 0.0) for index, point in enumerate(path)]
 
-    result = [path[0]]
+    result: list[tuple[Point, int, float]] = [(path[0], 0, 0.0)]
     # 직전에 찍은 점 이후로 걸어온 거리. 세그먼트 경계를 넘어 누적된다.
     walked = 0.0
 
-    for start, end in zip(path, path[1:]):
+    for index, (start, end) in enumerate(zip(path, path[1:])):
         seg_len = distance_meters(start, end)
         if seg_len == 0:
             continue
@@ -133,16 +148,20 @@ def resample_path(path: list[Point], interval_meters: float) -> list[Point]:
             t = offset / seg_len
             result.append(
                 (
-                    start[0] + (end[0] - start[0]) * t,
-                    start[1] + (end[1] - start[1]) * t,
+                    (
+                        start[0] + (end[0] - start[0]) * t,
+                        start[1] + (end[1] - start[1]) * t,
+                    ),
+                    index,
+                    t,
                 )
             )
             offset += interval_meters
         walked = seg_len - (offset - interval_meters)
 
     # 끝점 보존. 마지막으로 찍힌 점이 사실상 끝점이면 중복을 만들지 않는다.
-    if distance_meters(result[-1], path[-1]) > 1e-6:
-        result.append(path[-1])
+    if distance_meters(result[-1][0], path[-1]) > 1e-6:
+        result.append((path[-1], len(path) - 1, 0.0))
 
     return result
 

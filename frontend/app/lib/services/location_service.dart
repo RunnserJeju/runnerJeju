@@ -118,10 +118,10 @@ class LocationService {
 
   Future<void> openLocationSettings() => Geolocator.openLocationSettings();
 
+  // position.altitude는 일부러 버린다. 러닝 기록에서 고도를 쓰는 곳이 없다.
   static GeoPoint _toGeoPoint(Position position) => GeoPoint(
     latitude:   position.latitude,
     longitude:  position.longitude,
-    altitude:   position.altitude,
     recordedAt: position.timestamp,
     accuracy:   position.accuracy,
     speed:      position.speed,

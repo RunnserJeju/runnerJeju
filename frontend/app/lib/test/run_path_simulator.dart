@@ -134,10 +134,11 @@ class RunPathSimulator {
     final latPerMeter = 1 / metersPerLatDegree;
     final lngPerMeter = 1 / metersPerLngDegree(anchor.latitude);
 
+    // 고도는 싣지 않는다 — 실제 GPS 관측점(LocationService._toGeoPoint)과
+    // 같은 모양이어야 시뮬레이션이 진짜 러닝을 대신할 수 있다.
     return GeoPoint(
       latitude: anchor.latitude + offsets.north * latPerMeter,
       longitude: anchor.longitude + offsets.east * lngPerMeter,
-      altitude: anchor.altitude,
       recordedAt: DateTime.now(),
     );
   }
@@ -206,9 +207,6 @@ class RunPathSimulator {
     return GeoPoint(
       latitude: _lerp(start.latitude, end.latitude, t),
       longitude: _lerp(start.longitude, end.longitude, t),
-      altitude: start.altitude == null || end.altitude == null
-          ? null
-          : _lerp(start.altitude!, end.altitude!, t),
     );
   }
 

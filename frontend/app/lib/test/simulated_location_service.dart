@@ -47,7 +47,6 @@ class SimulatedLocationService implements LocationService {
     return GeoPoint(
       latitude: start.latitude,
       longitude: start.longitude,
-      altitude: start.altitude,
       recordedAt: DateTime.now(),
     );
   }

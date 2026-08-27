@@ -14,14 +14,35 @@ VerificationStatusName = Literal[
 ]
 
 
-class GeoPointSchema(BaseModel):
+# 좌표 한 점을 코스와 러닝이 따로 쓴다. 두 경로는 만들어지는 방식도, 실리는
+# 값도 겹치지 않아서 한 스키마로 묶으면 양쪽 다 남의 필드를 달고 다니게 된다.
+# (코스: 서버가 GPX로 만들어 내려주기만 함 / 러닝: 앱이 GPS로 모아 올림)
+
+
+class CoursePointSchema(BaseModel):
+    """코스 경로의 점."""
+
     lat: float
     lng: float
+
+    # GPX <ele>에서 온 고도(m). 코스 상세의 고도 그래프가 유일한 소비처다.
+    # 원본 GPX의 고도가 온전하지 않으면 서버가 통째로 버리므로 없을 수 있다(app/gpx.py).
     altitude: float | None = None
+
+
+class RunPointSchema(BaseModel):
+    """러닝 기록 경로의 점.
+
+    고도는 담지 않는다. 화면에 보여주지도, 거리·페이스·검증에 쓰지도 않아서
+    앱이 아예 수집하지 않는다(Flutter LocationService._toGeoPoint 참고).
+    """
+
+    lat: float
+    lng: float
     recorded_at: datetime | None = None
 
-    # 이 점 앞에서 기록이 끊겼는지(일시정지 동안 이동한 구간). 러닝 경로에만
-    # 붙고, 검증이 그 구간을 빼고 재는 근거가 된다 — verification.to_segments 참고.
+    # 이 점 앞에서 기록이 끊겼는지(일시정지 동안 이동한 구간). 검증이 그 구간을
+    # 빼고 재는 근거가 된다 — verification.to_segments 참고.
     segment_break: bool = False
 
 
@@ -145,13 +166,13 @@ class CourseListItem(BaseModel):
     # 지도에 코스 라벨을 찍을 좌표. 경로 전체는 위 이유로 빼지만, 점 하나는
     # 목록 크기에 영향이 없으면서 지도 화면이 코스마다 상세를 부르지 않아도
     # 되게 해준다. 경로가 비어 있는 코스면 None이라 지도에서 빠진다.
-    start_point: GeoPointSchema | None
+    start_point: CoursePointSchema | None
 
 
 class CourseSummary(CourseListItem):
     """상세/등록 응답. 지도에 그릴 경로 좌표까지 포함한다."""
 
-    path: list[GeoPointSchema]
+    path: list[CoursePointSchema]
 
 
 class CourseUpdate(BaseModel):
@@ -201,7 +222,7 @@ class RunCreate(BaseModel):
     ended_at: datetime
     distance_meters: float
     duration_sec: int
-    path: list[GeoPointSchema]
+    path: list[RunPointSchema]
 
 
 class RunOut(BaseModel):
@@ -212,7 +233,7 @@ class RunOut(BaseModel):
     ended_at: datetime
     distance_meters: float
     duration_sec: int
-    path: list[GeoPointSchema]
+    path: list[RunPointSchema]
 
 
 class RunUploadResult(BaseModel):

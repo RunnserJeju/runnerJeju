@@ -171,6 +171,34 @@ class TestResample:
         assert all(gap == pytest.approx(15.0, abs=0.1) for gap in gaps[:-1])
 
 
+class TestResamplePositions:
+    """리샘플 점이 원본의 어디서 왔는지 — 고도를 좌표와 같은 자리에서 보간하는 근거."""
+
+    def test_matches_resample_path(self):
+        path = [(33.2000, 126.3000), (33.2010, 126.3005), (33.2013, 126.3020)]
+
+        points = [p for p, _, _ in geo.resample_path_positions(path, 15.0)]
+
+        assert points == geo.resample_path(path, 15.0)
+
+    def test_position_points_back_to_its_segment(self):
+        # (index, t)로 원본을 직접 보간하면 리샘플된 좌표가 그대로 나와야 한다.
+        # 어긋나면 같은 자리에서 뽑은 고도도 엉뚱한 점의 값이 된다.
+        path = [(33.2000, 126.3000), (33.2010, 126.3005), (33.2013, 126.3020)]
+
+        for (lat, lng), index, ratio in geo.resample_path_positions(path, 15.0):
+            start = path[index]
+            end = path[index + 1] if index + 1 < len(path) else start
+            assert lat == pytest.approx(start[0] + (end[0] - start[0]) * ratio)
+            assert lng == pytest.approx(start[1] + (end[1] - start[1]) * ratio)
+
+    def test_short_paths(self):
+        assert geo.resample_path_positions([], 15.0) == []
+        assert geo.resample_path_positions([JEJU_CITY_HALL], 15.0) == [
+            (JEJU_CITY_HALL, 0, 0.0)
+        ]
+
+
 class TestJejuBounds:
     def test_accepts_jeju(self):
         assert geo.is_within_jeju([JEJU_CITY_HALL, (33.2285, 126.3064)])

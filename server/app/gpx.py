@@ -26,6 +26,16 @@ LOOP_THRESHOLD_METERS = 50.0
 # 코스로 인정하는 최소 점 개수. 2점이면 직선 하나라 코스라 부르기 어렵다.
 MIN_POINTS = 3
 
+# 고도값의 상식 범위(m). 한라산 정상이 1947m이고 해안 코스는 해수면 근처라
+# 실제 코스는 이 안에 다 들어온다.
+#
+# 범위 밖 점이 하나라도 있으면 그 GPX의 고도를 **통째로** 버린다(코스는 그대로
+# 등록된다 — 고도만 없는 코스가 된다). 튄 점만 빼고 앞뒤를 이어 붙이는 방법도
+# 있지만, 그러면 그 구간의 오르내림이 실제와 무관한 값이 되어 그래프가 조용히
+# 거짓말을 한다. 우도런 GPX 3개가 여기 걸린다(346점 중 149점이 -6757m까지 튄다).
+MIN_PLAUSIBLE_ALTITUDE_METERS = -20.0
+MAX_PLAUSIBLE_ALTITUDE_METERS = 2000.0
+
 # 저장용 경로의 리샘플 간격(m). 러닝 기록(5m 필터)보다 성기고 검증 tolerance(30m)보다
 # 촘촘해야 한다: 기록 간격 < 리샘플 간격 < tolerance. 자세한 배경은 resample_path 참고.
 RESAMPLE_INTERVAL_METERS = 15.0
@@ -43,7 +53,7 @@ class TrackPoint:
     recorded_at: datetime | None = None
 
     def to_json(self) -> dict:
-        """`GeoPointSchema` / Flutter `GeoPoint.fromJson`과 같은 키를 쓴다."""
+        """`CoursePointSchema` / Flutter `GeoPoint.fromJson`과 같은 키를 쓴다."""
         payload: dict = {"lat": self.lat, "lng": self.lng}
         if self.altitude is not None:
             payload["altitude"] = self.altitude
@@ -66,8 +76,9 @@ class ParsedCourse:
     # 지도 그리기와 검증 매칭률 계산에 쓰인다 — 매칭률이 "코스 거리의 몇 %"라는
     # 직관과 일치하려면 점 밀도가 균등해야 한다(geo.resample_path 참고).
     #
-    # 점별 고도는 담지 않는다. 보간한 점의 고도는 계산해봐야 추정치이고,
-    # 앱에서 점별 고도를 쓰는 곳이 없다(코스 고도는 elevation_gain_meters 하나로 충분).
+    # 점별 고도도 같이 담는다(앱의 코스 고도 그래프가 이 값을 그린다). 좌표를
+    # 보간한 바로 그 자리에서 함께 보간하므로 좌표와 고도가 같은 점을 가리킨다.
+    # 고도를 쓸 수 없는 GPX(_usable_elevations 참고)면 전 구간 None이다.
     resampled_points: list[TrackPoint]
 
     @property
@@ -177,6 +188,55 @@ def _extract_name(root: ET.Element) -> str | None:
     return None
 
 
+def _usable_elevations(points: list[TrackPoint]) -> list[float] | None:
+    """점별 고도 목록. 코스 고도로 쓸 수 없으면 None.
+
+    쓸 수 없는 경우는 둘이다.
+    - 고도가 없는 점이 하나라도 있을 때: 빠진 자리를 건너뛰고 이으면 누적 상승도
+      그래프도 실제와 다른 모양이 된다.
+    - 상식 범위를 벗어난 값이 있을 때: MIN/MAX_PLAUSIBLE_ALTITUDE_METERS 참고.
+
+    코스 등록 자체는 막지 않는다. 고도는 있으면 좋은 부가 정보라, 하나 때문에
+    코스를 못 올리게 하는 것은 과하다.
+    """
+    elevations = [p.altitude for p in points]
+
+    if any(value is None for value in elevations):
+        return None
+
+    if any(
+        not (MIN_PLAUSIBLE_ALTITUDE_METERS <= value <= MAX_PLAUSIBLE_ALTITUDE_METERS)
+        for value in elevations
+    ):
+        return None
+
+    return elevations  # type: ignore[return-value]
+
+
+def _resample(
+    coordinates: list[geo.Point], elevations: list[float] | None
+) -> list[TrackPoint]:
+    """저장용 경로를 만든다. 고도가 쓸 만하면 좌표와 같은 자리에서 함께 보간한다."""
+    resampled = []
+
+    for (lat, lng), index, ratio in geo.resample_path_positions(
+        coordinates, RESAMPLE_INTERVAL_METERS
+    ):
+        altitude = None
+
+        if elevations is not None:
+            start = elevations[index]
+            # 끝점 보존으로 붙는 마지막 점은 (len-1, 0.0)이라 다음 점이 없다.
+            end = elevations[index + 1] if index + 1 < len(elevations) else start
+            # 소수 첫째 자리까지만 남긴다. GPX 원본도 그 자리까지이고, 경로 하나가
+            # 수백 점이라 자릿수가 그대로 응답 크기로 이어진다.
+            altitude = round(start + (end - start) * ratio, 1)
+
+        resampled.append(TrackPoint(lat=lat, lng=lng, altitude=altitude))
+
+    return resampled
+
+
 def parse(content: bytes) -> ParsedCourse:
     """GPX 바이트를 코스로 변환한다. 실패하면 GpxParseError."""
     try:
@@ -206,11 +266,8 @@ def parse(content: bytes) -> ParsedCourse:
             f"(위도 {min_lat:.4f}~{max_lat:.4f}, 경도 {min_lng:.4f}~{max_lng:.4f})."
         )
 
-    elevations = [p.altitude for p in points if p.altitude is not None]
-    # 일부 점에만 고도가 있으면 누적 상승이 왜곡되므로 전부 있을 때만 계산한다.
-    gain = (
-        geo.elevation_gain_meters(elevations) if len(elevations) == len(points) else None
-    )
+    elevations = _usable_elevations(points)
+    gain = geo.elevation_gain_meters(elevations) if elevations is not None else None
 
     return ParsedCourse(
         name=_extract_name(root),
@@ -219,8 +276,5 @@ def parse(content: bytes) -> ParsedCourse:
         elevation_gain_meters=gain,
         is_loop=geo.distance_meters(coordinates[0], coordinates[-1])
         <= LOOP_THRESHOLD_METERS,
-        resampled_points=[
-            TrackPoint(lat=lat, lng=lng)
-            for lat, lng in geo.resample_path(coordinates, RESAMPLE_INTERVAL_METERS)
-        ],
+        resampled_points=_resample(coordinates, elevations),
     )

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../models/elevation_profile.dart';
+import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/admin_only.dart';
+import '../../widgets/elevation_chart.dart';
 import '../../widgets/sheet_handle.dart';
 
 /// 지도에서 코스 라벨을 눌렀을 때 아래에서 올라오는 시트.
@@ -160,7 +163,83 @@ class CoursePreviewSheet extends StatelessWidget {
           ],
         ),
       ],
+      // 고도는 경로에 딸려 오므로 목록의 course가 아니라 상세(detail)를 본다.
+      _ElevationSection(path: detail?.path ?? const []),
     ];
+  }
+}
+
+/// 코스 고도 섹션. 경로 좌표에 고도가 실려 있을 때만 나타난다.
+///
+/// 상세를 받아오기 전에는 그릴 것이 없고, 원본 GPX의 고도가 온전하지 않아 서버가
+/// 고도를 버린 코스(우도런 3개가 그렇다)도 마찬가지다. 그럴 때 "고도 정보 없음"
+/// 같은 자리를 남기지 않고 섹션째 뺀다 — 코스 대부분은 고도가 있어서, 없는 코스에만
+/// 빈 칸이 생기면 그게 더 눈에 걸린다.
+///
+/// StatefulWidget인 것은 프로파일을 캐시하기 위해서다. 시트를 끌어올리는 동안
+/// DraggableScrollableSheet의 builder가 프레임마다 다시 불리는데, 그때마다 수백
+/// 점의 거리를 다시 잴 이유가 없다.
+class _ElevationSection extends StatefulWidget {
+  const _ElevationSection({required this.path});
+
+  final List<GeoPoint> path;
+
+  @override
+  State<_ElevationSection> createState() => _ElevationSectionState();
+}
+
+class _ElevationSectionState extends State<_ElevationSection> {
+  ElevationProfile? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _profile = ElevationProfile.of(widget.path);
+  }
+
+  @override
+  void didUpdateWidget(_ElevationSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.path, widget.path)) {
+      _profile = ElevationProfile.of(widget.path);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = _profile;
+    if (profile == null) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle('고도'),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _Chip(
+                icon: Icons.trending_up_rounded,
+                label: '누적 상승 ${profile.gainMeters.round()}m',
+              ),
+              _Chip(
+                icon: Icons.terrain_rounded,
+                label: '최고 ${profile.maxAltitude.round()}m',
+              ),
+              _Chip(
+                icon: Icons.waves_rounded,
+                label: '최저 ${profile.minAltitude.round()}m',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ElevationChart(profile: profile),
+        ],
+      ),
+    );
   }
 }
 

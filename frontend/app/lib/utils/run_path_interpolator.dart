@@ -150,9 +150,6 @@ class RunPathInterpolator {
   static GeoPoint _lerp(GeoPoint a, GeoPoint b, double t) => GeoPoint(
     latitude: a.latitude + (b.latitude - a.latitude) * t,
     longitude: a.longitude + (b.longitude - a.longitude) * t,
-    altitude: a.altitude == null || b.altitude == null
-        ? null
-        : a.altitude! + (b.altitude! - a.altitude!) * t,
   );
 }
 
