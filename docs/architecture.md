@@ -101,7 +101,7 @@ server/
 
 마이그레이션 누락은 두 겹으로 막는다.
 
-1. 도커 엔트리포인트(`server/docker-entrypoint.sh`)가 uvicorn보다 **먼저** `alembic upgrade head`를 실행한다
+1. 앱을 띄우기 **전에** `alembic upgrade head`를 돌린다 — 로컬은 `scripts/dev.ps1 up`이, 운영은 배포 파이프라인의 마이그레이션 스텝(`cloudbuild.yaml`)이 담당한다. 기동 경로(엔트리포인트)에 두지 않는 이유는 마이그레이션이 실패했을 때 컨테이너가 재시작만 반복하며 정상 인스턴스가 남지 않기 때문이다([cicd.md](cicd.md))
 2. 그 경로를 우회해도, 앱이 기동 시 DB 리비전이 head인지 확인하고 아니면 기동을 거부한다 (`app/schema_guard.py`)
 
 `migrations/env.py`의 `include_object`는 **PostGIS가 만든 테이블을 autogenerate 대상에서 제외한다.** DB 이미지가 PostGIS라 `topology`, `layer`, `spatial_ref_sys` 등이 함께 들어 있는데, 걸러내지 않으면 autogenerate가 이들을 "메타데이터에 없는 테이블"로 보고 전부 DROP하는 마이그레이션을 만들어낸다.

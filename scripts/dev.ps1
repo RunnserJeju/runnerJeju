@@ -3,8 +3,13 @@
     백엔드 개발 환경 조작 스크립트.
 
 .DESCRIPTION
-    DB와 API를 도커로 함께 띄운다. 마이그레이션은 api 컨테이너 엔트리포인트가
-    기동 전에 실행하므로 따로 챙길 필요가 없다.
+    DB와 API를 도커로 함께 띄운다. up/rebuild가 컨테이너를 올리기 전에
+    마이그레이션을 먼저 실행하므로 따로 챙길 필요는 없다.
+
+    엔트리포인트가 아니라 여기서 도는 이유는 운영과 조건을 맞추기 위해서다 —
+    운영(Cloud Run)은 마이그레이션을 배포 파이프라인의 별도 스텝으로 뺐다
+    (cloudbuild.yaml, docs/cicd.md). 기동 경로에 남겨두면 실패했을 때
+    컨테이너가 재시작만 반복한다.
 
 .EXAMPLE
     .\scripts\dev.ps1 up          # DB + API 기동 (백그라운드)
@@ -49,23 +54,32 @@ function Invoke-Api {
         Invoke-Compose (@('exec', 'api') + $ApiArgs)
     }
     else {
-        # --entrypoint ""로 alembic 자동 실행을 건너뛴다. migrate 자체를 돌릴 때
-        # 엔트리포인트가 먼저 upgrade를 해버리면 무엇이 실행됐는지 흐려진다.
+        # api가 안 떠 있을 때(그리고 스키마가 어긋나 못 뜰 때)도 돌아야 하므로
+        # 일회용 컨테이너를 쓴다.
         Invoke-Compose (@('run', '--rm', '--entrypoint', '', 'api') + $ApiArgs)
     }
 }
 
+# 이미지를 만들고, 스키마를 head까지 올린 뒤, 컨테이너를 띄운다.
+# 순서가 중요하다 — 스키마가 어긋나면 app/schema_guard.py가 기동을 거부한다.
+function Start-Stack {
+    param([string[]]$UpArgs)
+
+    Invoke-Compose @('build')
+    Invoke-Api @('alembic', 'upgrade', 'head')
+    Invoke-Compose (@('up', '-d') + $UpArgs)
+
+    Write-Host ''
+    Write-Host '  API   http://localhost:8000' -ForegroundColor Green
+    Write-Host '  docs  http://localhost:8000/docs' -ForegroundColor Green
+    Write-Host '  로그  .\scripts\dev.ps1 logs' -ForegroundColor DarkGray
+}
+
 switch ($Command) {
-    'up' {
-        Invoke-Compose @('up', '-d', '--build')
-        Write-Host ''
-        Write-Host '  API   http://localhost:8000' -ForegroundColor Green
-        Write-Host '  docs  http://localhost:8000/docs' -ForegroundColor Green
-        Write-Host '  로그  .\scripts\dev.ps1 logs' -ForegroundColor DarkGray
-    }
+    'up'      { Start-Stack @() }
     'down'    { Invoke-Compose @('down') }
     'restart' { Invoke-Compose @('restart', 'api') }
-    'rebuild' { Invoke-Compose @('up', '-d', '--build', '--force-recreate') }
+    'rebuild' { Start-Stack @('--force-recreate') }
     'logs'    { Invoke-Compose @('logs', '-f', '--tail', '100') }
     'status'  { Invoke-Compose @('ps') }
 

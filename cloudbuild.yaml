@@ -1,0 +1,125 @@
+# 배포 파이프라인 (Cloud Build → Cloud Run)
+#
+# `live` 브랜치에 푸시되면 Cloud Build 트리거가 이 파일을 실행한다.
+# main은 개발용이라 아무 일도 일어나지 않는다. 최초 1회 설정은 docs/cicd.md 참고.
+#
+# 순서에 의미가 있다: 테스트 → 이미지 → 마이그레이션 → 배포.
+# 앞 스텝이 실패하면 뒤는 돌지 않고, 라이브는 이전 리비전 그대로 살아 있다.
+
+substitutions:
+  _REGION: asia-northeast3
+  _REPO: runner-jeju
+  _SERVICE: runners-jeju-api
+  _MIGRATE_JOB: runners-jeju-api-migrate
+  # 비밀값이 아니다 — Supabase 프로젝트 주소일 뿐이고, 실제 권한은
+  # SUPABASE_API_SECRET_KEY(Secret Manager)에 있다.
+  _SUPABASE_URL: https://paizkbixmfekjkepuqow.supabase.co
+  _STORAGE_BUCKET: banners
+
+steps:
+  # 1. 테스트 — 여기서 깨지면 이미지도 안 만든다.
+  #
+  # 가상환경을 /opt/venv에 둔다. /workspace는 다음 스텝의 도커 빌드 컨텍스트라
+  # 여기에 .venv를 만들면 빌드가 느려진다(.dockerignore가 걸러주긴 하지만).
+  - id: test
+    name: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+    dir: server
+    env:
+      - UV_PROJECT_ENVIRONMENT=/opt/venv
+      - PYTHONPATH=/workspace/server
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        uv sync --frozen
+        uv run pytest -q
+
+  # 2. 직전 이미지를 캐시로 당겨온다. 없으면(첫 배포) 그냥 넘어간다.
+  - id: pull-cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: sh
+    args:
+      - -c
+      - docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:live || true
+
+  # 3. 이미지 빌드. 태그를 두 개 단다.
+  #    :$SHORT_SHA — 불변. 어떤 커밋이 떠 있는지 추적하고 롤백할 때 쓴다.
+  #    :live       — 항상 최신 라이브. 캐시용이자 사람이 보기 편한 별칭.
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    dir: server
+    args:
+      - build
+      - --cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:live
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:live
+      - .
+
+  # 4. 푸시. 마이그레이션 Job이 이 이미지를 당겨 써야 하므로 배포보다 먼저다.
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        set -e
+        docker push ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:${SHORT_SHA}
+        docker push ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:live
+
+  # 5. 마이그레이션 — 앱을 올리기 전에 딱 한 번.
+  #
+  # 앱 컨테이너 부팅에 얹지 않는 이유: 실패하면 새 인스턴스가 아예 못 뜨고
+  # 재시작만 반복해 정상 인스턴스가 남지 않는다. Job으로 빼면 실패해도
+  # 여기서 파이프라인이 멈추고 기존 리비전이 트래픽을 계속 받는다.
+  #
+  # --wait: Job이 끝날 때까지 기다리고, 실패하면 이 스텝도 실패한다.
+  # --max-retries 0: 마이그레이션은 반쯤 적용된 채 재시도하면 더 위험하다.
+  - id: migrate
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - deploy
+      - ${_MIGRATE_JOB}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:${SHORT_SHA}
+      - --region=${_REGION}
+      - --command=alembic
+      - --args=upgrade,head
+      - --set-secrets=DATABASE_URL=db-url:latest
+      - --max-retries=0
+      - --task-timeout=10m
+      - --execute-now
+      - --wait
+
+  # 6. 배포. 환경변수·시크릿을 매번 명시해서 콘솔에서 손댄 설정이 조용히
+  #    남아 있지 않게 한다(설정도 코드로 관리).
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --cpu=1
+      - --memory=512Mi
+      - --concurrency=20
+      - --timeout=60
+      - --max-instances=4
+      - --labels=commit-sha=${SHORT_SHA}
+      - --set-env-vars=SUPABASE_URL=${_SUPABASE_URL},SUPABASE_STORAGE_BUCKET=${_STORAGE_BUCKET}
+      - --set-secrets=DATABASE_URL=db-url:latest,JWT_SECRET_KEY=jwt-key:latest,SUPABASE_API_SECRET_KEY=sb-key:latest,KAKAO_REST_API_KEY=kakao-key:latest
+
+# 테스트 + 이미지 빌드 + 배포까지 기본 10분으로는 빠듯하다.
+timeout: 1800s
+
+options:
+  # 전용 서비스 계정으로 돌리려면 로그 위치를 명시해야 한다(docs/cicd.md).
+  logging: CLOUD_LOGGING_ONLY

@@ -13,8 +13,8 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-    # api가 마이그레이션부터 실행하므로, DB가 "떴다"가 아니라 "쿼리를 받을 수 있다"를
-    # 확인해야 한다. 컨테이너 시작만 기다리면 첫 alembic이 연결 거부로 죽는다.
+    # DB가 "떴다"가 아니라 "쿼리를 받을 수 있다"를 확인해야 한다. 컨테이너 시작만
+    # 기다리면 scripts/dev.ps1 up이 먼저 돌리는 alembic이 연결 거부로 죽는다.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U runner -d runner_jeju"]
       interval: 3s

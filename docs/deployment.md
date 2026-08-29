@@ -85,10 +85,12 @@ engine = create_engine(
 > 비밀값(`JWT_SECRET_KEY`, `SUPABASE_API_SECRET_KEY`, `DATABASE_URL`의 비밀번호)은
 > 평문 환경변수보다 **Secret Manager**에 넣고 참조하는 걸 권장한다.
 
-## 4. 마이그레이션을 컨테이너 기동에서 뗀다
+## 4. 마이그레이션을 컨테이너 기동에서 뗀다 ✅ 반영됨
 
-지금 [`docker-entrypoint.sh`](../server/docker-entrypoint.sh)는 컨테이너가 뜰 때마다
-`alembic upgrade head`를 돌린다(`set -e`). 로컬(1개)에선 안전하지만 Cloud Run에선
+> 아래는 왜 이렇게 했는지의 기록이다. 실제 파이프라인은 [`cicd.md`](cicd.md) 참고.
+
+예전 [`docker-entrypoint.sh`](../server/docker-entrypoint.sh)는 컨테이너가 뜰 때마다
+`alembic upgrade head`를 돌렸다(`set -e`). 로컬(1개)에선 안전하지만 Cloud Run에선
 물린다.
 
 1. **실패 시 전체 장애**: 마이그레이션이 실패하면 컨테이너가 안 뜨고, Cloud Run은
@@ -107,30 +109,24 @@ engine = create_engine(
 
 ## 5. 배포 명령어
 
-> TODO: 동료 배포 작업 확정 후 이미지 빌드 → 마이그레이션 Job → `gcloud run deploy`
-> 실제 값을 채운다. 뼈대만 남긴다.
+손으로 치지 않는다. **`live` 브랜치에 푸시하면 Cloud Build가 위 4단계를 순서대로
+실행한다** — 파이프라인은 [`cloudbuild.yaml`](../cloudbuild.yaml), 설정·롤백 절차는
+[`cicd.md`](cicd.md)에 있다.
 
-```bash
-# 1. 이미지 빌드 & 푸시 (운영용은 --no-dev)
-# 2. 마이그레이션을 앱 배포 전에 한 번 (Cloud Run Job 등)
-#    alembic upgrade head
-# 3. 앱 배포
-#    gcloud run deploy runner-jeju-api \
-#      --image ... \
-#      --region asia-northeast3 \        # Cloud Run 서울
-#      --min-instances 1 \              # 콜드스타트 제거 (단, 상시 1개 = 상시 과금)
-#      --max-instances 10 \             # 커넥션 상한용 (아래 "커넥션 폭발" 참고)
-#      --set-secrets DATABASE_URL=...,JWT_SECRET_KEY=...,SUPABASE_API_SECRET_KEY=... \
-#      --set-env-vars SUPABASE_URL=...,SUPABASE_STORAGE_BUCKET=banners
+```powershell
+git switch live
+git merge main
+git push          # ← 이게 배포다
 ```
 
 ## 지금 당장 체크리스트
 
-- [ ] `DATABASE_URL`을 pooler(6543) 주소로
+- [x] `DATABASE_URL`을 pooler 주소로 (Secret Manager `db-url`)
 - [ ] `db.py`에 `connect_args={"prepare_threshold": None}`
-- [ ] 운영 환경변수 5개 세팅 (JWT는 개발과 다른 값)
-- [ ] 엔트리포인트에서 `alembic upgrade head` 제거 + 배포 스텝으로 이동
-- [ ] `--min-instances 1`, `--max-instances 10`
+      → **`db-url`이 6543(transaction pooler)이면 필수, 5432면 불필요.** 값 확인 필요
+- [x] 운영 환경변수 세팅 — 단 `KAKAO_REST_API_KEY`가 빠져 있다 ([cicd.md](cicd.md) 1번)
+- [x] 엔트리포인트에서 `alembic upgrade head` 제거 + 배포 스텝으로 이동
+- [ ] `--min-instances 1` (현재 0 — 콜드스타트 감수 중), `--max-instances`는 4로 설정됨
 
 ---
 

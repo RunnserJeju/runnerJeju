@@ -16,8 +16,8 @@
 이것 하나로 끝난다. 내부적으로 일어나는 일:
 
 1. `db`(PostGIS)가 뜨고, `pg_isready`로 **쿼리를 받을 수 있는 상태**가 될 때까지 기다린다
-2. `api` 컨테이너가 `alembic upgrade head`로 스키마를 최신까지 올린다
-3. uvicorn이 뜬다 (`--reload`, 호스트 소스를 바인드 마운트하므로 코드 저장 시 자동 반영)
+2. 일회용 컨테이너로 `alembic upgrade head`를 돌려 스키마를 최신까지 올린다
+3. `api` 컨테이너가 뜬다 (`--reload`, 호스트 소스를 바인드 마운트하므로 코드 저장 시 자동 반영)
 
 확인:
 
@@ -61,7 +61,8 @@ DROP + ADD로 잡는 등 의도와 다르게 나오는 경우가 있다.
 
 마이그레이션을 빠뜨린 채 서버가 뜨는 일은 두 겹으로 막아둔다.
 
-- 도커 엔트리포인트가 uvicorn보다 먼저 `alembic upgrade head`를 실행한다
+- `.\scripts\dev.ps1 up`(과 `rebuild`)이 컨테이너를 띄우기 전에 `alembic upgrade head`를
+  실행한다. 운영에서는 배포 파이프라인이 같은 일을 한다([cicd.md](cicd.md))
 - 그 경로를 우회해도(로컬에서 직접 `uvicorn` 실행 등), 앱이 기동 시 DB 리비전이
   head인지 확인하고 아니면 무엇을 해야 하는지 알려주며 기동을 거부한다
   (`app/schema_guard.py`)
