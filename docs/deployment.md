@@ -122,9 +122,12 @@ git push          # ← 이게 배포다
 ## 지금 당장 체크리스트
 
 - [x] `DATABASE_URL`을 pooler 주소로 (Secret Manager `db-url`)
-- [ ] `db.py`에 `connect_args={"prepare_threshold": None}`
-      → **`db-url`이 6543(transaction pooler)이면 필수, 5432면 불필요.** 값 확인 필요
-- [x] 운영 환경변수 세팅 — 단 `KAKAO_REST_API_KEY`가 빠져 있다 ([cicd.md](cicd.md) 1번)
+- [x] ~~`db.py`에 `connect_args={"prepare_threshold": None}`~~ → **불필요**.
+      운영은 `aws-0-ap-northeast-2.pooler.supabase.com:5432` — pooler지만
+      **session mode**(6543 transaction mode가 아니다)라 prepared statement가
+      커넥션에 붙어 있어도 안전하다. 나중에 6543으로 바꾸면 그때 필수가 된다.
+      (확인법: 기동 로그의 `▶ DB ...` 줄. 시크릿을 열 필요 없다.)
+- [x] 운영 환경변수 세팅 — `KAKAO_REST_API_KEY` 포함 시크릿 4개 완료
 - [x] 엔트리포인트에서 `alembic upgrade head` 제거 + 배포 스텝으로 이동
 - [ ] `--min-instances 1` (현재 0 — 콜드스타트 감수 중), `--max-instances`는 4로 설정됨
 
