@@ -20,6 +20,7 @@
 |---|---|---|
 | `PATCH /courses/{id}` | `PATCH /admin/courses/{id}` | `CourseApi.updateCourse` |
 | `POST /courses/gpx` | `POST /admin/courses/gpx` | `CourseApi.uploadGpx` |
+| `PUT /courses/{id}/gpx` | `PUT /admin/courses/{id}/gpx` | (아직 없음 — 운영 웹에서 구현) |
 | `PUT /courses/{id}/thumbnail` | `PUT /admin/courses/{id}/thumbnail` | (아직 없음 — 운영 웹에서 구현) |
 | `DELETE /courses/{id}/thumbnail` | `DELETE /admin/courses/{id}/thumbnail` | (아직 없음 — 운영 웹에서 구현) |
 | `POST /banners` | `POST /admin/banners` | `BannerApi` (배너 등록) |
@@ -36,6 +37,13 @@
 **등록 `POST /courses/gpx`** (multipart) — 폼 필드: `file`(GPX), `distance_km`(≥1), `difficulty`(1~3), `address`, `name?`, `tags?`(쉼표구분), `parkings?`/`restrooms?`(좌표 포함 JSON 배열), `description?`, **`estimated_time_min?`**(예상 소요시간 분, ≥1). 썸네일은 여기서 안 받는다 — 등록 직후 아래 썸네일 엔드포인트로 올린다.
 
 **수정 `PATCH /courses/{id}`** (JSON) — `name`, `distance_km`, `difficulty`, `address`, `tags?`, `description?`, **`estimated_time_min?`**, `parkings`/`restrooms`. path·썸네일은 안 건드린다.
+
+**경로 교체 `PUT /courses/{id}/gpx`** (multipart, `file`: GPX, `reset_records?`: bool) — path만 새 GPX로 갈아끼운다. 메타데이터·썸네일은 안 건드린다. 응답은 `CourseSummary`.
+- 이 코스로 달린 기록(러닝·검증·완주 스탬프)이 있는데 `reset_records`가 없으면(false) → **409**. 클라가 "완주 기록이 초기화됩니다" 경고를 띄우고 확인받으라는 신호.
+- `reset_records=true` → **완주 스탬프·검증을 hard delete로 초기화**한 뒤 경로 교체. **개인 러닝 기록(Run)은 유지**(개인 활동 히스토리 + 감사 흔적). 완주 수는 0으로 리셋됨.
+- 기록이 없으면 플래그와 무관하게 그냥 교체.
+- 파일 검증이 초기화보다 먼저라, GPX가 잘못됐으면 아무것도 안 지우고 422.
+- UI 흐름: 수정 시도 → (409면) 경고 다이얼로그 → 확인 → `reset_records=true`로 재요청.
 
 **썸네일 (전용 리소스)** — 이미지 파일 처리를 등록/수정 폼과 분리:
 - `PUT /courses/{id}/thumbnail` (multipart, `file`: jpg/png/webp, ≤8MB) — 설정/교체. 교체 시 옛 오브젝트 삭제. 응답은 `CourseSummary`.
@@ -103,6 +111,11 @@ server/app/
 ### 4단계 — 앱 운영 화면 제거
 - [ ] Flutter 운영 화면·admin API 메서드 삭제
 - [ ] 운영 웹으로 완전 이관 확인 후 정리
+
+## 결정됨 — 기록 있는 코스의 경로(GPX) 수정
+- **초기화 후 교체**로 결정(2026-08-30). `reset_records=true`면 완주 스탬프·검증을 hard delete, 경로 교체. 개인 러닝 기록(Run)은 유지 → 개인 히스토리 보존 + 감사 흔적
+- soft delete 안 함 — `uq_stamp_user_course` 유니크가 부분 인덱스(`WHERE deleted_at IS NULL`)로 바뀌어야 하고 모든 Stamp/Verification 조회에 필터가 붙는 광범위 변경 대비, "사라진 옛 경로 완주"를 되살릴 실익이 약함. 되돌리기 안전장치가 필요해지면 개별 soft delete보다 리셋 이벤트(누가/언제/몇 건) admin 액션 로그가 더 싸고 명확 — 필요 시 추가
+- Run은 course_id를 유지한 채 완주 스탬프만 사라진 "달렸지만 미완주" 정상 상태가 됨
 
 ## 보류 / 검토 필요
 - CSRF — 쿠키 세션은 CSRF 노출. 어드민 웹이 다른 오리진이면 토큰 방식(쿠키+헤더) 필요. 구현 시 결정

@@ -8,18 +8,20 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import TypeAdapter, ValidationError
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
 from app.deps import current_user_id
-from app.models import Course
+from app.models import Course, Run, Stamp, Verification
 from app.routers.courses import (
     CourseUploadError,
     _completed_counts,
     _my_completed_course_ids,
     _to_summary,
     create_course_from_gpx_bytes,
+    resample_path_from_gpx,
 )
 from app.schemas import CourseSummary, CourseUpdate, Difficulty, Facility
 
@@ -152,6 +154,98 @@ def _load_course_or_404(db: Session, course_id: uuid.UUID) -> Course:
     if course is None:
         raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
     return course
+
+
+def _course_has_activity(db: Session, course_id: uuid.UUID) -> bool:
+    """이 코스로 달리거나(러닝) 검증·완주한 기록이 하나라도 있으면 True.
+
+    경로 교체 시 확인을 강제하는 가드용이다. 찜(Favorite)은 경로와 무관하니 세지
+    않는다 — 찜만 된 코스는 경로를 바꿔도 기존 데이터가 어긋날 게 없다.
+    """
+    for model in (Run, Stamp, Verification):
+        row = db.execute(
+            select(model.id).where(model.course_id == course_id).limit(1)
+        ).first()
+        if row is not None:
+            return True
+    return False
+
+
+def _reset_course_records(db: Session, course_id: uuid.UUID) -> None:
+    """이 코스의 완주 스탬프와 검증을 모두 지운다(hard delete).
+
+    경로가 바뀌면 옛 경로 기준으로 계산된 완주·검증은 새 경로와 어긋나므로
+    초기화한다. **개인 러닝 기록(Run)은 남긴다** — "언제 얼마 달렸다"는 개인 활동
+    히스토리이고, 원본 GPS·시각이 남아 이 초기화의 감사 흔적 역할도 한다.
+    (Run에 course_id는 남지만 완주 여부는 Stamp가 정하므로, "달렸지만 완주 스탬프는
+    없음"이라는 정상 상태가 된다.)
+
+    커밋은 호출한 엔드포인트가 경로 교체까지 묶어 한 트랜잭션으로 처리한다.
+    """
+    db.execute(delete(Verification).where(Verification.course_id == course_id))
+    db.execute(delete(Stamp).where(Stamp.course_id == course_id))
+
+
+@router.put("/courses/{course_id}/gpx", response_model=CourseSummary)
+def replace_course_gpx(
+    course_id: uuid.UUID,
+    file: UploadFile = File(..., description="새 GPX 파일"),
+    reset_records: bool = Form(
+        default=False,
+        description="이 코스로 달린 기록이 있으면 True로 보내야 진행됨. "
+        "완주 스탬프·검증이 초기화된다(개인 러닝 기록은 유지).",
+    ),
+    db: Session = Depends(get_db),
+    user_id: str = Depends(current_user_id),
+):
+    """코스의 경로(path)를 새 GPX로 교체한다. (관리자 전용 — 라우터 레벨에서 강제)
+
+    이 코스로 달린 기록(러닝·검증·완주 스탬프)이 있으면, 경로를 바꾸는 순간 그
+    기록들의 완주·진행률 판정 기준이 옛 경로로 계산돼 새 경로와 어긋난다. 그래서:
+
+    - 기록이 있는데 `reset_records`가 False면 **409**로 막는다 — 클라이언트가
+      "완주 기록이 초기화됩니다" 경고를 띄우고 확인받으라는 신호다.
+    - `reset_records=True`면 완주 스탬프·검증을 초기화(hard delete)한 뒤 경로를
+      교체한다. 개인 러닝 기록(Run)은 남긴다(_reset_course_records 참고).
+    - 기록이 없으면 플래그와 무관하게 그냥 교체한다.
+
+    메타데이터·썸네일은 건드리지 않는다 — 경로만 리샘플해 갈아끼운다. 파일 검증을
+    먼저 끝낸 뒤에 초기화하므로, GPX가 잘못됐으면 아무것도 지우지 않고 422로 멈춘다.
+    """
+    course = _load_course_or_404(db, course_id)
+
+    has_activity = _course_has_activity(db, course_id)
+    if has_activity and not reset_records:
+        raise HTTPException(
+            status_code=409,
+            detail="이 코스로 달린 기록이 있어요. 경로를 바꾸면 완주 기록이 초기화돼요. "
+            "확인하면 reset_records=true로 다시 요청해 주세요.",
+        )
+
+    content = file.file.read(MAX_GPX_BYTES + 1)
+    if len(content) > MAX_GPX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"GPX 파일이 너무 커요. {MAX_GPX_BYTES // (1024 * 1024)}MB 이하여야 해요.",
+        )
+
+    # 파일을 먼저 검증한다 — 초기화(삭제)보다 앞에 둬서, 잘못된 GPX면 기록을
+    # 지우지 않고 멈추게 한다.
+    try:
+        new_path = resample_path_from_gpx(content)
+    except CourseUploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if has_activity:
+        _reset_course_records(db, course_id)
+
+    course.path = new_path
+    db.commit()
+    db.refresh(course)
+
+    counts = _completed_counts(db, [course.id])
+    mine = _my_completed_course_ids(db, user_id, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
 
 
 @router.put("/courses/{course_id}/thumbnail", response_model=CourseSummary)

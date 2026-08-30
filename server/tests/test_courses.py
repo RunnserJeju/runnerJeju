@@ -488,3 +488,155 @@ class TestCourseThumbnail:
             admin_courses_router.delete_course_thumbnail(uuid.uuid4(), db, "admin")
 
         assert exc_info.value.status_code == 404
+
+
+class _GpxReplaceResult:
+    """execute() 결과 흉내. 활동 조회는 .first(), 완주 조회는 .all()/.scalars()를 쓴다."""
+
+    def __init__(self, *, has_activity: bool):
+        self._has_activity = has_activity
+
+    def first(self):
+        return ("row",) if self._has_activity else None
+
+    def all(self):
+        return []
+
+    def scalars(self):
+        return []
+
+
+class GpxReplaceFakeSession:
+    def __init__(self, course: Course | None, *, has_activity: bool = False):
+        self._course = course
+        self._has_activity = has_activity
+        self.committed = False
+        # 실행된 statement를 모아 초기화(delete) 호출을 검증한다.
+        self.executed: list = []
+
+    def get(self, _model, course_id):
+        if self._course is not None and self._course.id == course_id:
+            return self._course
+        return None
+
+    def execute(self, stmt):
+        self.executed.append(stmt)
+        return _GpxReplaceResult(has_activity=self._has_activity)
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, _obj):
+        pass
+
+    @property
+    def delete_count(self) -> int:
+        return sum(1 for s in self.executed if type(s).__name__ == "Delete")
+
+
+class TestReplaceCourseGpx:
+    def test_replaces_path_when_no_activity(self):
+        course = _course()
+        original_path = list(course.path)
+        db = GpxReplaceFakeSession(course, has_activity=False)
+
+        result = admin_courses_router.replace_course_gpx(
+            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+        )
+
+        # 경로가 실제로 새 GPX에서 뽑은 점들로 바뀐다.
+        assert course.path != original_path
+        assert len(course.path) > 0
+        assert result["path"] == course.path
+        assert db.committed is True
+        # 기록이 없으면 초기화(delete)는 하지 않는다.
+        assert db.delete_count == 0
+
+    def test_does_not_touch_metadata_or_thumbnail(self):
+        course = _course(thumbnail_url="https://cdn/keep.png")
+        db = GpxReplaceFakeSession(course, has_activity=False)
+
+        admin_courses_router.replace_course_gpx(
+            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+        )
+
+        assert course.name == "옛 이름"
+        assert course.thumbnail_url == "https://cdn/keep.png"
+
+    def test_409_when_activity_and_not_confirmed(self):
+        course = _course()
+        original_path = list(course.path)
+        db = GpxReplaceFakeSession(course, has_activity=True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                course.id,
+                FakeUpload(content=SAGYE.read_bytes()),
+                reset_records=False,
+                db=db,
+                user_id="admin",
+            )
+
+        assert exc_info.value.status_code == 409
+        # 경로는 그대로 — 커밋도 초기화도 안 한다.
+        assert course.path == original_path
+        assert db.committed is False
+        assert db.delete_count == 0
+
+    def test_resets_records_when_confirmed(self):
+        course = _course()
+        original_path = list(course.path)
+        db = GpxReplaceFakeSession(course, has_activity=True)
+
+        result = admin_courses_router.replace_course_gpx(
+            course.id,
+            FakeUpload(content=SAGYE.read_bytes()),
+            reset_records=True,
+            db=db,
+            user_id="admin",
+        )
+
+        # 경로 교체 + 스탬프/검증 초기화(delete 2건) + 커밋.
+        assert course.path != original_path
+        assert result["path"] == course.path
+        assert db.delete_count == 2
+        assert db.committed is True
+
+    def test_bad_gpx_does_not_reset_records(self):
+        # 파일 검증이 초기화보다 먼저다 — 잘못된 GPX면 아무것도 지우지 않는다.
+        course = _course()
+        db = GpxReplaceFakeSession(course, has_activity=True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                course.id,
+                FakeUpload(content=b""),
+                reset_records=True,
+                db=db,
+                user_id="admin",
+            )
+
+        assert exc_info.value.status_code == 422
+        assert db.delete_count == 0
+        assert db.committed is False
+
+    def test_404_when_course_missing(self):
+        db = GpxReplaceFakeSession(None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                uuid.uuid4(), FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+            )
+
+        assert exc_info.value.status_code == 404
+
+    def test_422_on_empty_gpx(self):
+        course = _course()
+        db = GpxReplaceFakeSession(course, has_activity=False)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                course.id, FakeUpload(content=b""), db=db, user_id="admin"
+            )
+
+        assert exc_info.value.status_code == 422
