@@ -165,23 +165,19 @@ class CoursePreviewSheet extends StatelessWidget {
         Wrap(
           spacing: 6,
           runSpacing: 6,
-          children: [
-            for (final tag in course.tagList) _Chip(label: tag),
-          ],
+          children: [for (final tag in course.tagList) _Chip(label: tag)],
         ),
       ],
       // 고도는 경로에 딸려 오므로 목록의 course가 아니라 상세(detail)를 본다.
-      _ElevationSection(path: detail?.path ?? const []),
+      // 상세가 오기 전에는 "없음"인지 아직 모르는 것이라 섹션을 그리지 않는다.
+      if (detail != null) _ElevationSection(path: detail!.path),
     ];
   }
 }
 
-/// 코스 고도 섹션. 경로 좌표에 고도가 실려 있을 때만 나타난다.
-///
-/// 상세를 받아오기 전에는 그릴 것이 없고, 원본 GPX의 고도가 온전하지 않아 서버가
-/// 고도를 버린 코스(우도런 3개가 그렇다)도 마찬가지다. 그럴 때 "고도 정보 없음"
-/// 같은 자리를 남기지 않고 섹션째 뺀다 — 코스 대부분은 고도가 있어서, 없는 코스에만
-/// 빈 칸이 생기면 그게 더 눈에 걸린다.
+/// 코스 고도 섹션. 제목은 늘 그리고, 고도가 없는 코스는 그래프 자리에 그렇다고
+/// 적는다(원본 GPX의 고도가 온전하지 않아 서버가 버린 코스 — 우도런 3개가 그렇다).
+/// 섹션째 빼면 "이 앱은 고도를 안 보여주나?"와 "이 코스만 없나?"가 구분되지 않는다.
 ///
 /// StatefulWidget인 것은 프로파일을 캐시하기 위해서다. 시트를 끌어올리는 동안
 /// DraggableScrollableSheet의 builder가 프레임마다 다시 불리는데, 그때마다 수백
@@ -215,7 +211,6 @@ class _ElevationSectionState extends State<_ElevationSection> {
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
-    if (profile == null) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 20),
@@ -224,27 +219,59 @@ class _ElevationSectionState extends State<_ElevationSection> {
         children: [
           const _SectionTitle('고도'),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _Chip(
-                icon: Icons.trending_up_rounded,
-                label: '누적 상승 ${profile.gainMeters.round()}m',
-              ),
-              _Chip(
-                icon: Icons.terrain_rounded,
-                label: '최고 ${profile.maxAltitude.round()}m',
-              ),
-              _Chip(
-                icon: Icons.waves_rounded,
-                label: '최저 ${profile.minAltitude.round()}m',
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ElevationChart(profile: profile),
+          if (profile == null)
+            const _ElevationUnavailable()
+          else ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _Chip(
+                  icon: Icons.trending_up_rounded,
+                  label: '누적 상승 ${profile.gainMeters.round()}m',
+                ),
+                _Chip(
+                  icon: Icons.terrain_rounded,
+                  label: '최고 ${profile.maxAltitude.round()}m',
+                ),
+                _Chip(
+                  icon: Icons.waves_rounded,
+                  label: '최저 ${profile.minAltitude.round()}m',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ElevationChart(profile: profile),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// 고도 그래프가 들어갈 자리에 대신 놓는 안내. 그래프와 같은 높이라 코스를
+/// 바꿔 가며 볼 때 아래 내용이 들썩이지 않는다.
+class _ElevationUnavailable extends StatelessWidget {
+  const _ElevationUnavailable();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 150,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.paper,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Center(
+        child: Text(
+          '고도 데이터 없음',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFFA3ABB6),
+          ),
+        ),
       ),
     );
   }
@@ -345,7 +372,10 @@ class _MetaChips extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: [
-        _Chip(icon: Icons.straighten_rounded, label: '왕복 ${course.distanceKm}km'),
+        _Chip(
+          icon: Icons.straighten_rounded,
+          label: '왕복 ${course.distanceKm}km',
+        ),
         _Chip(icon: Icons.trending_up_rounded, label: course.difficulty.label),
         if (course.estimatedTimeLabel != null)
           _Chip(
@@ -428,7 +458,11 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.label, required this.value});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
   final String label;
