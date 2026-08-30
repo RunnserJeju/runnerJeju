@@ -66,7 +66,9 @@ class _RunScreenState extends State<RunScreen> {
   RunWidgetData _snapshot() => RunWidgetData(
     distanceMeters: _tracker.distanceMeters,
     elapsed: _tracker.elapsed,
-    paceSecondsPerKm: _tracker.paceSecondsPerKm,
+    // 잠금화면은 칸이 하나라 화면의 주 지표(최근 1km)를 따른다.
+    paceSecondsPerKm:
+        _tracker.recentPaceSecondsPerKm ?? _tracker.paceSecondsPerKm,
     paused: _tracker.status == RunStatus.paused,
   );
 
@@ -362,6 +364,9 @@ class _ControlPanel extends StatelessWidget {
           if (interruption != null) ...[
             _InterruptionNotice(interruption: interruption!),
             const SizedBox(height: 16),
+          ] else if (tracker.isAwaitingFix) ...[
+            const _AwaitingFixNotice(),
+            const SizedBox(height: 16),
           ],
           Center(
             child: MetricTile(
@@ -380,9 +385,12 @@ class _ControlPanel extends StatelessWidget {
                 value: Formatters.duration(tracker.elapsed),
                 alignment: CrossAxisAlignment.center,
               ),
+              // 주 지표는 최근 1km. 1km 전에는 지금까지 전체가 창이라 평균과
+              // 같은 값이므로 라벨에서 "최근 1km"를 뗀다.
               MetricTile(
-                label: '평균 페이스',
-                value: Formatters.pace(tracker.paceSecondsPerKm),
+                label: tracker.distanceMeters >= 1000 ? '최근 1km 페이스' : '페이스',
+                value: Formatters.pace(tracker.recentPaceSecondsPerKm),
+                caption: '평균 ${Formatters.pace(tracker.paceSecondsPerKm)}',
                 alignment: CrossAxisAlignment.center,
               ),
             ],
@@ -487,6 +495,34 @@ class _Controls extends StatelessWidget {
 /// 스낵바만으로는 부족하다. 몇 초 뒤 사라지는데, 그동안 화면을 안 보고 있었다면
 /// 남는 것은 "멈춰 있는 러닝" 하나뿐이라 사용자가 직접 일시정지를 누른 것과
 /// 구분되지 않는다.
+/// 시작은 눌렀는데 아직 쓸 만한 위치가 없을 때. 이 동안 시간은 흐르지 않는다.
+class _AwaitingFixNotice extends StatelessWidget {
+  const _AwaitingFixNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          'GPS를 잡는 중이에요. 잡히면 시간이 흐르기 시작해요.',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _InterruptionNotice extends StatelessWidget {
   const _InterruptionNotice({required this.interruption});
 
