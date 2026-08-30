@@ -13,7 +13,7 @@
 default 없이 add_column한 것과 같은 방식이다. NOT NULL이 아니므로 기존 행을
 채워 넣을 일도, TRUNCATE도 없다.
 
-Revision ID: 0011_course_thumbnail_estimated_time
+Revision ID: 0011_course_thumb_eta
 Revises: 0010_favorites
 Create Date: 2026-08-30 00:00:00.000000
 """
@@ -23,7 +23,9 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0011_course_thumbnail_estimated_time"
+# 리비전 ID는 32자 이하여야 한다 — alembic_version.version_num이 VARCHAR(32)다.
+# 넘기면 마이그레이션 DDL은 다 돌고 마지막에 버전을 적다가 실패해 통째로 롤백된다.
+revision: str = "0011_course_thumb_eta"
 down_revision: Union[str, Sequence[str], None] = "0010_favorites"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

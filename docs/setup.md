@@ -59,6 +59,21 @@ API 문서는 http://localhost:8000/docs 에 있다.
 `--autogenerate`가 만든 파일은 **반드시 눈으로 확인한다.** 컬럼 이름 변경을
 DROP + ADD로 잡는 등 의도와 다르게 나오는 경우가 있다.
 
+### 리비전 ID 규칙
+
+이 리포는 도구가 주는 hex ID 대신 `NNNN_짧은이름`(예: `0010_favorites`)을
+손으로 적는다. 순번이 앞에 오면 파일 목록이 곧 적용 순서라 읽기 쉽다.
+
+대신 지켜야 할 게 하나 있다. **ID는 32자를 넘기면 안 된다.** alembic이 적용된
+리비전을 기록하는 `alembic_version.version_num`이 VARCHAR(32)라, 넘기면 DDL은
+다 돌고 마지막에 버전을 적다가 `StringDataRightTruncation`으로 죽는다(트랜잭션이라
+통째로 롤백된다). 실제로 `0011_course_thumbnail_estimated_time`(36자)이 이렇게
+터져서 `0011_course_thumb_eta`로 줄였다.
+
+- 파일을 복사해서 만들 때 `revision` 문자열과 파일명을 같은 값으로 맞춘다
+- `down_revision`은 직전 파일의 `revision`
+- 이름은 짧게 — 무엇을 바꿨는지는 파일 첫 docstring에 쓴다
+
 마이그레이션을 빠뜨린 채 서버가 뜨는 일은 두 겹으로 막아둔다.
 
 - `.\scripts\dev.ps1 up`(과 `rebuild`)이 컨테이너를 띄우기 전에 `alembic upgrade head`를
