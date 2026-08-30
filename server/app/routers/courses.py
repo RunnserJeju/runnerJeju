@@ -28,6 +28,8 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "parkings": course.parkings or [],
         "restrooms": course.restrooms or [],
         "description": course.description,
+        "estimated_time_min": course.estimated_time_min,
+        "thumbnail_url": course.thumbnail_url,
         "path": path,
         # 목록 응답(CourseListItem)에는 path가 빠지므로, 지도에 라벨을 찍을 점은
         # 여기서 따로 뽑아 준다. 상세 응답에도 같이 들어가지만 값은 path[0]과
@@ -122,6 +124,7 @@ def create_course_from_gpx_bytes(
     parkings: list[dict] | None = None,
     restrooms: list[dict] | None = None,
     description: str | None,
+    estimated_time_min: int | None = None,
     created_by: str | None,
 ) -> Course:
     """GPX 바이트를 파싱해 코스를 새로 등록한다.
@@ -161,6 +164,9 @@ def create_course_from_gpx_bytes(
         parkings=parkings or [],
         restrooms=restrooms or [],
         description=description,
+        estimated_time_min=estimated_time_min,
+        # 썸네일(thumbnail_url)은 여기서 안 넣는다 — 파일 업로드가 필요해 등록 직후
+        # 전용 엔드포인트가 따로 채운다. 새 코스는 항상 썸네일 없이 만들어진다.
         # 원본 GPX 점이 아니라 균등 간격으로 리샘플한 경로를 저장한다.
         # 검증 매칭률이 "코스 거리의 몇 %"와 일치하려면 점 밀도가 균등해야 하고,
         # 클라이언트도 이 경로를 그대로 받아 실시간 커버리지 계산의 기준점으로 쓴다.

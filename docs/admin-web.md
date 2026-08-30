@@ -20,12 +20,31 @@
 |---|---|---|
 | `PATCH /courses/{id}` | `PATCH /admin/courses/{id}` | `CourseApi.updateCourse` |
 | `POST /courses/gpx` | `POST /admin/courses/gpx` | `CourseApi.uploadGpx` |
+| `PUT /courses/{id}/thumbnail` | `PUT /admin/courses/{id}/thumbnail` | (아직 없음 — 운영 웹에서 구현) |
+| `DELETE /courses/{id}/thumbnail` | `DELETE /admin/courses/{id}/thumbnail` | (아직 없음 — 운영 웹에서 구현) |
 | `POST /banners` | `POST /admin/banners` | `BannerApi` (배너 등록) |
 | `DELETE /banners/{id}` | `DELETE /admin/banners/{id}` | `BannerApi` (배너 삭제) |
 | `POST /notices` | `POST /admin/notices` | `NoticeApi` (공지 등록) |
 | `GET /geo/geocode` | `GET /admin/geo/geocode` | `GeoApi` — 코스 등록 화면의 주소→좌표 변환 |
 
 공개로 남는 것(이동 없음): `GET /courses`, `GET /courses/{id}`, `GET /banners`, `GET /notices`.
+
+## 코스 관리 필드·썸네일 (백엔드, 2026-08-30)
+
+운영 웹 코스 등록/수정 화면이 참고할 스펙. 서버 구현·테스트 완료(마이그레이션 `0011`).
+
+**등록 `POST /courses/gpx`** (multipart) — 폼 필드: `file`(GPX), `distance_km`(≥1), `difficulty`(1~3), `address`, `name?`, `tags?`(쉼표구분), `parkings?`/`restrooms?`(좌표 포함 JSON 배열), `description?`, **`estimated_time_min?`**(예상 소요시간 분, ≥1). 썸네일은 여기서 안 받는다 — 등록 직후 아래 썸네일 엔드포인트로 올린다.
+
+**수정 `PATCH /courses/{id}`** (JSON) — `name`, `distance_km`, `difficulty`, `address`, `tags?`, `description?`, **`estimated_time_min?`**, `parkings`/`restrooms`. path·썸네일은 안 건드린다.
+
+**썸네일 (전용 리소스)** — 이미지 파일 처리를 등록/수정 폼과 분리:
+- `PUT /courses/{id}/thumbnail` (multipart, `file`: jpg/png/webp, ≤8MB) — 설정/교체. 교체 시 옛 오브젝트 삭제. 응답은 `CourseSummary`.
+- `DELETE /courses/{id}/thumbnail` — `thumbnail_url`을 null로 + Storage 파일 삭제. 이미 없으면 no-op.
+- 등록도 이 엔드포인트로 올린다 → "처음 설정"과 "교체"가 같은 코드.
+
+**조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함. 앱은 반영 완료(소요시간 표시, 썸네일 카드).
+
+**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`). **배포 전 Supabase에 `course-thumbnails` Public 버킷 생성 필요.**
 
 ## 목표 서버 구조
 

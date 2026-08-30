@@ -340,6 +340,11 @@ class _MetaChips extends StatelessWidget {
       children: [
         _Chip(icon: Icons.straighten_rounded, label: '왕복 ${course.distanceKm}km'),
         _Chip(icon: Icons.trending_up_rounded, label: course.difficulty.label),
+        if (course.estimatedTimeLabel != null)
+          _Chip(
+            icon: Icons.schedule_rounded,
+            label: course.estimatedTimeLabel!,
+          ),
         _Chip(
           icon: Icons.emoji_events_outlined,
           label: '완주 ${course.completedCount}명',

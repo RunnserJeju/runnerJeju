@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
+from app import storage
 from app.db import get_db
 from app.deps import current_user_id
 from app.models import Course
@@ -27,6 +28,15 @@ router = APIRouter(tags=["courses"])
 # 업로드 가능한 GPX 최대 크기. 6.2km 코스가 36KB이므로 넉넉하다.
 # 제한이 없으면 거대한 파일 하나로 워커 메모리를 채울 수 있다.
 MAX_GPX_BYTES = 5 * 1024 * 1024
+
+# 썸네일 이미지 제한. 배너(admin/banners.py)와 같은 규칙 — 폰 원본 사진이
+# 올라올 수 있어 넉넉히 두고, 확장자는 Storage 오브젝트 경로로도 쓰인다.
+MAX_THUMBNAIL_BYTES = 8 * 1024 * 1024
+_ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
 
 # 멀티파트 폼에 파일과 함께 실려오는 parkings/restrooms를 검증한다. 폼 필드라
 # JSON 문자열로 오므로 validate_json으로 파싱한다(각 원소는 Facility = 좌표 포함).
@@ -55,6 +65,7 @@ def update_course(
     course.address = payload.address
     course.tags = payload.tags
     course.description = payload.description
+    course.estimated_time_min = payload.estimated_time_min
     course.parkings = [facility.model_dump() for facility in payload.parkings]
     course.restrooms = [facility.model_dump() for facility in payload.restrooms]
 
@@ -83,6 +94,9 @@ def create_course_from_gpx(
         default="[]", description="화장실 목록 JSON. 형식은 parkings와 같다"
     ),
     description: str | None = Form(default=None),
+    estimated_time_min: int | None = Form(
+        default=None, ge=1, description="예상 소요시간(분). 안내값 — 생략 가능"
+    ),
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ):
@@ -122,10 +136,98 @@ def create_course_from_gpx(
             parkings=[facility.model_dump() for facility in parsed_parkings],
             restrooms=[facility.model_dump() for facility in parsed_restrooms],
             description=description,
+            estimated_time_min=estimated_time_min,
             created_by=user_id,
         )
     except CourseUploadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # 방금 만든 코스라 완주자는 아직 없다.
+    # 방금 만든 코스라 완주자는 아직 없다. 썸네일은 아직 없다 — 등록 직후
+    # PUT /courses/{id}/thumbnail으로 따로 올린다.
     return _to_summary(course, 0, False)
+
+
+def _load_course_or_404(db: Session, course_id: uuid.UUID) -> Course:
+    course = db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+    return course
+
+
+@router.put("/courses/{course_id}/thumbnail", response_model=CourseSummary)
+def set_course_thumbnail(
+    course_id: uuid.UUID,
+    file: UploadFile = File(..., description="썸네일 이미지 (jpg/png/webp)"),
+    db: Session = Depends(get_db),
+    user_id: str = Depends(current_user_id),
+):
+    """코스 대표 썸네일을 올린다(교체 포함). (관리자 전용 — 라우터 레벨에서 강제)
+
+    이미지 자체를 하나의 리소스로 다뤄 등록/수정 폼과 분리했다 — 파일 처리·교체·
+    삭제 로직이 여기 한 곳에 모인다(배너와 같은 방침). 등록도 이 엔드포인트로
+    올리므로 "처음 설정"과 "교체"가 같은 코드를 탄다.
+
+    교체면 옛 오브젝트는 새로 올린 뒤 지운다 — Storage는 매번 새 경로에 저장해
+    (app.storage) 옛 파일이 고아로 남기 때문이다. 삭제 실패는 무시한다(부가 작업).
+    """
+    course = _load_course_or_404(db, course_id)
+
+    extension = _ALLOWED_IMAGE_TYPES.get(file.content_type or "")
+    if extension is None:
+        raise HTTPException(status_code=422, detail="jpg/png/webp 이미지만 올릴 수 있어요.")
+
+    content = file.file.read(MAX_THUMBNAIL_BYTES + 1)
+    if len(content) > MAX_THUMBNAIL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"이미지가 너무 커요. {MAX_THUMBNAIL_BYTES // (1024 * 1024)}MB 이하여야 해요.",
+        )
+    if not content:
+        raise HTTPException(status_code=422, detail="빈 파일이에요.")
+
+    try:
+        new_url = storage.upload_image(
+            content,
+            content_type=file.content_type,
+            extension=extension,
+            bucket=storage.SUPABASE_COURSE_BUCKET,
+        )
+    except storage.StorageUploadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    # 업로드가 성공한 뒤에야 옛 것을 지운다 — 실패하면 옛 썸네일이 그대로 살아 있게.
+    old_url = course.thumbnail_url
+    course.thumbnail_url = new_url
+    db.commit()
+    db.refresh(course)
+
+    if old_url:
+        storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
+
+    counts = _completed_counts(db, [course.id])
+    mine = _my_completed_course_ids(db, user_id, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
+
+
+@router.delete("/courses/{course_id}/thumbnail", response_model=CourseSummary)
+def delete_course_thumbnail(
+    course_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(current_user_id),
+):
+    """코스 썸네일을 지운다(컬럼을 NULL로). (관리자 전용 — 라우터 레벨에서 강제)
+
+    이미 없으면 아무 일도 안 한다. Storage 파일도 지우되 실패는 무시한다.
+    """
+    course = _load_course_or_404(db, course_id)
+
+    old_url = course.thumbnail_url
+    if old_url:
+        course.thumbnail_url = None
+        db.commit()
+        db.refresh(course)
+        storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
+
+    counts = _completed_counts(db, [course.id])
+    mine = _my_completed_course_ids(db, user_id, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), course.id in mine)

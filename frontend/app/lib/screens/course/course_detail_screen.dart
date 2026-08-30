@@ -117,6 +117,15 @@ class _CourseDetailBody extends StatelessWidget {
                             value: course.difficulty.label,
                           ),
                         ),
+                        // 명단에 소요시간이 없는 코스가 있어 값이 있을 때만 칸을 낸다.
+                        if (course.estimatedTimeMin != null)
+                          Expanded(
+                            child: MetricTile(
+                              label: '예상 시간',
+                              value: '${course.estimatedTimeMin}',
+                              unit: '분',
+                            ),
+                          ),
                       ],
                     ),
                     if (course.description != null) ...[

@@ -121,6 +121,15 @@ class Course(Base):
 
     description: Mapped[str | None] = mapped_column(String(2000), default=None)
 
+    # 예상 소요시간(분). 명단에 없는 코스가 있어 nullable이다. 왕복 안내값인
+    # distance_km처럼 실측이 아니라 안내용이라 분 단위 정수로 충분하다.
+    estimated_time_min: Mapped[int | None] = mapped_column(Integer, default=None)
+
+    # 대표 썸네일. 배너와 같은 Supabase Storage public URL(app.storage)이다. 값은
+    # 전용 엔드포인트(PUT/DELETE /courses/{id}/thumbnail)가 업로드·교체·삭제하며
+    # 채우고, 코스 등록/수정(GPX·메타데이터)은 이 컬럼을 건드리지 않는다.
+    thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
