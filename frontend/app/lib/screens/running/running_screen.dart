@@ -4,6 +4,8 @@ import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/formatters.dart';
+import '../../utils/geo_utils.dart';
 import '../../utils/transient_messenger.dart';
 import '../../widgets/admin_only.dart';
 import '../../widgets/course_map_view.dart';
@@ -59,6 +61,10 @@ class _RunningScreenState extends State<RunningScreen> {
   bool _isExploring = false;
 
   GeoPoint? _myPosition;
+
+  /// 코스 시작을 눌러 놓고 현위치를 다시 잡는 동안인지. 그동안 시작 버튼이
+  /// 기다리는 중임을 보여준다([CoursePreviewSheet.isPreparingStart]).
+  bool _isPreparingStart = false;
 
   /// 러닝 화면이 위에 떠 있는 동안인지.
   ///
@@ -226,11 +232,54 @@ class _RunningScreenState extends State<RunningScreen> {
     }
   }
 
+  /// 코스 시작점에서 이만큼 넘게 떨어져 있으면 길찾기를 권한다. 코스 초입에
+  /// 서 있을 때의 GPS 오차(도심에서 수십 m)에는 걸리지 않을 만큼 넉넉하다.
+  static const double _routeGuideThreshold = 100;
+
+  /// 시작 직전 현위치 조회에 줄 시간. 넘기면 화면을 열 때 잡아 둔 값으로 간다 —
+  /// 시작 버튼을 눌렀는데 하염없이 기다리는 것보다 낫다.
+  static const Duration _startFixTimeout = Duration(seconds: 3);
+
   Future<void> _startRun({RunningCourse? course}) async {
+    var origin = _myPosition;
+
+    // 코스 러닝은 시작점까지의 거리를 봐야 해서 위치를 다시 잡는다.
+    // _myPosition은 화면을 열 때 한 번 잡은 값이라, 코스를 둘러보는 사이에
+    // 사용자가 이동했으면 이미 시작점에 도착했는데도 길찾기를 묻게 된다.
+    final start = course?.startPoint;
+    if (start != null) {
+      setState(() => _isPreparingStart = true);
+      origin = await _freshPosition() ?? origin;
+      if (!mounted) return;
+      setState(() => _isPreparingStart = false);
+
+      // 위치를 끝내 못 잡았으면 거리를 알 수 없다. 묻지 않고 그냥 시작한다 —
+      // 위치 권한 안내는 러닝 화면이 따로 띄운다.
+      final distance =
+          origin == null ? null : GeoUtils.distanceBetween(origin, start);
+
+      if (origin != null && distance != null && distance > _routeGuideThreshold) {
+        final wantsRoute = await _confirmRouteGuide(course!, distance);
+        if (!mounted) return;
+
+        // 길찾기를 골랐으면 러닝은 시작하지 않는다. 시작점까지 이동한 뒤
+        // 돌아와 다시 누르는 흐름이다. 바깥을 눌러 닫았을 때(null)도 마찬가지 —
+        // 아무것도 고르지 않은 것을 '여기서 시작'으로 읽지 않는다.
+        if (wantsRoute != false) {
+          if (wantsRoute == true) {
+            await _openRouteToStart(from: origin, to: start);
+          }
+          return;
+        }
+      }
+    }
+
     setState(() => _isRunningScreenOpen = true);
 
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => RunScreen(course: course)),
+      MaterialPageRoute(
+        builder: (_) => RunScreen(course: course, initialCenter: origin),
+      ),
     );
     if (!mounted) return;
 
@@ -240,6 +289,57 @@ class _RunningScreenState extends State<RunningScreen> {
 
     // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다.
     await _loadCourses();
+  }
+
+  /// 현위치를 다시 한 번 잡는다. 실패하거나 [_startFixTimeout]을 넘기면 null.
+  Future<GeoPoint?> _freshPosition() async {
+    try {
+      final position = await Services.instance.location.currentPosition(
+        timeLimit: _startFixTimeout,
+      );
+      if (mounted) setState(() => _myPosition = position);
+      return position;
+    } catch (_) {
+      // 권한이 없거나 실내라 못 잡은 경우. 부르는 쪽이 이전 값으로 간다.
+      return null;
+    }
+  }
+
+  /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
+  /// 러닝도 길찾기도 시작하지 않는다.
+  Future<bool?> _confirmRouteGuide(RunningCourse course, double meters) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('시작점까지 길찾기'),
+        content: Text(
+          '${course.name} 시작점이 ${Formatters.awayDistance(meters)} 떨어져 있어요.\n'
+          '카카오맵으로 길찾기를 시작할까요?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('여기서 시작'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('길찾기'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openRouteToStart({
+    required GeoPoint from,
+    required GeoPoint to,
+  }) async {
+    final opened = await Services.instance.kakaoMapLauncher.openWalkingRoute(
+      from: from,
+      to: to,
+    );
+    if (!mounted || opened) return;
+    _showMessage('길찾기를 열지 못했어요.');
   }
 
   /// 코스 등록(관리자 전용)으로 가는 길. 예전에는 '코스' 탭 상단에 있었는데,
@@ -369,6 +469,7 @@ class _RunningScreenState extends State<RunningScreen> {
               onToggleFavorite: _toggleSelectedFavorite,
               onClose: _clearSelection,
               onRetryDetail: () => _selectCourse(selected),
+              isPreparingStart: _isPreparingStart,
               onStart: () => _startRun(course: _selectedDetail),
               onEdit: () => _editCourse(_selectedDetail ?? selected),
             ),

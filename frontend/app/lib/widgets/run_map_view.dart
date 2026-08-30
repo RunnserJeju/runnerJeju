@@ -30,6 +30,7 @@ class RunMapView extends StatefulWidget {
     this.initialCenter,
     this.followCurrentPosition = false,
     this.showCourseDirection = false,
+    this.isAwaitingLocation = false,
   });
 
   /// 따라 달릴 코스 경로. 강조색 실선으로 그린다.
@@ -49,7 +50,9 @@ class RunMapView extends StatefulWidget {
   /// 지금 위치. 주면 이 위젯이 자체 렌더 루프를 돌려 마커와 경로를 함께 그린다.
   final GeoPoint? currentPosition;
 
-  /// 최초 지도 중심. 없으면 경로 중심 → 제주시청 순으로 대체한다.
+  /// 최초 지도 중심. 없으면 현위치 → 코스/러닝 경로의 중심 순으로 대체하고,
+  /// 그것마저 없으면 지도를 아예 만들지 않는다 — 임시 좌표로 띄웠다가 나중에
+  /// 옮기면 그 이동이 화면에서 점프로 보인다([isAwaitingLocation]).
   final GeoPoint? initialCenter;
 
   /// true면 현재 위치를 따라 지도 중심을 이동한다.
@@ -59,11 +62,9 @@ class RunMapView extends StatefulWidget {
   /// 시작 전에는 코스 모양만 깔끔하게 보여준다.
   final bool showCourseDirection;
 
-  /// 위치를 아직 모를 때 쓰는 기본 중심(제주시청).
-  static const GeoPoint defaultCenter = GeoPoint(
-    latitude: 33.4996,
-    longitude: 126.5312,
-  );
+  /// 지금 현위치를 조회하는 중인지. 그릴 좌표가 하나도 없을 때, 곧 들어올
+  /// 것인지(러닝 화면) 애초에 없는 것인지(빈 기록)를 이 값으로 가른다.
+  final bool isAwaitingLocation;
 
   @override
   State<RunMapView> createState() => _RunMapViewState();
@@ -149,10 +150,6 @@ class _RunMapViewState extends State<RunMapView>
   bool _hasFittedStaticPath = false;
   bool _disposed = false;
 
-  /// 마지막으로 카메라를 옮긴 [RunMapView.initialCenter]. GPS 조회가 지도 생성
-  /// 뒤에 늦게 끝나는 경우(자유 러닝) 그 값이 뒤늦게 들어오면 한 번 더 옮긴다.
-  GeoPoint? _appliedInitialCenter;
-
   // 러닝 중 카메라에 지정할 배율.
   //
   // 매번 명시적인 값을 넘겨야 한다. CameraUpdate.newCenterPosition의 zoomLevel을
@@ -224,14 +221,6 @@ class _RunMapViewState extends State<RunMapView>
   );
 
   @override
-  void initState() {
-    super.initState();
-    // 지도를 만들 때 이미 값이 있었다면 KakaoMapOption.position(build 참고)이
-    // 그 자리로 이미 잡아 준다 — _syncInitialCenter가 또 옮길 필요가 없다.
-    _appliedInitialCenter = widget.initialCenter;
-  }
-
-  @override
   void didUpdateWidget(covariant RunMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
     // 러닝 화면은 경과 시간 때문에 1초마다 rebuild된다. 지도에 넣을 값이 그대로면
@@ -244,7 +233,6 @@ class _RunMapViewState extends State<RunMapView>
       old.followCurrentPosition != widget.followCurrentPosition ||
       old.showCourseDirection != widget.showCourseDirection ||
       !identical(_lastSample, widget.currentPosition) ||
-      !identical(old.initialCenter, widget.initialCenter) ||
       !_isSamePath(old.coursePath, widget.coursePath) ||
       !_isSamePath(old.runPath, widget.runPath) ||
       !identical(old.parkings, widget.parkings) ||
@@ -276,10 +264,18 @@ class _RunMapViewState extends State<RunMapView>
       return MapErrorView(error: error, keyHash: _keyHash);
     }
 
+    // 중심을 모르는 채로는 지도를 만들지 않는다. KakaoMapOption.position은 최초
+    // 생성 때 한 번만 읽히므로, 아무 데나 띄워 놓고 좌표가 도착한 뒤 옮기면
+    // 그 이동이 그대로 카메라 점프로 보인다(예전의 제주시청 → 현위치 튐).
     final center = widget.initialCenter ??
+        widget.currentPosition ??
         GeoUtils.centerOf(widget.coursePath) ??
-        GeoUtils.centerOf(widget.runPath) ??
-        RunMapView.defaultCenter;
+        GeoUtils.centerOf(widget.runPath);
+    if (center == null) {
+      return widget.isAwaitingLocation
+          ? const MapLoadingView()
+          : const MapEmptyView();
+    }
 
     return kakao.KakaoMap(
       option: kakao.KakaoMapOption(
@@ -335,7 +331,6 @@ class _RunMapViewState extends State<RunMapView>
 
         // 순서가 중요하다. 현위치와 카메라는 점 하나만 보내면 되지만 코스는
         // 점이 쌓일수록 무거워진다. 가벼운 쪽을 앞에 둔다.
-        await _syncInitialCenter(controller);
         await _syncLivePosition(controller);
         await _moveCamera(controller);
         await _drawCourse(controller);
@@ -345,31 +340,6 @@ class _RunMapViewState extends State<RunMapView>
     } finally {
       _isRedrawing = false;
     }
-  }
-
-  /// 자유 러닝에서 GPS 조회가 지도 생성보다 늦게 끝나는 경우를 보정한다.
-  ///
-  /// [RunScreen]은 화면을 열자마자 현위치를 비동기로 조회해 [initialCenter]에
-  /// 채워 넣는다([RunMapView.initialCenter] 참고). 그런데 지도는 그 값이
-  /// 도착하기 전에 이미 기본 중심(제주시청)으로 만들어지는 경우가 흔하고,
-  /// [build]의 [kakao.KakaoMapOption.position]은 최초 생성 때 한 번만 읽혀서
-  /// 그 뒤로 [initialCenter]가 바뀌어도 카메라가 저절로 따라가지 않는다.
-  /// 여기서 늦게 도착한 값을 감지해 한 번 옮겨 준다.
-  Future<void> _syncInitialCenter(kakao.KakaoMapController controller) async {
-    final center = widget.initialCenter;
-    if (center == null || identical(_appliedInitialCenter, center)) return;
-    _appliedInitialCenter = center;
-
-    // 이미 달리는 중이면 곧이어 _moveCamera가 현위치로 카메라를 잡으므로
-    // 여기서 옮기면 그 이동과 겹쳐 화면이 한 번 더 튄다.
-    if (widget.followCurrentPosition) return;
-
-    await controller.moveCamera(
-      kakao.CameraUpdate.newCenterPosition(
-        _toLatLng(center),
-        zoomLevel: _initialZoomLevel,
-      ),
-    );
   }
 
   /// 새 위치를 보간기에 넣고, 마커를 만들고, 렌더 루프를 켠다.

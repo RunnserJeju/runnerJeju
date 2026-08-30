@@ -27,6 +27,7 @@ class CoursePreviewSheet extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onClose,
     required this.onRetryDetail,
+    required this.isPreparingStart,
     required this.onStart,
     required this.onEdit,
   });
@@ -45,6 +46,11 @@ class CoursePreviewSheet extends StatelessWidget {
 
   final VoidCallback onClose;
   final VoidCallback onRetryDetail;
+
+  /// 시작을 눌러 놓고 현위치를 잡는 중인지. 시작점까지의 거리를 재려면 위치가
+  /// 필요해서, 누른 뒤 잠깐 기다리는 구간이 생긴다.
+  final bool isPreparingStart;
+
   final VoidCallback onStart;
 
   /// 관리자 전용 코스 수정. AdminOnly로 감싸 일반 사용자에겐 안 보인다.
@@ -96,6 +102,7 @@ class CoursePreviewSheet extends StatelessWidget {
               const SizedBox(height: 16),
               _StartButton(
                 isReady: detail != null,
+                isPreparing: isPreparingStart,
                 hasError: detailError != null,
                 onStart: onStart,
                 onRetry: onRetryDetail,
@@ -354,12 +361,14 @@ class _MetaChips extends StatelessWidget {
 class _StartButton extends StatelessWidget {
   const _StartButton({
     required this.isReady,
+    required this.isPreparing,
     required this.hasError,
     required this.onStart,
     required this.onRetry,
   });
 
   final bool isReady;
+  final bool isPreparing;
   final bool hasError;
   final VoidCallback onStart;
   final VoidCallback onRetry;
@@ -374,7 +383,9 @@ class _StartButton extends StatelessWidget {
       );
     }
 
-    if (!isReady) {
+    // 상세를 기다릴 때와 현위치를 기다릴 때가 같은 모양이다. 사용자에게는
+    // 둘 다 "누르고 잠깐 기다리는 중"이고, 무엇을 기다리는지는 알 바 아니다.
+    if (!isReady || isPreparing) {
       return FilledButton(
         onPressed: null,
         child: const SizedBox(

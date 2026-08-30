@@ -8,6 +8,12 @@ class Formatters {
   static String distanceKm(double meters) =>
       (meters / 1000).toStringAsFixed(2);
 
+  /// 미터 → "320m" / "1.2km". 얼마나 떨어져 있는지 한 줄로 말할 때 쓴다.
+  /// [distanceKm]와 달리 단위를 붙이고, 가까우면 m로 말한다.
+  static String awayDistance(double meters) => meters < 1000
+      ? '${meters.round()}m'
+      : '${(meters / 1000).toStringAsFixed(1)}km';
+
   /// 초 → "00:32:41" 또는 "32:41"
   static String duration(Duration elapsed) {
     final h = elapsed.inHours;

@@ -21,9 +21,14 @@ import 'run_result_screen.dart';
 ///
 /// [course]를 주면 코스를 따라 달리는 러닝이 되고, 코스 경로가 함께 그려진다.
 class RunScreen extends StatefulWidget {
-  const RunScreen({super.key, this.course});
+  const RunScreen({super.key, this.course, this.initialCenter});
 
   final RunningCourse? course;
+
+  /// 지도를 처음 놓을 자리. 러닝을 시작한 화면이 방금 잡은 현위치를 넘겨 준다.
+  /// 있으면 지도가 곧바로 그 자리에서 열리고, 없으면 여기서 직접 조회할 때까지
+  /// 지도 자리에 로딩이 보인다([_resolveInitialCenter]).
+  final GeoPoint? initialCenter;
 
   @override
   State<RunScreen> createState() => _RunScreenState();
@@ -44,7 +49,8 @@ class _RunScreenState extends State<RunScreen> {
   void initState() {
     super.initState();
     _tracker.addListener(_onTrackerChanged);
-    _resolveInitialCenter();
+    _initialCenter = widget.initialCenter;
+    if (_initialCenter == null) _resolveInitialCenter();
   }
 
   @override
@@ -82,10 +88,12 @@ class _RunScreenState extends State<RunScreen> {
     setState(() {});
   }
 
-  /// 러닝 시작 전에도 지도가 내 주변을 보여주도록 현재 위치를 한 번 조회한다.
+  /// 지도를 놓을 자리를 직접 조회한다. 넘겨받은 [RunScreen.initialCenter]가
+  /// 없을 때만 — 즉 지도 화면에서도 위치를 못 잡았던 경우에만 — 돈다.
+  ///
+  /// 코스 러닝도 예외가 아니다. 코스 한가운데를 보여주고 시작하면 정작 사용자가
+  /// 서 있는 곳이 화면 밖일 수 있다.
   Future<void> _resolveInitialCenter() async {
-    if (widget.course != null) return;
-
     final availability = await Services.instance.location.ensurePermission();
     if (!availability.isReady || !mounted) return;
 
@@ -93,7 +101,8 @@ class _RunScreenState extends State<RunScreen> {
       final position = await Services.instance.location.currentPosition();
       if (mounted) setState(() => _initialCenter = position);
     } catch (_) {
-      // 위치를 못 잡아도 기본 중심으로 지도를 띄운다.
+      // 끝내 못 잡으면 코스 러닝은 코스 중심으로, 자유 러닝은 로딩인 채로
+      // 남는다. 어느 쪽이든 첫 위치가 들어오면 카메라가 따라간다.
     }
   }
 
@@ -197,6 +206,9 @@ class _RunScreenState extends State<RunScreen> {
                 currentPosition: tracker.currentPosition,
                 initialCenter: _initialCenter,
                 followCurrentPosition: tracker.status == RunStatus.running,
+                // 넘겨받은 좌표도 없고 직접 조회도 아직이면 지도를 띄울 자리를
+                // 모른다. 그동안 지도 자리에 로딩이 보인다.
+                isAwaitingLocation: _initialCenter == null,
                 showCourseDirection: isActive,
               ),
             ),

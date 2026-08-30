@@ -14,6 +14,7 @@ import 'banner_service.dart';
 import 'course_service.dart';
 import 'favorite_service.dart';
 import 'geo_service.dart';
+import 'kakao_map_launcher.dart';
 import 'location_service.dart';
 import 'notice_service.dart';
 import 'program_service.dart';
@@ -70,6 +71,9 @@ class Services {
   /// 실제 GPS. 시뮬레이션 러닝은 이걸 바꾸지 않고 [RunTracker.start]에
   /// 위치원을 따로 넘긴다 — 그래야 앱 전역이 아니라 그 한 번의 러닝만 가짜가 된다.
   late final LocationService location = LocationService();
+
+  /// 코스 시작점까지의 길안내. 카카오맵 앱/웹을 띄우기만 하는 얇은 계층이다.
+  late final KakaoMapLauncher kakaoMapLauncher = const KakaoMapLauncher();
 
   /// 진행 중인 러닝은 화면 전환과 무관하게 유지되어야 하므로 전역에 하나만 둔다.
   late final RunTracker runTracker = RunTracker(location);

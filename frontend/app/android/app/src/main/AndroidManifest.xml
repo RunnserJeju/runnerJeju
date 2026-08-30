@@ -86,5 +86,16 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- 코스 시작점까지 길찾기(KakaoMapLauncher)가 쓰는 두 갈래.
+             Android 11+는 여기 없는 앱을 아예 못 보므로, 카카오맵이 깔려
+             있어도 canLaunchUrl이 false가 되고 https 폴백조차 열리지 않는다. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="kakaomap"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

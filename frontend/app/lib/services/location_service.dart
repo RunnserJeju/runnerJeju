@@ -88,10 +88,15 @@ class LocationService {
   }
 
   /// 현재 위치 1회 조회. 권한이 없으면 예외가 난다.
-  Future<GeoPoint> currentPosition() async {
+  ///
+  /// [timeLimit]을 주면 그 안에 좌표를 못 잡을 때 TimeoutException을 낸다.
+  /// 사용자를 기다리게 해 놓고 조회하는 자리(러닝 시작 직전)에서 쓴다 — 실내처럼
+  /// 위성이 안 잡히는 곳에서 getCurrentPosition은 한없이 기다릴 수 있다.
+  Future<GeoPoint> currentPosition({Duration? timeLimit}) async {
     final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
+      locationSettings: LocationSettings(
         accuracy: LocationAccuracy.high,
+        timeLimit: timeLimit,
       ),
     );
     return _toGeoPoint(position);
