@@ -39,11 +39,15 @@ main (개발)  ──PR/merge──▶  live (배포)
 
 ## 배포하기
 
+`live`는 보호 브랜치라 직접 푸시가 막혀 있다. **PR로만 배포한다.**
+
 ```powershell
-git switch live
-git merge main      # 또는 GitHub에서 main → live PR
-git push            # ← 이게 배포다
+gh pr create --base live --head main --title "배포" --fill
+gh pr merge --merge          # ← 병합되는 순간이 배포다
 ```
+
+승인자는 필요 없다(필요 승인 수 0). 리뷰를 받고 싶으면 GitHub에서 평소처럼 붙이면
+된다. 웹에서 main → live PR을 만들어 병합해도 똑같다.
 
 진행 상황은 콘솔의 Cloud Build > 기록, 또는:
 
@@ -194,10 +198,31 @@ git switch -c live
 git push -u origin live
 ```
 
-GitHub에서 `live` 브랜치 보호 규칙을 켜두면 좋다 — **직접 푸시 금지, PR로만 병합.**
-검증 안 된 커밋이 실수로 라이브에 나가는 걸 막는다. (아직 안 걸어둠)
+## 6. live 브랜치 보호 ✅
 
-## 6. 첫 배포 ✅
+검증 안 된 커밋이 실수로 라이브에 나가는 걸 막는다. 저장소가 public이라 classic
+branch protection을 그대로 쓴다(Rulesets도 되지만 규칙 하나엔 이쪽이 간단하다).
+
+```powershell
+gh api -X PUT repos/RunnserJeju/runnerJeju/branches/live/protection `
+  -H "Accept: application/vnd.github+json" `
+  -F "required_pull_request_reviews[required_approving_review_count]=0" `
+  -F "enforce_admins=true" `
+  -F "required_status_checks=null" -F "restrictions=null" `
+  -F "allow_force_pushes=false" -F "allow_deletions=false"
+```
+
+| 설정 | 왜 |
+| --- | --- |
+| 필요 승인 수 `0` | PR은 필수지만 승인자는 없어도 된다. `1`로 두면 자기 PR을 자기가 승인 못 해 지금 인원에선 배포가 아예 막힌다 |
+| `enforce_admins=true` | 오너도 직접 푸시 불가. 없으면 규칙이 사실상 무의미하다 |
+| force push·삭제 차단 | live 히스토리를 되돌릴 수 없게 |
+
+> 긴급하게 우회해야 하면 규칙을 잠깐 끄는 수밖에 없다:
+> `gh api -X DELETE repos/RunnserJeju/runnerJeju/branches/live/protection`
+> (다시 켤 땐 위 PUT을 그대로 다시 돌린다.)
+
+## 7. 첫 배포 ✅
 
 커밋 `0c88336` → 리비전 `runners-jeju-api-00004-nk5`. 이 배포로 13일 밀려 있던
 찜(`/favorites`)·운영진(`/admin/*`)·좌표 변환 API가 라이브에 올라갔고,

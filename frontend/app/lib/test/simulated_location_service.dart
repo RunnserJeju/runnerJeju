@@ -41,8 +41,9 @@ class SimulatedLocationService implements LocationService {
   Future<LocationAvailability> ensurePermission() async =>
       LocationAvailability.ready;
 
+  // 시뮬레이션은 좌표를 즉시 만들어 내므로 timeLimit을 볼 일이 없다.
   @override
-  Future<GeoPoint> currentPosition() async {
+  Future<GeoPoint> currentPosition({Duration? timeLimit}) async {
     final start = _resolveRoute().first;
     return GeoPoint(
       latitude: start.latitude,

@@ -20,30 +20,41 @@ import httpx
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_API_SECRET_KEY = os.environ.get("SUPABASE_API_SECRET_KEY")
+
+# 이미지 종류별로 버킷을 나눈다 — 배너와 코스 썸네일이 섞이면 정리·용량 파악·
+# 캐시 정책을 따로 걸기 어렵다. 호출자가 어느 버킷에 올릴지 넘기고, 안 넘기면
+# 배너 버킷을 기본으로 쓴다(기존 배너 코드가 그대로 도는 하위호환).
 SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "banners")
+SUPABASE_COURSE_BUCKET = os.environ.get("SUPABASE_COURSE_BUCKET", "course-thumbnails")
 
 
 class StorageUploadError(RuntimeError):
     """설정 누락이나 업로드 실패. message는 그대로 사용자에게 보여줘도 된다."""
 
 
-def upload_image(content: bytes, *, content_type: str, extension: str) -> str:
+def upload_image(
+    content: bytes, *, content_type: str, extension: str, bucket: str | None = None
+) -> str:
     """이미지 바이트를 Storage에 올리고 public URL을 돌려준다.
 
-    오브젝트 경로는 매번 uuid4로 새로 만든다 — 같은 배너를 다시 올려도 옛 URL을
+    bucket을 안 주면 배너 버킷(SUPABASE_STORAGE_BUCKET)에 올린다 — 배너 코드가
+    인자 없이 부르던 것을 그대로 유지하려는 기본값이다. 코스 썸네일처럼 다른
+    버킷에 넣으려면 bucket을 명시한다.
+
+    오브젝트 경로는 매번 uuid4로 새로 만든다 — 같은 이미지를 다시 올려도 옛 URL을
     가리키는 캐시(CDN·클라이언트 이미지 캐시)가 새 이미지를 안 보여주는 문제를
-    피하려고. 옛 오브젝트를 지우는 로직은 아직 없다(배너 개수가 적어서 나중에
-    정리해도 됨 — 1GB 프리 티어 기준 참고).
+    피하려고.
     """
     if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
         raise StorageUploadError(
             "이미지 업로드가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_API_SECRET_KEY)."
         )
 
+    bucket = bucket or SUPABASE_STORAGE_BUCKET
     path = f"{uuid.uuid4()}.{extension}"
 
     response = httpx.put(
-        f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{path}",
+        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
         headers={
             "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
             "apikey": SUPABASE_API_SECRET_KEY,
@@ -56,27 +67,31 @@ def upload_image(content: bytes, *, content_type: str, extension: str) -> str:
     if response.status_code >= 400:
         raise StorageUploadError(f"이미지 업로드에 실패했어요: {response.text[:200]}")
 
-    return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_STORAGE_BUCKET}/{path}"
+    return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
 
 
-def delete_image(image_url: str) -> None:
+def delete_image(image_url: str, *, bucket: str | None = None) -> None:
     """`upload_image`가 돌려준 public URL로 Storage 오브젝트를 지운다.
 
-    실패해도 예외를 던지지 않는다 — 호출자(배너 삭제)는 DB row를 지우는 게
+    bucket은 올릴 때와 같은 값을 줘야 URL에서 경로를 뽑아낸다(안 주면 배너 버킷).
+    URL이 다른 버킷을 가리키면 marker가 안 맞아 조용히 넘어간다.
+
+    실패해도 예외를 던지지 않는다 — 호출자(배너·코스 삭제)는 DB row를 지우는 게
     본목적이고, Storage 정리는 부가적이다. URL 형식이 예상과 달라 경로를 못
     뽑거나 이미 지워진 파일이면 조용히 넘어간다.
     """
     if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
         return
 
-    marker = f"/object/public/{SUPABASE_STORAGE_BUCKET}/"
+    bucket = bucket or SUPABASE_STORAGE_BUCKET
+    marker = f"/object/public/{bucket}/"
     if marker not in image_url:
         return
     path = image_url.split(marker, 1)[1]
 
     try:
         httpx.delete(
-            f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_STORAGE_BUCKET}/{path}",
+            f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
             headers={
                 "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
                 "apikey": SUPABASE_API_SECRET_KEY,

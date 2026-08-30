@@ -10,6 +10,7 @@ DB 없이 라우터 함수를 직접 부르고 Session은 FakeSession으로 흉�
 (test_banners.py와 같은 방침). GPX는 실제 코스 파일(sagye-coastal.gpx)을 쓴다.
 """
 
+import io
 import uuid
 from pathlib import Path
 
@@ -17,7 +18,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app import geocoding
+from app import geocoding, storage
 from app.admin import courses as admin_courses_router
 from app.models import Course
 from app.routers import courses as courses_router
@@ -96,6 +97,28 @@ class TestCreateCourseFacilities:
         assert len(course.restrooms) == 2
 
 
+class TestCreateCourseEstimatedTime:
+    def test_stores_estimated_time_min(self):
+        db = FakeSession()
+        course = _create(db, estimated_time_min=90)
+
+        assert course.estimated_time_min == 90
+
+    def test_defaults_to_none(self):
+        # 안 넘기면 None이다(명단에 소요시간이 없는 코스가 있다).
+        db = FakeSession()
+        course = _create(db)
+
+        assert course.estimated_time_min is None
+
+    def test_never_sets_thumbnail(self):
+        # 썸네일은 등록에서 안 채운다 — 전용 엔드포인트가 따로 올린다.
+        db = FakeSession()
+        course = _create(db, estimated_time_min=60)
+
+        assert course.thumbnail_url is None
+
+
 class TestToSummary:
     def test_includes_facility_lists(self):
         course = Course(
@@ -107,12 +130,33 @@ class TestToSummary:
             path=[{"lat": 33.5, "lng": 126.5}],
             parkings=[PARKING],
             restrooms=[],
+            estimated_time_min=75,
+            thumbnail_url="https://example.com/a.png",
         )
 
         summary = courses_router._to_summary(course, 0, False)
 
         assert summary["parkings"] == [PARKING]
         assert summary["restrooms"] == []
+        assert summary["estimated_time_min"] == 75
+        assert summary["thumbnail_url"] == "https://example.com/a.png"
+
+    def test_estimated_time_and_thumbnail_default_none(self):
+        course = Course(
+            id=uuid.uuid4(),
+            name="c",
+            distance_km=6,
+            difficulty=2,
+            address="제주",
+            path=[],
+            parkings=[],
+            restrooms=[],
+        )
+
+        summary = courses_router._to_summary(course, 0, False)
+
+        assert summary["estimated_time_min"] is None
+        assert summary["thumbnail_url"] is None
 
     def test_empty_when_columns_are_none(self):
         # JSONB 기본값이 아직 안 붙은 옛 행 등에서 None이 와도 빈 리스트로 내려간다.
@@ -206,6 +250,7 @@ class TestUpdateCourse:
             address="새 주소",
             tags="새,태그",
             description="새 설명",
+            estimated_time_min=120,
             parkings=[PARKING],
             restrooms=[],
         )
@@ -224,9 +269,31 @@ class TestUpdateCourse:
         assert course.address == "새 주소"
         assert course.tags == "새,태그"
         assert course.description == "새 설명"
+        assert course.estimated_time_min == 120
         assert db.committed is True
         # 응답에도 반영된다.
         assert result["name"] == "새 이름"
+        assert result["estimated_time_min"] == 120
+
+    def test_clears_estimated_time_with_none(self):
+        # null을 보내면 소요시간을 지운다.
+        course = _course(estimated_time_min=90)
+        db = UpdateFakeSession(course)
+
+        admin_courses_router.update_course(
+            course.id, self._payload(estimated_time_min=None), db, "admin"
+        )
+
+        assert course.estimated_time_min is None
+
+    def test_does_not_touch_thumbnail(self):
+        # 메타데이터 수정은 썸네일을 건드리지 않는다(전용 엔드포인트 담당).
+        course = _course(thumbnail_url="https://example.com/keep.png")
+        db = UpdateFakeSession(course)
+
+        admin_courses_router.update_course(course.id, self._payload(), db, "admin")
+
+        assert course.thumbnail_url == "https://example.com/keep.png"
 
     def test_replaces_facilities(self):
         course = _course(parkings=[{"name": "옛주차장", "address": "옛", "lat": 1, "lng": 2}])
@@ -273,6 +340,17 @@ class TestCourseUpdateSchema:
         assert payload.parkings == []
         assert payload.restrooms == []
 
+    def test_estimated_time_defaults_to_none(self):
+        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, address="제주")
+
+        assert payload.estimated_time_min is None
+
+    def test_rejects_non_positive_estimated_time(self):
+        with pytest.raises(ValidationError):
+            CourseUpdate(
+                name="x", distance_km=5, difficulty=2, address="제주", estimated_time_min=0
+            )
+
 
 class TestPushCoursesResolveFacilities:
     def _fake_geocode(self, lat=33.5, lng=126.5):
@@ -308,3 +386,257 @@ class TestPushCoursesResolveFacilities:
 
         with pytest.raises(SystemExit, match="address가 없어요"):
             push_courses._resolve_facilities([{"name": "이름만"}], "주차장", "코스")
+
+
+class FakeUpload:
+    """UploadFile 흉내 — content_type과 .file.read(n)만 있으면 엔드포인트가 돈다."""
+
+    def __init__(self, content: bytes = b"img-bytes", content_type: str = "image/png"):
+        self.content_type = content_type
+        self.file = io.BytesIO(content)
+
+
+class TestCourseThumbnail:
+    def _patch_storage(self, monkeypatch, *, url="https://cdn/new.png"):
+        """storage 업로드/삭제를 가로채 호출을 기록한다(네트워크 없이 로직만 본다)."""
+        deleted: list[str] = []
+        monkeypatch.setattr(
+            storage,
+            "upload_image",
+            lambda content, *, content_type, extension, bucket=None: url,
+        )
+        monkeypatch.setattr(
+            storage, "delete_image", lambda old, *, bucket=None: deleted.append(old)
+        )
+        return deleted
+
+    def test_sets_thumbnail_when_none(self, monkeypatch):
+        deleted = self._patch_storage(monkeypatch, url="https://cdn/new.png")
+        course = _course(thumbnail_url=None)
+        db = UpdateFakeSession(course)
+
+        result = admin_courses_router.set_course_thumbnail(
+            course.id, FakeUpload(), db, "admin"
+        )
+
+        assert course.thumbnail_url == "https://cdn/new.png"
+        assert result["thumbnail_url"] == "https://cdn/new.png"
+        # 옛 썸네일이 없었으니 삭제는 부르지 않는다.
+        assert deleted == []
+
+    def test_replaces_and_deletes_old(self, monkeypatch):
+        deleted = self._patch_storage(monkeypatch, url="https://cdn/new.png")
+        course = _course(thumbnail_url="https://cdn/old.png")
+        db = UpdateFakeSession(course)
+
+        admin_courses_router.set_course_thumbnail(course.id, FakeUpload(), db, "admin")
+
+        assert course.thumbnail_url == "https://cdn/new.png"
+        # 교체 시 옛 오브젝트를 지운다.
+        assert deleted == ["https://cdn/old.png"]
+
+    def test_rejects_non_image_type(self, monkeypatch):
+        self._patch_storage(monkeypatch)
+        course = _course(thumbnail_url=None)
+        db = UpdateFakeSession(course)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.set_course_thumbnail(
+                course.id, FakeUpload(content_type="application/pdf"), db, "admin"
+            )
+
+        assert exc_info.value.status_code == 422
+        assert course.thumbnail_url is None
+
+    def test_set_404_when_course_missing(self, monkeypatch):
+        self._patch_storage(monkeypatch)
+        db = UpdateFakeSession(None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.set_course_thumbnail(
+                uuid.uuid4(), FakeUpload(), db, "admin"
+            )
+
+        assert exc_info.value.status_code == 404
+
+    def test_delete_clears_and_removes_object(self, monkeypatch):
+        deleted = self._patch_storage(monkeypatch)
+        course = _course(thumbnail_url="https://cdn/old.png")
+        db = UpdateFakeSession(course)
+
+        result = admin_courses_router.delete_course_thumbnail(course.id, db, "admin")
+
+        assert course.thumbnail_url is None
+        assert result["thumbnail_url"] is None
+        assert deleted == ["https://cdn/old.png"]
+
+    def test_delete_is_noop_when_already_none(self, monkeypatch):
+        deleted = self._patch_storage(monkeypatch)
+        course = _course(thumbnail_url=None)
+        db = UpdateFakeSession(course)
+
+        admin_courses_router.delete_course_thumbnail(course.id, db, "admin")
+
+        # 지울 게 없으면 Storage 삭제도 부르지 않는다.
+        assert deleted == []
+
+    def test_delete_404_when_course_missing(self, monkeypatch):
+        self._patch_storage(monkeypatch)
+        db = UpdateFakeSession(None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.delete_course_thumbnail(uuid.uuid4(), db, "admin")
+
+        assert exc_info.value.status_code == 404
+
+
+class _GpxReplaceResult:
+    """execute() 결과 흉내. 활동 조회는 .first(), 완주 조회는 .all()/.scalars()를 쓴다."""
+
+    def __init__(self, *, has_activity: bool):
+        self._has_activity = has_activity
+
+    def first(self):
+        return ("row",) if self._has_activity else None
+
+    def all(self):
+        return []
+
+    def scalars(self):
+        return []
+
+
+class GpxReplaceFakeSession:
+    def __init__(self, course: Course | None, *, has_activity: bool = False):
+        self._course = course
+        self._has_activity = has_activity
+        self.committed = False
+        # 실행된 statement를 모아 초기화(delete) 호출을 검증한다.
+        self.executed: list = []
+
+    def get(self, _model, course_id):
+        if self._course is not None and self._course.id == course_id:
+            return self._course
+        return None
+
+    def execute(self, stmt):
+        self.executed.append(stmt)
+        return _GpxReplaceResult(has_activity=self._has_activity)
+
+    def commit(self):
+        self.committed = True
+
+    def refresh(self, _obj):
+        pass
+
+    @property
+    def delete_count(self) -> int:
+        return sum(1 for s in self.executed if type(s).__name__ == "Delete")
+
+
+class TestReplaceCourseGpx:
+    def test_replaces_path_when_no_activity(self):
+        course = _course()
+        original_path = list(course.path)
+        db = GpxReplaceFakeSession(course, has_activity=False)
+
+        result = admin_courses_router.replace_course_gpx(
+            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+        )
+
+        # 경로가 실제로 새 GPX에서 뽑은 점들로 바뀐다.
+        assert course.path != original_path
+        assert len(course.path) > 0
+        assert result["path"] == course.path
+        assert db.committed is True
+        # 기록이 없으면 초기화(delete)는 하지 않는다.
+        assert db.delete_count == 0
+
+    def test_does_not_touch_metadata_or_thumbnail(self):
+        course = _course(thumbnail_url="https://cdn/keep.png")
+        db = GpxReplaceFakeSession(course, has_activity=False)
+
+        admin_courses_router.replace_course_gpx(
+            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+        )
+
+        assert course.name == "옛 이름"
+        assert course.thumbnail_url == "https://cdn/keep.png"
+
+    def test_409_when_activity_and_not_confirmed(self):
+        course = _course()
+        original_path = list(course.path)
+        db = GpxReplaceFakeSession(course, has_activity=True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                course.id,
+                FakeUpload(content=SAGYE.read_bytes()),
+                reset_records=False,
+                db=db,
+                user_id="admin",
+            )
+
+        assert exc_info.value.status_code == 409
+        # 경로는 그대로 — 커밋도 초기화도 안 한다.
+        assert course.path == original_path
+        assert db.committed is False
+        assert db.delete_count == 0
+
+    def test_resets_records_when_confirmed(self):
+        course = _course()
+        original_path = list(course.path)
+        db = GpxReplaceFakeSession(course, has_activity=True)
+
+        result = admin_courses_router.replace_course_gpx(
+            course.id,
+            FakeUpload(content=SAGYE.read_bytes()),
+            reset_records=True,
+            db=db,
+            user_id="admin",
+        )
+
+        # 경로 교체 + 스탬프/검증 초기화(delete 2건) + 커밋.
+        assert course.path != original_path
+        assert result["path"] == course.path
+        assert db.delete_count == 2
+        assert db.committed is True
+
+    def test_bad_gpx_does_not_reset_records(self):
+        # 파일 검증이 초기화보다 먼저다 — 잘못된 GPX면 아무것도 지우지 않는다.
+        course = _course()
+        db = GpxReplaceFakeSession(course, has_activity=True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                course.id,
+                FakeUpload(content=b""),
+                reset_records=True,
+                db=db,
+                user_id="admin",
+            )
+
+        assert exc_info.value.status_code == 422
+        assert db.delete_count == 0
+        assert db.committed is False
+
+    def test_404_when_course_missing(self):
+        db = GpxReplaceFakeSession(None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                uuid.uuid4(), FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+            )
+
+        assert exc_info.value.status_code == 404
+
+    def test_422_on_empty_gpx(self):
+        course = _course()
+        db = GpxReplaceFakeSession(course, has_activity=False)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.replace_course_gpx(
+                course.id, FakeUpload(content=b""), db=db, user_id="admin"
+            )
+
+        assert exc_info.value.status_code == 422

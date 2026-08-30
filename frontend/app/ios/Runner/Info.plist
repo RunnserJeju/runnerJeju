@@ -43,6 +43,9 @@
 	<array>
 		<string>kakaokompassauth</string>
 		<string>kakaolink</string>
+		<!-- 코스 시작점까지 길찾기(KakaoMapLauncher). 여기 없으면 카카오맵이
+		     깔려 있어도 canLaunchUrl이 false를 돌려줘 늘 웹으로 빠진다. -->
+		<string>kakaomap</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

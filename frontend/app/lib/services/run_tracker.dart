@@ -61,6 +61,49 @@ class RunTracker extends ChangeNotifier {
   /// 촘촘하게, 기록은 이 게이트를 지난 점만.
   static const double _commitMeters = 5;
 
+  // ── 위치 샘플 걸러내기 ──────────────────────────────────────────────
+  //
+  // 아래 넷은 전부 "페이스가 틀리는" 원인을 하나씩 막는다. 걸러낸 점은 마커에도
+  // 쓰지 않는다 — 라이브 지도의 선은 [currentPosition]으로 그려지므로, 기록만
+  // 거르고 마커는 그대로 두면 지도의 선과 저장되는 경로가 서로 달라진다.
+
+  /// 이보다 오차가 큰 점은 버린다. 도심에서 흔한 15~25m는 통과시키되, 첫
+  /// 고정 직후나 건물 사이에서 나오는 50m+ 튐은 걸러낸다. 그런 점 하나가
+  /// 수십 m를 순식간에 거리로 만든다.
+  static const double _maxAccuracyMeters = 30;
+
+  /// 이보다 오래된 점은 버린다. Android 위치 제공자는 구독 직후 마지막으로
+  /// 알려진(몇 분 전일 수 있는) 위치를 먼저 주는데, 그걸 출발점으로 삼으면
+  /// 실제 현위치까지의 거리가 첫 구간으로 잡힌다.
+  static const Duration _maxSampleAge = Duration(seconds: 10);
+
+  /// 직전 확정점에서 이 속도를 넘는 이동은 GPS 튐으로 본다(m/s). 8m/s는
+  /// 2'05"/km — 러닝 코스에서 나올 수 없는 값이다.
+  static const double _maxPlausibleSpeed = 8;
+
+  /// [_maxPlausibleSpeed]로 연속 이만큼 거르면 튐이 아니라 기준점이 낡은 것
+  /// (터널·지하도를 지나 진짜 이동했다)으로 보고 기준점을 갈아 끼운다. 그때의
+  /// 이동은 확실치 않으므로 거리에 넣지 않는다.
+  static const int _maxJumpRejections = 3;
+
+  /// GPS가 이 속도 미만이라 하면 서 있는 것으로 본다(m/s). 걷기가 1.2m/s
+  /// 안팎이라 여유가 있다. 서 있는 동안의 지터는 [_commitMeters]를 넘어도
+  /// 거리에 넣지 않는다.
+  static const double _stationarySpeed = 0.5;
+
+  /// 최근 페이스의 창(m). 러닝 앱들이 흔히 쓰는 "최근 1km".
+  static const double _recentPaceWindowMeters = 1000;
+
+  /// 이 거리 전에는 최근 페이스를 내지 않는다. 몇십 m 위의 페이스는 GPS
+  /// 오차가 그대로 숫자가 된다.
+  static const double _minPaceMeters = 100;
+
+  /// [_maxPlausibleSpeed]에 연속으로 걸린 횟수.
+  int _jumpRejections = 0;
+
+  /// 확정점마다의 (누적 거리, 경과 시간). 최근 페이스가 여기서 창을 자른다.
+  final List<({double meters, Duration elapsed})> _paceSamples = [];
+
   RunStatus get status => _status;
 
   /// 위치가 끊겨서 기록이 멈춰 있다면 그 사유. 화면이 이걸 보고 알린다.
@@ -68,6 +111,10 @@ class RunTracker extends ChangeNotifier {
   List<GeoPoint> get path => List.unmodifiable(_path);
   double get distanceMeters => _distanceMeters;
   /// 실제로 달린 시간(멈춰 있던 시간 제외).
+  ///
+  /// 시작 시각은 시작 버튼이 아니라 **첫 유효 위치**다([_onPosition]). 버튼
+  /// 시각으로 재면 GPS가 잡히기까지의 5~30초가 거리 0인 채로 흘러, 첫 5m가
+  /// 확정되는 순간 페이스가 60분/km 같은 값으로 시작한다.
   ///
   /// 1초 타이머로 세지 않고 시각을 뺀다. 타이머는 앱이 백그라운드로 내려가면
   /// 느려지거나 아예 멈추는데, 그동안에도 위치는 계속 들어오고 거리는 쌓인다.
@@ -97,10 +144,38 @@ class RunTracker extends ChangeNotifier {
   bool get isActive =>
       _status == RunStatus.running || _status == RunStatus.paused;
 
-  /// km당 초. 아직 움직이지 않았으면 null.
+  /// 달리는 중인데 아직 유효한 위치가 한 점도 안 들어왔는지. 그동안 시간은
+  /// 흐르지 않는다([elapsed]). 화면이 이걸 보고 "GPS 잡는 중"을 띄운다.
+  bool get isAwaitingFix => _status == RunStatus.running && _startedAt == null;
+
+  /// 러닝 전체의 평균 페이스(km당 초). 아직 움직이지 않았으면 null.
   double? get paceSecondsPerKm {
     if (_distanceMeters <= 0) return null;
-    return elapsed.inSeconds / (_distanceMeters / 1000);
+    return elapsed.inMilliseconds / 1000 / (_distanceMeters / 1000);
+  }
+
+  /// 최근 1km의 페이스(km당 초). 1km를 아직 못 뛰었으면 지금까지 전체가 창이라
+  /// [paceSecondsPerKm]와 같은 값이다 — 1km를 넘는 순간부터 둘이 갈라진다.
+  /// [_minPaceMeters] 전에는 null.
+  ///
+  /// 창의 시작점은 확정점 중에서 고르므로 정확히 1000m가 아니라 그 언저리의
+  /// 확정점부터다. 끝은 지금 이 순간이라, 서 있으면 페이스가 천천히 느려진다.
+  double? get recentPaceSecondsPerKm {
+    if (_distanceMeters < _minPaceMeters || _paceSamples.isEmpty) return null;
+
+    final nowElapsed = elapsed;
+    final windowStart = _distanceMeters - _recentPaceWindowMeters;
+    var from = _paceSamples.first;
+    for (final sample in _paceSamples) {
+      if (sample.meters >= windowStart) {
+        from = sample;
+        break;
+      }
+    }
+
+    final meters = _distanceMeters - from.meters;
+    if (meters <= 0) return null;
+    return (nowElapsed - from.elapsed).inMilliseconds / 1000 / (meters / 1000);
   }
 
   /// 코스 커버리지 0.0~1.0(코스 점 중 실제로 지나간 비율). 자유 러닝이면 null.
@@ -157,7 +232,7 @@ class RunTracker extends ChangeNotifier {
     _coverage = course == null || course.path.isEmpty
         ? null
         : CourseCoverageTracker(course.path);
-    _startedAt = DateTime.now();
+    // _startedAt은 여기서 잡지 않는다. 첫 유효 위치가 들어올 때 잡는다(elapsed 참고).
     _status = RunStatus.running;
     _activeLocation = location;
 
@@ -248,6 +323,9 @@ class RunTracker extends ChangeNotifier {
 
     _status = RunStatus.finished;
     _endedAt = DateTime.now();
+    // 위치를 한 점도 못 받고 끝냈으면 시작 시각이 없다. 기록은 남겨야 하므로
+    // 종료 시각으로 채운다 — 시간 0, 거리 0인 기록이 된다.
+    _startedAt ??= _endedAt;
     _ticker?.cancel();
     _positionSubscription?.cancel();
     _positionSubscription = null;
@@ -281,30 +359,94 @@ class RunTracker extends ChangeNotifier {
 
   void _onPosition(GeoPoint point) {
     if (_status != RunStatus.running) return;
-
-    // 마커용 최신 위치는 무조건 갱신한다.
-    _lastPosition = point;
+    if (!_isUsable(point)) return;
 
     final anchor = _commitAnchor;
     if (anchor == null) {
-      // 러닝 시작 후, 또는 일시정지 해제 후 첫 point인 경우  
-      // 재개한 경우라면 직전 점과 이 점 사이가 "일시정지 동안 이동한 구간"이다.  
-      // 그 구간은 거리에 넣지 않는다.  
-      final committed = _path.isEmpty ? point : point.asSegmentStart();
-      _commitAnchor = point;
-      _path.add(committed);
-      _coverage?.add(committed);
-    } else {
-      final moved = GeoUtils.distanceBetween(anchor, point);
-      if (moved >= _commitMeters) {
-        _distanceMeters += moved;
-        _commitAnchor = point;
-        _path.add(point);
-        _coverage?.add(point);
+      // 러닝 시작 후, 또는 일시정지 해제 후 첫 point인 경우
+      // 재개한 경우라면 직전 점과 이 점 사이가 "일시정지 동안 이동한 구간"이다.
+      // 그 구간은 거리에 넣지 않는다.
+      if (_startedAt == null) {
+        _startedAt = point.recordedAt ?? DateTime.now();
+        // 위치가 잡히기 전에 멈췄다 풀었으면 그 멈춤은 시작 전의 일이다.
+        _pausedTotal = Duration.zero;
       }
+      _lastPosition = point;
+      _jumpRejections = 0;
+      _commit(_path.isEmpty ? point : point.asSegmentStart());
+      notifyListeners();
+      return;
+    }
+
+    final moved = GeoUtils.distanceBetween(anchor, point);
+
+    if (_isImplausibleJump(anchor, point, moved)) {
+      if (++_jumpRejections < _maxJumpRejections) return;
+      // 계속 같은 곳을 가리킨다 — 튐이 아니라 우리가 뒤처진 것이다. 그 사이는
+      // 잰 것이 아니므로 끊긴 구간으로 표시하고 여기서 다시 시작한다.
+      _jumpRejections = 0;
+      _lastPosition = point;
+      _commit(point.asSegmentStart());
+      notifyListeners();
+      return;
+    }
+    _jumpRejections = 0;
+
+    // 마커용 최신 위치는 걸러낸 점만 빼고 갱신한다.
+    _lastPosition = point;
+
+    if (moved >= _commitMeters && !_isStationary(point)) {
+      _distanceMeters += moved;
+      _commit(point);
     }
 
     notifyListeners();
+  }
+
+  /// 점을 경로·커버리지·페이스 표본에 확정한다. 거리는 부르는 쪽이 먼저 더한다.
+  void _commit(GeoPoint point) {
+    _commitAnchor = point;
+    _path.add(point);
+    _coverage?.add(point);
+    _paceSamples.add((meters: _distanceMeters, elapsed: elapsed));
+
+    // 창 밖으로 완전히 나간 표본은 버린다. 창 경계 직전 표본 하나는 남겨야
+    // 창의 시작점으로 쓸 수 있다.
+    final windowStart = _distanceMeters - _recentPaceWindowMeters;
+    while (_paceSamples.length > 1 && _paceSamples[1].meters <= windowStart) {
+      _paceSamples.removeAt(0);
+    }
+  }
+
+  /// 오차가 크거나 오래된 점은 쓰지 않는다. 정보가 없는 점(시뮬레이션)은 통과.
+  bool _isUsable(GeoPoint point) {
+    final accuracy = point.accuracy;
+    if (accuracy != null && accuracy > _maxAccuracyMeters) return false;
+
+    final recordedAt = point.recordedAt;
+    if (recordedAt != null &&
+        DateTime.now().difference(recordedAt) > _maxSampleAge) {
+      return false;
+    }
+    return true;
+  }
+
+  /// 직전 확정점에서 여기까지가 사람이 뛸 수 없는 속도인지. 시각이 없으면
+  /// 판단할 수 없으므로 통과시킨다.
+  bool _isImplausibleJump(GeoPoint anchor, GeoPoint point, double moved) {
+    final from = anchor.recordedAt;
+    final to = point.recordedAt;
+    if (from == null || to == null) return false;
+
+    final seconds = to.difference(from).inMilliseconds / 1000;
+    if (seconds <= 0) return false;
+    return moved / seconds > _maxPlausibleSpeed;
+  }
+
+  /// GPS 자체가 "서 있다"고 하는지. 속도를 못 잰 점(null)은 모르는 것으로 둔다.
+  bool _isStationary(GeoPoint point) {
+    final speed = point.speed;
+    return speed != null && speed < _stationarySpeed;
   }
 
   /// 화면 갱신용 시계. 경과 시간을 여기서 세지는 않는다([elapsed] 참고) —
@@ -337,6 +479,8 @@ class RunTracker extends ChangeNotifier {
     _coverage = null;
     _activeLocation = null;
     _interruption = null;
+    _jumpRejections = 0;
+    _paceSamples.clear();
   }
 
   @override

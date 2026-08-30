@@ -7,6 +7,7 @@ class MetricTile extends StatelessWidget {
     required this.label,
     required this.value,
     this.unit,
+    this.caption,
     this.emphasized = false,
     this.alignment = CrossAxisAlignment.start,
   });
@@ -14,6 +15,9 @@ class MetricTile extends StatelessWidget {
   final String label;
   final String value;
   final String? unit;
+
+  /// 값 아래 작은 글씨. 주 지표에 딸린 보조 값(최근 페이스 아래의 평균)용.
+  final String? caption;
 
   /// true면 값을 크게 표시한다. 러닝 중 화면의 메인 지표용.
   final bool emphasized;
@@ -67,6 +71,18 @@ class MetricTile extends StatelessWidget {
             ],
           ],
         ),
+        if (caption != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            caption!,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: onSurface.withValues(alpha: 0.55),
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ],
     );
   }

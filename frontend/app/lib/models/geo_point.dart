@@ -38,6 +38,7 @@ class GeoPoint {
   final double? accuracy;
 
   // 이동 속도(m/s). GPS가 직접 내주는 값이라 좌표 차이로 계산한 것보다 안정적이다.
+  // 못 잰 점은 null이다(0이 아니다 — 0은 "서 있다"라는 뜻이다).
   final double? speed;
 
   /// 같은 좌표에 [startsNewSegment] 표시만 붙인 사본.

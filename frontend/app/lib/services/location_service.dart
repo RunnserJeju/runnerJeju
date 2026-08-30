@@ -45,6 +45,9 @@ class LocationService {
       return AndroidSettings(
         accuracy: LocationAccuracy.best,
         distanceFilter: minMeter,
+        // 기본값은 5초다(geolocator LocationOptions). iOS는 매초 주는데 Android만
+        // 5초면 5m 게이트를 넘는 점이 드문드문 들어와 초반 페이스가 계단처럼 튄다.
+        intervalDuration: const Duration(seconds: 1),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: '러닝 기록 중',
           notificationText: '경로와 거리를 기록하고 있어요',
@@ -88,10 +91,15 @@ class LocationService {
   }
 
   /// 현재 위치 1회 조회. 권한이 없으면 예외가 난다.
-  Future<GeoPoint> currentPosition() async {
+  ///
+  /// [timeLimit]을 주면 그 안에 좌표를 못 잡을 때 TimeoutException을 낸다.
+  /// 사용자를 기다리게 해 놓고 조회하는 자리(러닝 시작 직전)에서 쓴다 — 실내처럼
+  /// 위성이 안 잡히는 곳에서 getCurrentPosition은 한없이 기다릴 수 있다.
+  Future<GeoPoint> currentPosition({Duration? timeLimit}) async {
     final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
+      locationSettings: LocationSettings(
         accuracy: LocationAccuracy.high,
+        timeLimit: timeLimit,
       ),
     );
     return _toGeoPoint(position);
@@ -119,11 +127,16 @@ class LocationService {
   Future<void> openLocationSettings() => Geolocator.openLocationSettings();
 
   // position.altitude는 일부러 버린다. 러닝 기록에서 고도를 쓰는 곳이 없다.
+  //
+  // speed는 모르면 null로 넘긴다. geolocator는 속도를 못 잰 점(iOS의 무효 속도,
+  // Android hasSpeed()=false)에 0.0을 채워 주는데, 그걸 그대로 두면 "서 있다"와
+  // "모른다"가 구분되지 않아 달리는 중에도 거리가 안 쌓이는 점이 생긴다.
+  // 속도가 실제로 측정된 점은 speedAccuracy가 양수다.
   static GeoPoint _toGeoPoint(Position position) => GeoPoint(
     latitude:   position.latitude,
     longitude:  position.longitude,
     recordedAt: position.timestamp,
     accuracy:   position.accuracy,
-    speed:      position.speed,
+    speed:      position.speedAccuracy > 0 ? position.speed : null,
   );
 }
