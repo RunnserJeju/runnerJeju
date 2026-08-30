@@ -55,15 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 대표 사진 데모: 서버 코스 모델엔 아직 이미지 필드가 없어, 특정 코스에만
-  // 임시로 에셋을 매핑해 카드 디자인을 확인한다. 필드가 생기면 제거한다.
-  ImageProvider? _demoCourseImage(RunningCourse course) {
-    if (course.name.contains('하르방')) {
-      return const AssetImage('assets/images/hareubang_course.png');
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -142,7 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           final course = recommended[index];
                           return CourseRecommendCard(
                             course: course,
-                            image: _demoCourseImage(course),
                             onTap: () => _openCourse(course),
                           );
                         },

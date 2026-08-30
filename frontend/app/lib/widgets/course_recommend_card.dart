@@ -5,23 +5,18 @@ import '../theme/app_theme.dart';
 
 /// 홈 '추천 코스' 카드: 사진(상단) + 이름·특징(하단).
 ///
-/// 코스마다 대표 사진([image])이 있으면 배경으로 깔고, 없으면 뉴트럴
-/// 플레이스홀더로 높이를 맞춰 가로 스크롤에서 나란히 정렬되게 한다.
-/// (서버 코스 모델엔 아직 대표 이미지 필드가 없어, 지금은 홈에서 특정 코스에만
-/// 에셋을 넘겨 시험한다. 필드가 생기면 network 이미지로 바꾸면 된다.)
+/// 코스에 대표 썸네일([RunningCourse.thumbnailUrl])이 있으면 배경으로 깔고,
+/// 없거나 로딩에 실패하면 뉴트럴 플레이스홀더로 높이를 맞춰 가로 스크롤에서
+/// 나란히 정렬되게 한다.
 class CourseRecommendCard extends StatelessWidget {
   const CourseRecommendCard({
     super.key,
     required this.course,
-    this.image,
     this.onTap,
     this.width = 220,
   });
 
   final RunningCourse course;
-
-  /// 카드 상단 배경 사진. null이면 플레이스홀더.
-  final ImageProvider? image;
 
   final VoidCallback? onTap;
 
@@ -59,8 +54,13 @@ class CourseRecommendCard extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (image != null)
-                        Image(image: image!, fit: BoxFit.cover)
+                      if (course.thumbnailUrl != null)
+                        Image.network(
+                          course.thumbnailUrl!,
+                          fit: BoxFit.cover,
+                          // 로딩 실패(잘못된 URL·네트워크)면 플레이스홀더로 떨어진다.
+                          errorBuilder: (_, _, _) => const _Placeholder(),
+                        )
                       else
                         const _Placeholder(),
                       if (course.isCompletedByMe)

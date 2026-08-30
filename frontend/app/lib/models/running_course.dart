@@ -34,6 +34,8 @@ class RunningCourse {
     this.parkings = const [],
     this.restrooms = const [],
     this.description,
+    this.estimatedTimeMin,
+    this.thumbnailUrl,
     this.completedCount = 0,
     this.isCompletedByMe = false,
     this.startPoint,
@@ -65,6 +67,12 @@ class RunningCourse {
 
   final String? description;
 
+  /// 예상 소요시간(분). 명단에 없으면 null이라 화면에서 숨긴다. 안내값이다.
+  final int? estimatedTimeMin;
+
+  /// 대표 썸네일 URL(Supabase Storage public URL). 없으면 null.
+  final String? thumbnailUrl;
+
   /// 코스를 이루는 좌표 목록. 지도에 그대로 폴리라인으로 그린다.
   final List<GeoPoint> path;
 
@@ -82,6 +90,17 @@ class RunningCourse {
   final GeoPoint? startPoint;
 
   GeoPoint? get endPoint => path.isEmpty ? null : path.last;
+
+  /// 예상 소요시간을 사람이 읽는 문자열로. 없으면 null이라 화면에서 숨긴다.
+  /// 예) 45 → "45분", 90 → "1시간 30분", 120 → "2시간".
+  String? get estimatedTimeLabel {
+    final m = estimatedTimeMin;
+    if (m == null) return null;
+    if (m < 60) return '$m분';
+    final hours = m ~/ 60;
+    final minutes = m % 60;
+    return minutes == 0 ? '$hours시간' : '$hours시간 $minutes분';
+  }
 
   /// 칩으로 보여줄 태그 목록. 빈 항목과 앞뒤 공백은 걸러낸다.
   List<String> get tagList =>
@@ -105,6 +124,8 @@ class RunningCourse {
     parkings: _facilities(json['parkings']),
     restrooms: _facilities(json['restrooms']),
     description: json['description'] as String?,
+    estimatedTimeMin: (json['estimated_time_min'] as num?)?.toInt(),
+    thumbnailUrl: json['thumbnail_url'] as String?,
     path: ((json['path'] as List?) ?? const [])
         .map((e) => GeoPoint.fromJson(e as Map<String, dynamic>))
         .toList(),

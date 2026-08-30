@@ -82,6 +82,11 @@ class CourseCard extends StatelessWidget {
                     icon: Icons.trending_up_rounded,
                     label: course.difficulty.label,
                   ),
+                  if (course.estimatedTimeLabel != null)
+                    _Tag(
+                      icon: Icons.schedule_rounded,
+                      label: course.estimatedTimeLabel!,
+                    ),
                   for (final tag in course.tagList)
                     _Tag(icon: Icons.sell_outlined, label: tag),
                 ],

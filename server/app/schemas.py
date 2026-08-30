@@ -160,6 +160,13 @@ class CourseListItem(BaseModel):
     restrooms: list[Facility]
 
     description: str | None
+
+    # 예상 소요시간(분). 명단에 없으면 None.
+    estimated_time_min: int | None
+
+    # 대표 썸네일 public URL. 전용 엔드포인트로만 설정/삭제된다(등록·수정 폼과 별개).
+    thumbnail_url: str | None
+
     completed_count: int
     is_completed_by_me: bool
 
@@ -180,6 +187,9 @@ class CourseUpdate(BaseModel):
 
     경로(path)는 여기 없다 — GPX로 정해지고, 이미 그 코스를 달린 사람의 검증·진행률
     기준이라 수정 대상에서 뺐다. 등록 화면과 같은 필드를 쓰므로 값 규칙도 같다.
+
+    썸네일(thumbnail_url)도 여기 없다 — 파일 업로드가 필요해 전용 엔드포인트
+    (PUT/DELETE /courses/{id}/thumbnail)가 따로 맡는다.
     """
 
     name: str = Field(min_length=1)
@@ -188,6 +198,8 @@ class CourseUpdate(BaseModel):
     address: str = Field(min_length=1)
     tags: str | None = None
     description: str | None = None
+    # 예상 소요시간(분). 지우려면 명시적으로 null을 보낸다.
+    estimated_time_min: int | None = Field(default=None, ge=1)
     parkings: list[Facility] = Field(default_factory=list)
     restrooms: list[Facility] = Field(default_factory=list)
 
