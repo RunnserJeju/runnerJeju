@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/running_course.dart';
 import '../theme/app_theme.dart';
+import 'course_thumbnail.dart';
 
 /// 코스 목록/홈에서 쓰는 코스 요약 카드.
 class CourseCard extends StatelessWidget {
@@ -18,63 +19,80 @@ class CourseCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        // IntrinsicHeight: 썸네일이 카드 높이를 그대로 따라가게 한다. 목록이
+        // 20여 개라 이 정도 레이아웃 비용은 문제되지 않는다.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      course.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  if (course.isCompletedByMe)
-                    const Icon(
-                      Icons.verified_rounded,
-                      size: 20,
-                      color: AppColors.success,
-                    ),
-                ],
+              SizedBox(
+                width: 100,
+                child: CourseThumbnail(url: course.thumbnailUrl, iconSize: 30),
               ),
-              if (course.description != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  course.description!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              course.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          if (course.isCompletedByMe)
+                            const Icon(
+                              Icons.verified_rounded,
+                              size: 20,
+                              color: AppColors.success,
+                            ),
+                        ],
+                      ),
+                      if (course.description != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          course.description!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _Tag(
+                            icon: Icons.straighten_rounded,
+                            label: '왕복 ${course.distanceKm}km',
+                          ),
+                          _Tag(
+                            icon: Icons.trending_up_rounded,
+                            label: course.difficulty.label,
+                          ),
+                          if (course.estimatedTimeLabel != null)
+                            _Tag(
+                              icon: Icons.schedule_rounded,
+                              label: course.estimatedTimeLabel!,
+                            ),
+                          for (final tag in course.tagList)
+                            _Tag(icon: Icons.sell_outlined, label: tag),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              ],
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _Tag(
-                    icon: Icons.straighten_rounded,
-                    label: '왕복 ${course.distanceKm}km',
-                  ),
-                  _Tag(
-                    icon: Icons.trending_up_rounded,
-                    label: course.difficulty.label,
-                  ),
-                  if (course.estimatedTimeLabel != null)
-                    _Tag(
-                      icon: Icons.schedule_rounded,
-                      label: course.estimatedTimeLabel!,
-                    ),
-                  for (final tag in course.tagList)
-                    _Tag(icon: Icons.sell_outlined, label: tag),
-                ],
               ),
             ],
           ),

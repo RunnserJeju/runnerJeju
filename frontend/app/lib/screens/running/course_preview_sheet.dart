@@ -4,6 +4,7 @@ import '../../models/elevation_profile.dart';
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/course_thumbnail.dart';
 import '../../widgets/elevation_chart.dart';
 import '../../widgets/sheet_handle.dart';
 
@@ -101,6 +102,20 @@ class CoursePreviewSheet extends StatelessWidget {
                 hasError: detailError != null,
                 onStart: onStart,
                 onRetry: onRetryDetail,
+              ),
+              const SizedBox(height: 20),
+              // 시작 버튼 아래에 둔다 — 접힌 높이(_collapsedSize)는 시작 버튼까지만
+              // 보이게 맞춰져 있어서, 위에 끼우면 그 약속이 깨진다. 여기 두면
+              // 시트를 끌어올렸을 때 가장 먼저 보인다.
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: CourseThumbnail(
+                    url: course.thumbnailUrl,
+                    iconSize: 44,
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               const Divider(height: 1, color: Color(0xFFEDEFF2)),
