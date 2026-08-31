@@ -71,12 +71,6 @@ def describe(entry: dict) -> str:
     path = COURSES_DIR / entry["file"]
     parsed = gpx.parse(path.read_bytes())
 
-    gain = (
-        "없음"
-        if parsed.elevation_gain_meters is None
-        else f"{parsed.elevation_gain_meters:.0f}m"
-    )
-
     # 명단의 distance_km은 왕복 안내값이라 GPX 실측 거리와 다르다. 둘 다 보여줘서
     # 명단 값이 크게 어긋났을 때(예: 단위를 잘못 적었을 때) 눈에 띄게 한다.
     return (
@@ -84,7 +78,6 @@ def describe(entry: dict) -> str:
         f"    좌표 {len(parsed.points)}개 · "
         f"명단 {entry['distance_km']}km · "
         f"GPX 실측 {parsed.distance_meters / 1000:.2f}km · "
-        f"고도상승 {gain} · "
         f"{'순환' if parsed.is_loop else '편도'}"
     )
 

@@ -7,10 +7,8 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/geo_utils.dart';
 import '../../utils/transient_messenger.dart';
-import '../../widgets/admin_only.dart';
 import '../../widgets/course_map_view.dart';
 import '../../widgets/sheet_handle.dart';
-import '../course/gpx_upload_screen.dart';
 import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
 import 'course_preview_sheet.dart';
@@ -317,13 +315,24 @@ class _RunningScreenState extends State<RunningScreen> {
           '카카오맵으로 길찾기를 시작할까요?',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('여기서 시작'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('길찾기'),
+          // 버튼 공통 스타일이 가로를 꽉 채우므로(app_theme.dart의 minimumSize)
+          // 그대로 두면 상하로 쌓인다. Row+Expanded로 좌우 반반 배치.
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('여기서 시작'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('길찾기'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -340,32 +349,6 @@ class _RunningScreenState extends State<RunningScreen> {
     );
     if (!mounted || opened) return;
     _showMessage('길찾기를 열지 못했어요.');
-  }
-
-  /// 코스 등록(관리자 전용)으로 가는 길. 예전에는 '코스' 탭 상단에 있었는데,
-  /// 그 탭을 이 지도가 대신하면서 여기 말고는 들어갈 곳이 없어졌다.
-  Future<void> _openGpxUpload() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const GpxUploadScreen()),
-    );
-    if (!mounted) return;
-
-    await _loadCourses();
-  }
-
-  /// 코스 수정(관리자 전용). 등록 화면을 수정 모드로 열고, 저장하고 돌아오면
-  /// 목록을 새로고침한다 — 열려 있던 프리뷰가 있으면 갱신된 값으로 바꿔 끼운다.
-  Future<void> _editCourse(RunningCourse course) async {
-    final updated = await Navigator.of(context).push<RunningCourse>(
-      MaterialPageRoute(builder: (_) => GpxUploadScreen(existing: course)),
-    );
-    if (!mounted) return;
-
-    await _loadCourses();
-
-    if (updated != null && _selected?.id == updated.id) {
-      setState(() => _selected = updated);
-    }
   }
 
   void _showComingSoon(String label) => _showMessage('$label 기능은 준비 중이에요.');
@@ -434,7 +417,6 @@ class _RunningScreenState extends State<RunningScreen> {
                         onTapExplore: _openExplore,
                         onTapPartner: () => _showComingSoon('협력업체'),
                         onTapMyLocation: _moveToMyLocation,
-                        onTapUploadGpx: _openGpxUpload,
                       ),
                     ],
                   ),
@@ -451,7 +433,6 @@ class _RunningScreenState extends State<RunningScreen> {
               onSelect: _selectCourse,
               onClose: () => setState(() => _isExploring = false),
               onRetry: _loadCourses,
-              onEdit: _editCourse,
             )
           else if (selected == null)
             Align(
@@ -471,7 +452,6 @@ class _RunningScreenState extends State<RunningScreen> {
               onRetryDetail: () => _selectCourse(selected),
               isPreparingStart: _isPreparingStart,
               onStart: () => _startRun(course: _selectedDetail),
-              onEdit: () => _editCourse(_selectedDetail ?? selected),
             ),
         ],
       ),
@@ -560,14 +540,12 @@ class _SideActions extends StatelessWidget {
     required this.onTapExplore,
     required this.onTapPartner,
     required this.onTapMyLocation,
-    required this.onTapUploadGpx,
   });
 
   final VoidCallback onTapFavorite;
   final VoidCallback onTapExplore;
   final VoidCallback onTapPartner;
   final VoidCallback onTapMyLocation;
-  final VoidCallback onTapUploadGpx;
 
   @override
   Widget build(BuildContext context) {
@@ -597,16 +575,6 @@ class _SideActions extends StatelessWidget {
           icon: Icons.my_location_rounded,
           tooltip: '내 위치',
           onTap: onTapMyLocation,
-        ),
-        AdminOnly(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: _RoundIconButton(
-              icon: Icons.upload_file_rounded,
-              tooltip: 'GPX로 코스 등록',
-              onTap: onTapUploadGpx,
-            ),
-          ),
         ),
       ],
     );

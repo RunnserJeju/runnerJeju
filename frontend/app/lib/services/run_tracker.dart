@@ -9,6 +9,7 @@ import '../models/running_course.dart';
 import '../utils/course_coverage.dart';
 import '../utils/geo_utils.dart';
 import 'location_service.dart';
+import 'motion_service.dart';
 
 enum RunStatus { idle, running, paused, finished }
 
@@ -17,9 +18,14 @@ enum RunStatus { idle, running, paused, finished }
 /// 위치 스트림을 구독해 경로/거리/시간을 누적하고, 화면은 여기만 바라본다.
 /// 서버 전송은 [RunTracker]의 책임이 아니라 [buildRecord] 결과를 받아 처리한다.
 class RunTracker extends ChangeNotifier {
-  RunTracker(this._locationService);
+  RunTracker(this._locationService, this._motionService);
 
   final LocationService _locationService;
+  final MotionService _motionService;
+
+  /// 이번 러닝에 모션 게이트를 쓰는지. 시뮬레이션 러닝은 폰을 가만히 둔 채
+  /// 돌리므로 켜면 거리가 영원히 안 쌓인다 — 실제 GPS일 때만 켠다.
+  bool _useMotionGate = false;
 
   StreamSubscription<GeoPoint>? _positionSubscription;
   Timer? _ticker;
@@ -236,6 +242,9 @@ class RunTracker extends ChangeNotifier {
     _status = RunStatus.running;
     _activeLocation = location;
 
+    _useMotionGate = source == null;
+    if (_useMotionGate) _motionService.start();
+
     _subscribeToPositions(location);
     _startTicker();
     notifyListeners();
@@ -329,6 +338,7 @@ class RunTracker extends ChangeNotifier {
     _ticker?.cancel();
     _positionSubscription?.cancel();
     _positionSubscription = null;
+    _motionService.stop();
     notifyListeners();
   }
 
@@ -377,6 +387,12 @@ class RunTracker extends ChangeNotifier {
       notifyListeners();
       return;
     }
+
+    // 기기가 물리적으로 정지해 있으면 이 점은 GPS 지터다. 마커도 기록도
+    // 갱신하지 않는다 — 서 있는 동안 마커가 돌아다니고 경로가 자라는 것을 막는다.
+    // 첫 유효 위치(위의 anchor == null)는 게이트보다 먼저 처리한다: 출발선에
+    // 가만히 서서 GPS를 기다리는 동안에도 마커와 시작 시각은 잡혀야 한다.
+    if (_useMotionGate && _motionService.isStill) return;
 
     final moved = GeoUtils.distanceBetween(anchor, point);
 
@@ -464,6 +480,8 @@ class RunTracker extends ChangeNotifier {
     _ticker = null;
     _positionSubscription?.cancel();
     _positionSubscription = null;
+    _motionService.stop();
+    _useMotionGate = false;
 
     _status = RunStatus.idle;
     _path.clear();
@@ -487,6 +505,7 @@ class RunTracker extends ChangeNotifier {
   void dispose() {
     _ticker?.cancel();
     _positionSubscription?.cancel();
+    _motionService.stop();
     super.dispose();
   }
 }

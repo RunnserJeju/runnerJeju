@@ -13,24 +13,19 @@ import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 /// 이때 진행방향이 되는 축은 이미지의 **세로(Y)** 다. 가로로 그렸더니 화살표가
 /// 선과 정확히 90도를 이뤘다. 그래서 위(-Y)를 향한 화살촉을 그린다.
 
-/// 코스 선(주황) 위에서 읽히는 회색.
-const Color _arrowColor = Color(0xFF5F666D);
+const Color _arrowColor = Colors.white;
 
 /// 이미지 한 변(dp). 회전 중심이 정중앙이 되도록 정사각이고,
 /// 화살표가 대각선으로 놓여도 잘리지 않을 만큼은 커야 한다.
 const int _arrowSize = 14;
 
-/// 진행방향으로의 길이(dp). 길수록 뾰족해서 방향이 잘 읽힌다.
-const double _arrowLength = 11;
+/// 진행방향으로의 길이(dp). 길수록 뾰족해서 방향이 잘 읽히지만,
+/// 꺾이는 지점에서 선 밖으로 삐져나오는 양도 커진다.
+const double _arrowLength = 9;
 
-/// 코스 선을 가로지르는 폭(dp).
-///
-/// 코스 선 굵기(RunMapView._courseLineWidth = 8)보다 좁아야 선 밖으로
-/// 삐져나오지 않는다. 이미지는 선 굵기에 맞춰 줄여주지 않고 이 크기 그대로 찍힌다.
-const double _arrowWidth = 5;
-
-/// 밑변 가운데를 파낸 깊이(dp). 그냥 삼각형보다 화살촉으로 읽혀서 방향이 분명해진다.
-const double _arrowNotch = 3;
+/// 코스 선을 가로지르는 폭(dp). 선 굵기(RunMapView._courseLineWidth)보다
+/// 좁아야 한다. 이미지는 선 굵기에 맞춰 줄여주지 않고 이 크기 그대로 찍힌다.
+const double _arrowWidth = 4;
 
 const double _arrowPixelRatio = 3;
 
@@ -55,7 +50,6 @@ Future<kakao.KImage> buildCourseDirectionArrow() async {
   final path = Path()
     ..moveTo(0, front)
     ..lineTo(-half, back)
-    ..lineTo(0, back - _arrowNotch)
     ..lineTo(half, back)
     ..close();
   canvas.drawPath(path, Paint()..color = _arrowColor);

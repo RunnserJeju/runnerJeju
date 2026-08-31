@@ -52,8 +52,6 @@ class TestRealCourse:
 
     def test_keeps_elevation(self, parsed):
         assert all(p.altitude is not None for p in parsed.points)
-        # 해안도로라 고도 상승이 거의 없다.
-        assert parsed.elevation_gain_meters == pytest.approx(3.0, abs=0.5)
 
     def test_has_no_timestamps(self, parsed):
         # 달린 기록이 아니라 그린 경로라서 <time>이 없다.
@@ -138,14 +136,12 @@ class TestUnusableElevation:
     def test_drops_elevation_when_a_point_has_none(self):
         parsed = self._with_elevations([10.0, None, 12.0])
 
-        assert parsed.elevation_gain_meters is None
         assert all(p.altitude is None for p in parsed.resampled_points)
 
     def test_drops_elevation_when_a_value_is_implausible(self):
         # 우도런 GPX가 이 경우다 — 한 구간이 -6757m로 튄다.
         parsed = self._with_elevations([10.0, -6757.8, 12.0])
 
-        assert parsed.elevation_gain_meters is None
         assert all(p.altitude is None for p in parsed.resampled_points)
 
     def test_still_registers_the_course(self):
@@ -215,18 +211,6 @@ class TestRejects:
         repeated = [JEJU_POINTS[0], JEJU_POINTS[0], JEJU_POINTS[0], JEJU_POINTS[1]]
         with pytest.raises(gpx.GpxParseError, match="코스로 쓸 수 없어요"):
             gpx.parse(wrap(track(repeated)))
-
-
-class TestPartialElevation:
-    def test_elevation_is_none_when_incomplete(self):
-        # 일부 점에만 <ele>가 있으면 누적 상승이 왜곡되므로 계산하지 않는다.
-        inner = (
-            '<trkpt lat="33.2285" lon="126.3064"><ele>10</ele></trkpt>'
-            '<trkpt lat="33.2280" lon="126.3054"></trkpt>'
-            '<trkpt lat="33.2270" lon="126.3040"><ele>30</ele></trkpt>'
-        )
-        parsed = gpx.parse(wrap(f"<trk><trkseg>{inner}</trkseg></trk>"))
-        assert parsed.elevation_gain_meters is None
 
 
 class TestTimestamps:

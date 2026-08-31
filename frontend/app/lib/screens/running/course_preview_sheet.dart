@@ -4,7 +4,7 @@ import '../../models/elevation_profile.dart';
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/admin_only.dart';
+import '../../widgets/course_thumbnail.dart';
 import '../../widgets/elevation_chart.dart';
 import '../../widgets/sheet_handle.dart';
 
@@ -29,7 +29,6 @@ class CoursePreviewSheet extends StatelessWidget {
     required this.onRetryDetail,
     required this.isPreparingStart,
     required this.onStart,
-    required this.onEdit,
   });
 
   /// 목록에서 온 코스. 이름·거리처럼 시트에 바로 보여줄 값은 여기 다 있다.
@@ -52,9 +51,6 @@ class CoursePreviewSheet extends StatelessWidget {
   final bool isPreparingStart;
 
   final VoidCallback onStart;
-
-  /// 관리자 전용 코스 수정. AdminOnly로 감싸 일반 사용자에겐 안 보인다.
-  final VoidCallback onEdit;
 
   /// 접힌 높이. 시작 버튼까지는 끌어올리지 않아도 보여야 한다.
   static const double _collapsedSize = 0.36;
@@ -106,16 +102,6 @@ class CoursePreviewSheet extends StatelessWidget {
                 hasError: detailError != null,
                 onStart: onStart,
                 onRetry: onRetryDetail,
-              ),
-              AdminOnly(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: OutlinedButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_rounded, size: 18),
-                    label: const Text('코스 수정'),
-                  ),
-                ),
               ),
               const SizedBox(height: 20),
               const Divider(height: 1, color: Color(0xFFEDEFF2)),
@@ -221,28 +207,8 @@ class _ElevationSectionState extends State<_ElevationSection> {
           const SizedBox(height: 10),
           if (profile == null)
             const _ElevationUnavailable()
-          else ...[
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _Chip(
-                  icon: Icons.trending_up_rounded,
-                  label: '누적 상승 ${profile.gainMeters.round()}m',
-                ),
-                _Chip(
-                  icon: Icons.terrain_rounded,
-                  label: '최고 ${profile.maxAltitude.round()}m',
-                ),
-                _Chip(
-                  icon: Icons.waves_rounded,
-                  label: '최저 ${profile.minAltitude.round()}m',
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+          else
             ElevationChart(profile: profile),
-          ],
         ],
       ),
     );
@@ -295,6 +261,14 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox.square(
+            dimension: 72,
+            child: CourseThumbnail(url: course.thumbnailUrl, iconSize: 26),
+          ),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

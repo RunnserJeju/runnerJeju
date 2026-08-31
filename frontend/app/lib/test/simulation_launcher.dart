@@ -4,8 +4,8 @@ import '../models/geo_point.dart';
 import '../services/location_service.dart';
 import 'simulated_location_service.dart';
 
-/// "시뮬레이션으로 달리기" 버튼. 노출 여부는 호출부의 [AdminOnly]가 정한다
-/// (admin 계정에게만 보인다).
+/// "시뮬레이션으로 달리기" 버튼. 호출부가 kDebugMode로 감싸므로 릴리스 빌드엔
+/// 들어가지 않는다.
 class SimulationStartButton extends StatelessWidget {
   const SimulationStartButton({
     super.key,
@@ -23,7 +23,7 @@ class SimulationStartButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton.filledTonal(
       icon: const Icon(Icons.science_outlined),
-      tooltip: '시뮬레이션으로 달리기 (admin 전용)',
+      tooltip: '시뮬레이션으로 달리기 (debug 전용)',
       onPressed: () => _pickProfile(context),
     );
   }

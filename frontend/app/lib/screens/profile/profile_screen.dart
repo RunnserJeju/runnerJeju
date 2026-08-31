@@ -9,7 +9,6 @@ import '../../widgets/async_view.dart';
 import '../../widgets/course_card.dart';
 import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
-import '../connection_test_screen.dart';
 import '../course/course_detail_screen.dart';
 import '../run/run_detail_screen.dart';
 
@@ -55,13 +54,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('마이페이지'),
         actions: [
-          IconButton(
-            tooltip: '서버 연결 테스트',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ConnectionTestScreen()),
-            ),
-            icon: const Icon(Icons.settings_ethernet_rounded),
-          ),
           IconButton(
             tooltip: '로그아웃',
             onPressed: _logout,
@@ -123,13 +115,25 @@ class _ProfileData {
   }
 }
 
-class _ProfileBody extends StatelessWidget {
+class _ProfileBody extends StatefulWidget {
   const _ProfileBody({required this.data});
 
   final _ProfileData data;
 
   @override
+  State<_ProfileBody> createState() => _ProfileBodyState();
+}
+
+class _ProfileBodyState extends State<_ProfileBody> {
+  /// 러닝 목록은 처음 5개만 보여주고, '더보기'마다 10개씩 늘린다.
+  static const int _initialRunCount = 5;
+  static const int _moreRunStep = 10;
+
+  int _visibleRunCount = _initialRunCount;
+
+  @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     final runs = data.recentRuns;
     final totalDistance = runs.fold<double>(
       0,
@@ -180,11 +184,21 @@ class _ProfileBody extends StatelessWidget {
             icon: Icons.directions_run_rounded,
             message: '최근 한 달 러닝 기록이 없어요',
           )
-        else
-          for (final record in runs) ...[
+        else ...[
+          for (final record in runs.take(_visibleRunCount)) ...[
             _RecordTile(record: record),
             const SizedBox(height: 10),
           ],
+          if (runs.length > _visibleRunCount)
+            Center(
+              child: TextButton.icon(
+                onPressed: () =>
+                    setState(() => _visibleRunCount += _moreRunStep),
+                icon: const Icon(Icons.expand_more_rounded),
+                label: Text('더보기 (${runs.length - _visibleRunCount}개)'),
+              ),
+            ),
+        ],
         const SizedBox(height: 28),
         const _SectionTitle('찜한 코스'),
         const SizedBox(height: 12),

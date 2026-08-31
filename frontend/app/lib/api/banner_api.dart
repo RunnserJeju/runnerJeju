@@ -1,5 +1,3 @@
-import 'package:dio/dio.dart';
-
 import '../models/home_banner.dart';
 import '../network/api_client.dart';
 
@@ -15,28 +13,5 @@ class BannerApi {
     return (response.data as List)
         .map((e) => HomeBanner.fromJson(e as Map<String, dynamic>))
         .toList();
-  }
-
-  /// 이미지 파일로 배너를 등록한다. **관리자 전용**(서버가 require_admin으로 막는다).
-  Future<HomeBanner> uploadBanner({
-    required List<int> bytes,
-    required String filename,
-  }) async {
-    final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(bytes, filename: filename),
-    });
-
-    final response = await _client.dio.post(
-      '/admin/banners',
-      data: formData,
-      options: Options(sendTimeout: const Duration(seconds: 30)),
-    );
-
-    return HomeBanner.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  /// **관리자 전용**(서버가 require_admin으로 막는다).
-  Future<void> deleteBanner(String id) async {
-    await _client.dio.delete('/admin/banners/$id');
   }
 }

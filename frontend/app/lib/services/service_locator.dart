@@ -2,7 +2,6 @@ import '../api/auth_api.dart';
 import '../api/banner_api.dart';
 import '../api/course_api.dart';
 import '../api/favorite_api.dart';
-import '../api/geo_api.dart';
 import '../api/notice_api.dart';
 import '../api/run_api.dart';
 import '../api/stamp_api.dart';
@@ -13,9 +12,9 @@ import 'auth_service.dart';
 import 'banner_service.dart';
 import 'course_service.dart';
 import 'favorite_service.dart';
-import 'geo_service.dart';
 import 'kakao_map_launcher.dart';
 import 'location_service.dart';
+import 'motion_service.dart';
 import 'notice_service.dart';
 import 'program_service.dart';
 import 'run_live_widget.dart';
@@ -59,7 +58,6 @@ class Services {
 
   /// 러닝 프로그램(커뮤니티/마이페이지). 아직 서버 API가 없어 빈 목록만 준다.
   late final ProgramService program = const ProgramService();
-  late final GeoService geo = GeoService(GeoApi(apiClient));
   late final RunService run = RunService(RunApi(apiClient));
   late final StampService stamp = StampService(StampApi(apiClient));
   late final VerificationService verification = VerificationService(
@@ -75,8 +73,11 @@ class Services {
   /// 코스 시작점까지의 길안내. 카카오맵 앱/웹을 띄우기만 하는 얇은 계층이다.
   late final KakaoMapLauncher kakaoMapLauncher = const KakaoMapLauncher();
 
+  /// 기기 정지 감지(가속도계). 러닝 중 정지 상태의 GPS 지터를 거르는 데 쓴다.
+  late final MotionService motion = MotionService();
+
   /// 진행 중인 러닝은 화면 전환과 무관하게 유지되어야 하므로 전역에 하나만 둔다.
-  late final RunTracker runTracker = RunTracker(location);
+  late final RunTracker runTracker = RunTracker(location, motion);
 
   /// 러닝 상태를 잠금화면에 미러링하는 표시 계층(Android 상시 알림 / iOS Live
   /// Activity). 데이터는 [runTracker]가 굴리고, 이건 화면 밖 표시만 맡는다.

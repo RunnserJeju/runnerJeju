@@ -69,7 +69,6 @@ class ParsedCourse:
     name: str | None
     points: list[TrackPoint]
     distance_meters: float
-    elevation_gain_meters: float | None
     is_loop: bool
 
     # 균등 간격(RESAMPLE_INTERVAL_METERS)으로 다시 찍은 경로. DB에 저장되어
@@ -267,13 +266,11 @@ def parse(content: bytes) -> ParsedCourse:
         )
 
     elevations = _usable_elevations(points)
-    gain = geo.elevation_gain_meters(elevations) if elevations is not None else None
 
     return ParsedCourse(
         name=_extract_name(root),
         points=points,
         distance_meters=geo.path_length_meters(coordinates),
-        elevation_gain_meters=gain,
         is_loop=geo.distance_meters(coordinates[0], coordinates[-1])
         <= LOOP_THRESHOLD_METERS,
         resampled_points=_resample(coordinates, elevations),

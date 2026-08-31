@@ -14,12 +14,4 @@ class NoticeApi {
         .map((e) => Notice.fromJson(e as Map<String, dynamic>))
         .toList();
   }
-
-  Future<Notice> createNotice({required String title, required String body}) async {
-    final response = await _client.dio.post(
-      '/admin/notices',
-      data: {'title': title, 'body': body},
-    );
-    return Notice.fromJson(response.data as Map<String, dynamic>);
-  }
 }

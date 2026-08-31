@@ -12,23 +12,24 @@
 | 웹 인증 | 자체 세션 방식 (소셜로그인 X) | 계정 소수. 서버측 세션 저장 → 즉시 무효화(강제 로그아웃) 가능. 앱의 JWT와 완전 분리 |
 | 전환 방식 | "이사" — 앱 클라도 `/admin/*`로 먼저 맞춰 계속 돌리다, 웹 완성 후 앱 운영 화면 제거 | 무중단. 서버 리팩터와 웹 개발 타임라인을 분리 |
 
-## 현재 운영 엔드포인트 맵
+## 운영 엔드포인트 맵
 
-혼재(공개+운영)된 라우터에서 아래 6개가 운영 전용(`require_admin`).
+이동은 끝났다(1단계). **호출자는 현재 없다** — 앱에서 걷어냈고(3단계) 운영 웹은
+아직 없다. 아래가 운영 웹이 붙여야 할 전체 목록이다.
 
-| 현재 경로 | 이동 후 | 클라(Flutter) 호출부 |
-|---|---|---|
-| `PATCH /courses/{id}` | `PATCH /admin/courses/{id}` | `CourseApi.updateCourse` |
-| `POST /courses/gpx` | `POST /admin/courses/gpx` | `CourseApi.uploadGpx` |
-| `PUT /courses/{id}/gpx` | `PUT /admin/courses/{id}/gpx` | (아직 없음 — 운영 웹에서 구현) |
-| `PUT /courses/{id}/thumbnail` | `PUT /admin/courses/{id}/thumbnail` | (아직 없음 — 운영 웹에서 구현) |
-| `DELETE /courses/{id}/thumbnail` | `DELETE /admin/courses/{id}/thumbnail` | (아직 없음 — 운영 웹에서 구현) |
-| `POST /banners` | `POST /admin/banners` | `BannerApi` (배너 등록) |
-| `DELETE /banners/{id}` | `DELETE /admin/banners/{id}` | `BannerApi` (배너 삭제) |
-| `POST /notices` | `POST /admin/notices` | `NoticeApi` (공지 등록) |
-| `GET /geo/geocode` | `GET /admin/geo/geocode` | `GeoApi` — 코스 등록 화면의 주소→좌표 변환 |
+| 엔드포인트 | 용도 |
+|---|---|
+| `POST /admin/courses/gpx` | 코스 등록 (multipart, GPX + 메타데이터) |
+| `PATCH /admin/courses/{id}` | 코스 메타데이터 수정 |
+| `PUT /admin/courses/{id}/gpx` | 경로 교체 (기록 있으면 409 → `reset_records=true`) |
+| `PUT /admin/courses/{id}/thumbnail` | 썸네일 설정/교체 |
+| `DELETE /admin/courses/{id}/thumbnail` | 썸네일 제거 |
+| `POST /admin/banners` | 배너 등록 |
+| `DELETE /admin/banners/{id}` | 배너 삭제 |
+| `POST /admin/notices` | 공지 등록 |
+| `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
-공개로 남는 것(이동 없음): `GET /courses`, `GET /courses/{id}`, `GET /banners`, `GET /notices`.
+공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /banners`, `GET /notices`.
 
 ## 코스 관리 필드·썸네일 (백엔드, 2026-08-30)
 
@@ -50,9 +51,25 @@
 - `DELETE /courses/{id}/thumbnail` — `thumbnail_url`을 null로 + Storage 파일 삭제. 이미 없으면 no-op.
 - 등록도 이 엔드포인트로 올린다 → "처음 설정"과 "교체"가 같은 코드.
 
-**조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함. 앱은 반영 완료(소요시간 표시, 썸네일 카드).
+**조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함.
 
-**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`). **배포 전 Supabase에 `course-thumbnails` Public 버킷 생성 필요.**
+앱 표시 완료 (2026-08-31) — 홈 추천 카드, 코스 탐색 목록·프로필 찜 목록
+(`CourseCard` 좌측 100px), 코스 바텀시트(16:9). 공통 위젯
+`widgets/course_thumbnail.dart`가 `cached_network_image`로 그리고, URL이 없거나
+실패해도 같은 크기의 플레이스홀더를 그려 카드 높이가 흔들리지 않는다.
+바텀시트에서는 **시작 버튼 아래**에 둔다 — 접힘 높이(`_collapsedSize`)가 시작
+버튼까지만 보이도록 맞춰져 있어서 그 위에 끼우면 약속이 깨진다.
+
+**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`).
+
+`course-thumbnails` Public 버킷 **생성 완료 (2026-08-31, 개발·운영 양쪽)**. 서버
+제약과 같은 값으로 맞춰 뒀다 — `public=true`, `file_size_limit=8MB`,
+`allowed_mime_types=[image/jpeg, image/png, image/webp]`
+(`admin/courses.py`의 `MAX_THUMBNAIL_BYTES`·`_ALLOWED_IMAGE_TYPES`와 동일).
+개발 버킷에 업로드→public URL 조회→삭제까지 확인했다.
+
+> `cloudbuild.yaml`은 `SUPABASE_COURSE_BUCKET`을 넘기지 않는다 — 기본값이 곧
+> 버킷 이름이라 그대로 동작한다. 버킷 이름을 바꾸려면 그때 환경변수를 추가한다.
 
 ## 목표 서버 구조
 
@@ -101,25 +118,74 @@ server/app/
 
 > 검증: 클라 6개 admin 경로 ↔ 서버 6개 `/admin/*` OpenAPI 경로 정확히 일치. 앱 실기기 E2E(관리자 로그인 후 실제 등록)는 에뮬레이터·관리자 계정 필요라 미실행.
 
-### 3단계 — 운영 웹 프론트
-- [ ] 스택 확정 (후보: Vite + React + TS + TanStack Query)
-- [ ] `admin_users` / `admin_sessions` 마이그레이션 (Alembic)
-- [ ] 세션 로그인 API (`POST /admin/login`, `POST /admin/logout`) + 세션 미들웨어/의존성
-- [ ] 운영 화면 구현 (코스 등록/수정, 배너, 공지, geocoding)
-- [ ] CORS를 어드민 도메인 기준으로 조정 (credentials 허용)
+### 3단계 — 앱 운영 화면 제거 ✅ (2026-08-31)
 
-### 4단계 — 앱 운영 화면 제거
-- [ ] Flutter 운영 화면·admin API 메서드 삭제
-- [ ] 운영 웹으로 완전 이관 확인 후 정리
+**순서를 4단계와 바꿨다.** 원래 계획은 "웹 완성 후 앱 제거"였는데, 앱 새 빌드를
+뽑기 전에 admin 코드를 걷어내는 게 우선이라 먼저 진행했다. 웹 완성 전까지 코스
+등록은 `server/tools/push_courses.py`로 한다 — 이 스크립트는 HTTP API가 아니라
+DB에 직접 쓰므로 앱·웹과 무관하게 동작한다.
+
+- [x] `AdminOnly` 5곳 제거 (배너 등록·공지 작성·GPX 등록·코스 수정 2곳)
+- [x] 화면 삭제 — `gpx_upload_screen`, `banner_create_screen`, `notice_create_screen`
+- [x] API·서비스 메서드 삭제 — `CourseApi.uploadGpx`/`updateCourse`,
+      `BannerApi` 등록·삭제, `NoticeApi.createNotice`, `GeoApi`/`GeoService` 통째
+- [x] `widgets/admin_only.dart`, `User.isAdmin` 삭제
+- [x] 시뮬레이션 노출 조건을 `AdminOnly` → `kDebugMode`로 전환.
+      **릴리스 빌드에서 가짜 위치로 완주 스탬프를 딸 수 있던 구멍이 닫혔다.**
+- [x] `flutter analyze` 무경고(기존 pubspec asset 경고 1건 제외), 테스트 41개 통과
+
+앱이 호출하는 엔드포인트에 `/admin/*`이 하나도 남지 않았다.
+
+> **서버는 건드리지 않았다.** `/admin/*` 엔드포인트와 JWT `require_admin`을 그대로
+> 뒀다. 지금은 호출자가 없을 뿐이고, 4단계에서 세션 인증으로 교체하면 된다.
+
+### 4단계 — 운영 웹 (진행 예정)
+
+**업무 분담:** 백엔드(세션 인증·운영 API)는 팀원, 프론트는 저장소 주인.
+
+백엔드
+- [ ] `admin_users` / `admin_sessions` 마이그레이션 (`0012`)
+- [ ] `bcrypt` 의존성 추가 (현재 없음)
+- [ ] 세션 로그인 API (`POST /admin/login`, `POST /admin/logout`, `GET /admin/me`)
+- [ ] `require_admin`을 세션 기반으로 교체 (JWT 경로 제거 — 앱은 이미 안 쓴다)
+- [ ] 첫 운영자 계정 부트스트랩 (`tools/create_admin.py`)
+- [ ] 운영 목록용 조회 API 필요 여부 판단 — `GET /courses`는 앱용 공개 API라
+      페이징·검색이 없다
+
+프론트
+- [ ] `frontend/admin/` — Vite + React + TS, TanStack Query, react-hook-form + zod,
+      Mantine, 카카오맵 JS SDK, HashRouter
+- [ ] 화면: 로그인 → 코스 목록 → 코스 등록 → 수정·경로교체(409 흐름)·썸네일 → 배너 → 공지
+
+배포
+- [ ] FastAPI가 `/admin-ui`에서 정적 서빙 (`StaticFiles`), `server/static/admin/` gitignore
+- [ ] `cloudbuild.yaml`에 `admin-build` 스텝 (npm ci → build → `server/static/admin`으로 복사)
+- [ ] Vite `base: '/admin-ui/'`, 개발용 프록시 설정
 
 ## 결정됨 — 기록 있는 코스의 경로(GPX) 수정
 - **초기화 후 교체**로 결정(2026-08-30). `reset_records=true`면 완주 스탬프·검증을 hard delete, 경로 교체. 개인 러닝 기록(Run)은 유지 → 개인 히스토리 보존 + 감사 흔적
 - soft delete 안 함 — `uq_stamp_user_course` 유니크가 부분 인덱스(`WHERE deleted_at IS NULL`)로 바뀌어야 하고 모든 Stamp/Verification 조회에 필터가 붙는 광범위 변경 대비, "사라진 옛 경로 완주"를 되살릴 실익이 약함. 되돌리기 안전장치가 필요해지면 개별 soft delete보다 리셋 이벤트(누가/언제/몇 건) admin 액션 로그가 더 싸고 명확 — 필요 시 추가
 - Run은 course_id를 유지한 채 완주 스탬프만 사라진 "달렸지만 미완주" 정상 상태가 됨
 
+## 결정됨 — 오리진 배치 (2026-08-31)
+
+**운영 웹을 API와 같은 오리진에 둔다.** FastAPI가 `/admin-ui`에서 빌드된 정적
+파일을 서빙하고, 그 페이지가 `/admin/*`을 호출한다.
+
+이유는 인증 복잡도다. 다른 오리진이면 CORS `allow_credentials`(와일드카드 금지),
+쿠키 `SameSite=None; Secure`, CSRF를 전부 직접 감당해야 한다. 같은 오리진이면
+그게 다 사라지고 `SameSite=Lax`로 충분하다(CSRF 토큰은 여전히 넣는다).
+
+대가는 배포 결합 — 프론트만 고쳐도 API 이미지가 다시 빌드되고 리비전이 새로 뜬다.
+무중단이라 실질 영향은 없다.
+
+나중에 배포를 분리하고 싶으면 **로드밸런서로 한 도메인에 합치는 쪽**으로 간다.
+그것도 같은 오리진이라 인증 코드를 안 고친다. 별도 도메인으로 쪼개는 선택만
+피하면 된다.
+
 ## 보류 / 검토 필요
-- CSRF — 쿠키 세션은 CSRF 노출. 어드민 웹이 다른 오리진이면 토큰 방식(쿠키+헤더) 필요. 구현 시 결정
-- 크로스도메인 쿠키 — 어드민 웹과 API가 다른 도메인이면 `SameSite=None; Secure` + CORS `allowCredentials` 필요. 같은 서브도메인으로 두면 단순. 배포 도메인 확정 후 결정
+- CSRF — `SameSite=Lax`로도 완전히 없어지진 않는다. 토큰 방식(쿠키+헤더) 필요
 - 세션 저장소 — Postgres 테이블로 시작(Redis 불필요). 트래픽·인스턴스 늘면 재검토
-- 웹 프론트 스택 — React/Vite 유력하나 미확정
+- `User.role` — 운영자가 `admin_users`로 분리되면 갈 곳이 없다. 컬럼 유지 여부 미정
+  (앱에서는 이미 `isAdmin`을 걷어냈다)
 - geocoding 툴(`/geo/geocode`) — 앱의 `GeoApi`가 코스 등록 화면에서 호출함(확인됨). `/admin`으로 이동, 2단계에서 `GeoApi` 경로도 갱신

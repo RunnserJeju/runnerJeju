@@ -28,8 +28,7 @@ class AuthService {
 
   /// 현재 사용자를 가져온다. 한 번 성공하면 그 뒤로는 캐시를 돌려준다.
   ///
-  /// 로그인하지 않았거나 조회에 실패하면 null이다. 호출부(권한에 따른 UI 노출)는
-  /// "모르면 감춘다"로 처리하면 되므로 예외를 던지지 않는다.
+  /// 로그인하지 않았거나 조회에 실패하면 null이다 — 예외를 던지지 않는다.
   Future<User?> loadCurrentUser({bool refresh = false}) async {
     if (_currentUser != null && !refresh) return _currentUser;
     if (!await isLoggedIn) return null;
@@ -37,7 +36,6 @@ class AuthService {
     try {
       _currentUser = await _authApi.fetchMe();
     } catch (_) {
-      // 네트워크 문제로 권한을 모를 수 있다. 그때는 admin이 아닌 것으로 본다.
       return null;
     }
 

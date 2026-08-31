@@ -25,15 +25,11 @@ class CourseListSheet extends StatelessWidget {
     required this.onSelect,
     required this.onClose,
     required this.onRetry,
-    this.onEdit,
   });
 
   final List<RunningCourse> courses;
   final bool isLoading;
   final bool hasError;
-
-  /// 주면 각 카드에 관리자 전용 수정 버튼이 붙는다.
-  final ValueChanged<RunningCourse>? onEdit;
 
   /// 검색어가 걸려 있는지. 비어 있을 때 "코스가 없다"와 "검색 결과가 없다"는
   /// 사용자가 할 일이 다르다.
@@ -105,7 +101,6 @@ class CourseListSheet extends StatelessWidget {
       itemBuilder: (context, index) => CourseCard(
         course: courses[index],
         onTap: () => onSelect(courses[index]),
-        onEdit: onEdit == null ? null : () => onEdit!(courses[index]),
       ),
     );
   }
