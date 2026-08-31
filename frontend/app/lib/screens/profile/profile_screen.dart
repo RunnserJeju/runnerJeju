@@ -9,7 +9,6 @@ import '../../widgets/async_view.dart';
 import '../../widgets/course_card.dart';
 import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
-import '../connection_test_screen.dart';
 import '../course/course_detail_screen.dart';
 import '../run/run_detail_screen.dart';
 
@@ -55,13 +54,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('마이페이지'),
         actions: [
-          IconButton(
-            tooltip: '서버 연결 테스트',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ConnectionTestScreen()),
-            ),
-            icon: const Icon(Icons.settings_ethernet_rounded),
-          ),
           IconButton(
             tooltip: '로그아웃',
             onPressed: _logout,
