@@ -7,13 +7,10 @@ import '../../models/running_course.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
-import '../../widgets/admin_only.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/banner_carousel.dart';
 import '../../widgets/course_recommend_card.dart';
 import '../course/course_detail_screen.dart';
-import 'banner_create_screen.dart';
-import 'notice_create_screen.dart';
 
 /// 홈: 배너 + 추천 코스 + 러닝 코스 큐레이션 + 공지사항.
 class HomeScreen extends StatefulWidget {
@@ -59,33 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text('Runners Jeju'),
-        actions: [
-          AdminOnly(
-            child: IconButton(
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              tooltip: '배너 등록',
-              onPressed: () => Navigator.of(context)
-                  .push(
-                    MaterialPageRoute(builder: (_) => const BannerCreateScreen()),
-                  )
-                  .then((_) => _refresh()),
-            ),
-          ),
-          AdminOnly(
-            child: IconButton(
-              icon: const Icon(Icons.add_circle_outline_rounded),
-              tooltip: '공지사항 작성',
-              onPressed: () => Navigator.of(context)
-                  .push(
-                    MaterialPageRoute(builder: (_) => const NoticeCreateScreen()),
-                  )
-                  .then((_) => _refresh()),
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Runners Jeju')),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(

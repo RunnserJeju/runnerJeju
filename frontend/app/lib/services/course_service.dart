@@ -1,9 +1,8 @@
 import '../api/course_api.dart';
 import '../exceptions/app_exception.dart';
-import '../models/course_facility.dart';
 import '../models/running_course.dart';
 
-/// 비즈니스 로직 계층: 코스 조회/등록. UI가 이해할 수 있는 형태로 오류를 바꿔준다.
+/// 비즈니스 로직 계층: 코스 조회. UI가 이해할 수 있는 형태로 오류를 바꿔준다.
 class CourseService {
   CourseService(this._courseApi);
 
@@ -22,70 +21,6 @@ class CourseService {
       return await _courseApi.fetchCourse(courseId);
     } catch (e) {
       throw AppException('코스 정보를 불러오지 못했어요.', e);
-    }
-  }
-
-  /// GPX 파일을 코스로 등록한다 (관리자용 수동 업로드).
-  Future<RunningCourse> uploadGpxFile({
-    required List<int> bytes,
-    required String filename,
-    required String name,
-    required int distanceKm,
-    required CourseDifficulty difficulty,
-    required String address,
-    String? tags,
-    List<CourseFacility> parkings = const [],
-    List<CourseFacility> restrooms = const [],
-    String? description,
-  }) async {
-    if (bytes.isEmpty) {
-      throw AppException('GPX 파일이 비어 있어요.');
-    }
-
-    try {
-      return await _courseApi.uploadGpx(
-        bytes: bytes,
-        filename: filename,
-        name: name,
-        distanceKm: distanceKm,
-        difficulty: difficulty,
-        address: address,
-        tags: tags,
-        parkings: parkings,
-        restrooms: restrooms,
-        description: description,
-      );
-    } catch (e) {
-      throw AppException('GPX 업로드에 실패했어요.', e);
-    }
-  }
-
-  /// 코스 메타데이터를 수정한다 (관리자용). 경로는 그대로 두고 정보만 바꾼다.
-  Future<RunningCourse> updateCourse({
-    required String courseId,
-    required String name,
-    required int distanceKm,
-    required CourseDifficulty difficulty,
-    required String address,
-    String? tags,
-    List<CourseFacility> parkings = const [],
-    List<CourseFacility> restrooms = const [],
-    String? description,
-  }) async {
-    try {
-      return await _courseApi.updateCourse(
-        courseId: courseId,
-        name: name,
-        distanceKm: distanceKm,
-        difficulty: difficulty,
-        address: address,
-        tags: tags,
-        parkings: parkings,
-        restrooms: restrooms,
-        description: description,
-      );
-    } catch (e) {
-      throw AppException('코스 수정에 실패했어요.', e);
     }
   }
 }

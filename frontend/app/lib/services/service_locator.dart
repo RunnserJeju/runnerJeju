@@ -2,7 +2,6 @@ import '../api/auth_api.dart';
 import '../api/banner_api.dart';
 import '../api/course_api.dart';
 import '../api/favorite_api.dart';
-import '../api/geo_api.dart';
 import '../api/notice_api.dart';
 import '../api/run_api.dart';
 import '../api/stamp_api.dart';
@@ -13,7 +12,6 @@ import 'auth_service.dart';
 import 'banner_service.dart';
 import 'course_service.dart';
 import 'favorite_service.dart';
-import 'geo_service.dart';
 import 'kakao_map_launcher.dart';
 import 'location_service.dart';
 import 'notice_service.dart';
@@ -59,7 +57,6 @@ class Services {
 
   /// 러닝 프로그램(커뮤니티/마이페이지). 아직 서버 API가 없어 빈 목록만 준다.
   late final ProgramService program = const ProgramService();
-  late final GeoService geo = GeoService(GeoApi(apiClient));
   late final RunService run = RunService(RunApi(apiClient));
   late final StampService stamp = StampService(StampApi(apiClient));
   late final VerificationService verification = VerificationService(

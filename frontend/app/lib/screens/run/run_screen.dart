@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/geo_point.dart';
@@ -12,7 +13,6 @@ import '../../test/simulation_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/transient_messenger.dart';
-import '../../widgets/admin_only.dart';
 import '../../widgets/metric_tile.dart';
 import '../../widgets/run_map_view.dart';
 import 'run_result_screen.dart';
@@ -433,23 +433,20 @@ class _Controls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (tracker.status) {
-      // 시뮬레이션 버튼은 admin 계정에게만 보인다(AdminOnly 참고).
+      // 시뮬레이션은 debug 빌드에서만 쓴다. 가짜 위치로 완주 스탬프를 딸 수
+      // 있어서, 릴리스에는 버튼도 코드도 들어가지 않아야 한다.
       RunStatus.idle || RunStatus.finished => Row(
         children: [
           Expanded(
             child: FilledButton(onPressed: onStart, child: const Text('러닝 시작')),
           ),
-          AdminOnly(
-            child: Row(
-              children: [
-                const SizedBox(width: 12),
-                SimulationStartButton(
-                  coursePath: coursePath,
-                  onStart: onStartSimulation,
-                ),
-              ],
+          if (kDebugMode) ...[
+            const SizedBox(width: 12),
+            SimulationStartButton(
+              coursePath: coursePath,
+              onStart: onStartSimulation,
             ),
-          ),
+          ],
         ],
       ),
       // 종료는 항상 일시정지를 거친다 — 완주했든 아니든 사용자가 일시정지를

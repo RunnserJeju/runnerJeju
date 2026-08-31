@@ -15,12 +15,4 @@ class NoticeService {
       throw AppException('공지사항을 불러오지 못했어요.', e);
     }
   }
-
-  Future<Notice> createNotice({required String title, required String body}) async {
-    try {
-      return await _noticeApi.createNotice(title: title, body: body);
-    } catch (e) {
-      throw AppException('공지사항을 등록하지 못했어요.', e);
-    }
-  }
 }

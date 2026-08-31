@@ -1,8 +1,3 @@
-import 'dart:convert';
-
-import 'package:dio/dio.dart';
-
-import '../models/course_facility.dart';
 import '../models/running_course.dart';
 import '../network/api_client.dart';
 
@@ -29,74 +24,6 @@ class CourseApi {
   /// 코스 상세 (경로 좌표 포함).
   Future<RunningCourse> fetchCourse(String courseId) async {
     final response = await _client.dio.get('/courses/$courseId');
-    return RunningCourse.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  /// GPX 파일로 코스를 등록한다 (관리자 전용).
-  ///
-  /// 항상 새 코스가 생긴다 — 같은 파일을 두 번 올리면 코스도 두 개가 된다.
-  /// 거리·난이도·주소는 GPX에서 알 수 없으므로 폼으로 함께 보낸다.
-  Future<RunningCourse> uploadGpx({
-    required List<int> bytes,
-    required String filename,
-    required String name,
-    required int distanceKm,
-    required CourseDifficulty difficulty,
-    required String address,
-    String? tags,
-    List<CourseFacility> parkings = const [],
-    List<CourseFacility> restrooms = const [],
-    String? description,
-  }) async {
-    final formData = FormData.fromMap({
-      'name': name,
-      'distance_km': distanceKm,
-      'difficulty': difficulty.value,
-      'address': address,
-      'tags': ?tags,
-      // 좌표까지 포함한 JSON 목록으로 보낸다. 서버가 Facility로 검증한다.
-      'parkings': jsonEncode(parkings.map((f) => f.toJson()).toList()),
-      'restrooms': jsonEncode(restrooms.map((f) => f.toJson()).toList()),
-      'description': ?description,
-      'file': MultipartFile.fromBytes(bytes, filename: filename),
-    });
-
-    final response = await _client.dio.post(
-      '/admin/courses/gpx',
-      data: formData,
-      options: Options(sendTimeout: const Duration(seconds: 30)),
-    );
-
-    return RunningCourse.fromJson(response.data as Map<String, dynamic>);
-  }
-
-  /// 코스 메타데이터를 수정한다 (관리자 전용). 경로(GPX)는 바꾸지 않으므로
-  /// 파일 없이 JSON으로 보낸다. 서버가 CourseUpdate로 검증한다.
-  Future<RunningCourse> updateCourse({
-    required String courseId,
-    required String name,
-    required int distanceKm,
-    required CourseDifficulty difficulty,
-    required String address,
-    String? tags,
-    List<CourseFacility> parkings = const [],
-    List<CourseFacility> restrooms = const [],
-    String? description,
-  }) async {
-    final response = await _client.dio.patch(
-      '/admin/courses/$courseId',
-      data: {
-        'name': name,
-        'distance_km': distanceKm,
-        'difficulty': difficulty.value,
-        'address': address,
-        'tags': ?tags,
-        'parkings': parkings.map((f) => f.toJson()).toList(),
-        'restrooms': restrooms.map((f) => f.toJson()).toList(),
-        'description': ?description,
-      },
-    );
-
     return RunningCourse.fromJson(response.data as Map<String, dynamic>);
   }
 }
