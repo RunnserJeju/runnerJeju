@@ -16,14 +16,13 @@ class ElevationSample {
 ///
 /// 코스 경로(`RunningCourse.path`)는 서버가 15m 균등 간격으로 리샘플하면서 점별
 /// 고도까지 채워 내려준다(server `app/gpx.py`). 그래프는 그 값을 그대로 그린다 —
-/// 여기서 하는 일은 x축에 쓸 누적 거리와, 요약에 쓸 최소/최대/누적 상승을 한 번
+/// 여기서 하는 일은 x축에 쓸 누적 거리와, y축 범위에 쓸 최소/최대를 한 번
 /// 계산해 두는 것뿐이다.
 class ElevationProfile {
   const ElevationProfile._({
     required this.samples,
     required this.minAltitude,
     required this.maxAltitude,
-    required this.gainMeters,
   });
 
   final List<ElevationSample> samples;
@@ -31,17 +30,8 @@ class ElevationProfile {
   final double minAltitude;
   final double maxAltitude;
 
-  /// 누적 상승(m). 오르막 구간의 상승분만 더한 값이다.
-  final double gainMeters;
-
   /// 코스 전체 길이(m).
   double get distanceMeters => samples.last.distanceMeters;
-
-  /// 누적 상승을 셀 때 무시할 잔떨림의 크기(m).
-  ///
-  /// 서버 `geo.elevation_gain_meters`의 threshold와 같은 값이어야 한다 — 같은
-  /// 경로를 두 곳에서 재는데 값이 갈리면 어느 쪽이 맞는지 알 수 없게 된다.
-  static const double _gainThresholdMeters = 3.0;
 
   /// 경로에서 프로파일을 만든다. 고도를 그릴 수 없는 코스면 null.
   ///
@@ -74,25 +64,6 @@ class ElevationProfile {
       samples: samples,
       minAltitude: altitudes.reduce((a, b) => a < b ? a : b),
       maxAltitude: altitudes.reduce((a, b) => a > b ? a : b),
-      gainMeters: _gainOf(altitudes),
     );
-  }
-
-  /// 누적 상승. 연속한 두 점의 차를 그대로 더하면 측정 노이즈가 전부 상승분으로
-  /// 쌓이므로, [_gainThresholdMeters] 이상 올라갔을 때만 반영한다.
-  static double _gainOf(List<double> altitudes) {
-    var gain = 0.0;
-    var reference = altitudes.first;
-
-    for (final value in altitudes.skip(1)) {
-      if (value - reference >= _gainThresholdMeters) {
-        gain += value - reference;
-        reference = value;
-      } else if (value < reference) {
-        reference = value;
-      }
-    }
-
-    return gain;
   }
 }

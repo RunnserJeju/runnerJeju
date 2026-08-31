@@ -207,27 +207,6 @@ class TestJejuBounds:
         assert not geo.is_within_jeju([JEJU_CITY_HALL, (37.5665, 126.9780)])
 
 
-class TestElevationGain:
-    def test_ignores_noise_below_threshold(self):
-        # 1m 미만으로 오르내리는 잔떨림은 상승으로 치지 않는다.
-        noisy = [2.5, 2.6, 2.5, 2.7, 2.6, 2.5]
-        assert geo.elevation_gain_meters(noisy) == 0
-
-    def test_counts_real_climb(self):
-        assert geo.elevation_gain_meters([0, 10, 20]) == pytest.approx(20)
-
-    def test_ignores_descent(self):
-        assert geo.elevation_gain_meters([100, 50, 10]) == 0
-
-    def test_counts_each_climb_separately(self):
-        # 올라갔다 내려갔다 다시 올라가면 두 번의 상승이 모두 잡힌다.
-        assert geo.elevation_gain_meters([0, 10, 0, 10]) == pytest.approx(20)
-
-    def test_short_input(self):
-        assert geo.elevation_gain_meters([]) == 0
-        assert geo.elevation_gain_meters([5.0]) == 0
-
-
 class TestBoundsAndCenter:
     def test_bounds(self):
         path = [(33.20, 126.30), (33.25, 126.35), (33.22, 126.28)]

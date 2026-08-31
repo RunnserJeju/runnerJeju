@@ -9,6 +9,8 @@ import '../models/course_facility.dart';
 import '../models/geo_point.dart';
 import '../models/running_course.dart';
 import '../theme/app_theme.dart';
+import '../utils/geo_utils.dart';
+import 'course_endpoint_marker.dart';
 import 'facility_marker.dart';
 import 'map_status_views.dart';
 
@@ -102,6 +104,11 @@ class _CourseMapViewState extends State<CourseMapView> {
 
   kakao.Route? _selectedRoute;
   List<GeoPoint>? _drawnSelectedPath;
+
+  /// 선택된 코스 시작/끝의 '출발'/'도착' 배지. 선택이 바뀔 때만 다시 그린다.
+  final List<kakao.Poi> _endpointMarkers = [];
+  List<GeoPoint>? _drawnEndpointPath;
+  final Map<String, kakao.PoiStyle> _endpointStyles = {};
 
   /// 선택된 코스의 시설 마커들. 선택이 바뀌면 통째로 지우고 다시 그린다.
   final List<kakao.Poi> _facilityMarkers = [];
@@ -311,6 +318,7 @@ class _CourseMapViewState extends State<CourseMapView> {
         await _syncMarkers(controller);
         await _syncHighlight();
         await _syncSelectedRoute(controller);
+        await _syncEndpointMarkers(controller);
         await _syncFacilityMarkers(controller);
         await _syncMyPosition(controller);
         await _fitOnFirstLoad();
@@ -407,6 +415,71 @@ class _CourseMapViewState extends State<CourseMapView> {
       await existing.changePoint(latLngs);
     }
     _drawnSelectedPath = points;
+  }
+
+  /// 선택된 코스 시작/끝점에 '출발'/'도착' 배지를 찍는다. 시작과 끝이 사실상
+  /// 같은 순환 코스에는 '출발·도착' 하나만 찍는다.
+  Future<void> _syncEndpointMarkers(kakao.KakaoMapController controller) async {
+    final points = widget.selectedPath;
+    if (identical(_drawnEndpointPath, points)) return;
+
+    for (final marker in _endpointMarkers) {
+      await marker.remove();
+      if (_disposed) return;
+    }
+    _endpointMarkers.clear();
+
+    if (points.length >= 2) {
+      final isLoop =
+          GeoUtils.distanceBetween(points.first, points.last) <=
+          loopEndpointThresholdMeters;
+
+      Future<void> place(GeoPoint point, kakao.PoiStyle? style) async {
+        if (style == null || _disposed) return;
+        final poi = await controller.labelLayer.addPoi(
+          _toLatLng(point),
+          style: style,
+        );
+        if (_disposed) {
+          await poi.remove();
+          return;
+        }
+        _endpointMarkers.add(poi);
+      }
+
+      if (isLoop) {
+        await place(
+          points.first,
+          await _ensureEndpointStyle(startEndpointColor, loopEndpointLabel),
+        );
+      } else {
+        // 출발을 나중에 찍어, 짧은 코스에서 겹치면 출발이 위에 오게 한다.
+        await place(
+          points.last,
+          await _ensureEndpointStyle(finishEndpointColor, finishEndpointLabel),
+        );
+        if (_disposed) return;
+        await place(
+          points.first,
+          await _ensureEndpointStyle(startEndpointColor, startEndpointLabel),
+        );
+      }
+      if (_disposed) return;
+    }
+
+    _drawnEndpointPath = points;
+  }
+
+  Future<kakao.PoiStyle?> _ensureEndpointStyle(Color color, String label) async {
+    final cached = _endpointStyles[label];
+    if (cached != null) return cached;
+
+    final icon = await buildCourseEndpointChip(color, label);
+    if (_disposed) return null;
+    return _endpointStyles[label] = kakao.PoiStyle(
+      anchor: const kakao.KPoint(0.5, 0.5),
+      icon: icon,
+    );
   }
 
   /// 선택된 코스의 주차장/화장실 배지를 좌표에 찍는다. 선택이 바뀌면 통째로

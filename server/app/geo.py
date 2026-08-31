@@ -166,28 +166,6 @@ def resample_path_positions(
     return result
 
 
-def elevation_gain_meters(elevations: list[float], threshold: float = 3.0) -> float:
-    """누적 고도 상승(m).
-
-    연속한 두 점의 차이를 그대로 더하면 고도 측정 노이즈가 전부 상승분으로
-    쌓인다. threshold 이상 올라갔을 때만 반영해서 잔떨림을 걸러낸다.
-    """
-    if len(elevations) < 2:
-        return 0.0
-
-    gain = 0.0
-    reference = elevations[0]
-
-    for value in elevations[1:]:
-        if value - reference >= threshold:
-            gain += value - reference
-            reference = value
-        elif value < reference:
-            reference = value
-
-    return gain
-
-
 def center_of(path: list[Point]) -> Point:
     """경로의 중심점. 위경도 평균이 아니라 구면 평균이라 경도 180도 부근에서도 안전하다."""
     x = y = z = 0.0

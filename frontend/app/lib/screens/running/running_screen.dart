@@ -315,13 +315,24 @@ class _RunningScreenState extends State<RunningScreen> {
           '카카오맵으로 길찾기를 시작할까요?',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('여기서 시작'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('길찾기'),
+          // 버튼 공통 스타일이 가로를 꽉 채우므로(app_theme.dart의 minimumSize)
+          // 그대로 두면 상하로 쌓인다. Row+Expanded로 좌우 반반 배치.
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('여기서 시작'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('길찾기'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

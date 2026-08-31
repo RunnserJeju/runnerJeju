@@ -49,19 +49,6 @@ void main() {
       expect(profile.minAltitude, 4);
       expect(profile.maxAltitude, 30);
     });
-
-    test('누적 상승은 오르막만 더한다', () {
-      final profile = ElevationProfile.of(pathOf([0, 10, 0, 10]))!;
-
-      expect(profile.gainMeters, closeTo(20, 0.01));
-    });
-
-    test('3m 미만의 잔떨림은 상승으로 세지 않는다', () {
-      // 서버 geo.elevation_gain_meters와 같은 판정이어야 한다.
-      final profile = ElevationProfile.of(pathOf([10, 12, 10, 12, 10]))!;
-
-      expect(profile.gainMeters, 0);
-    });
   });
 
   group('ElevationChart', () {

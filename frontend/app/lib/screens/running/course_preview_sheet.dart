@@ -104,20 +104,6 @@ class CoursePreviewSheet extends StatelessWidget {
                 onRetry: onRetryDetail,
               ),
               const SizedBox(height: 20),
-              // 시작 버튼 아래에 둔다 — 접힌 높이(_collapsedSize)는 시작 버튼까지만
-              // 보이게 맞춰져 있어서, 위에 끼우면 그 약속이 깨진다. 여기 두면
-              // 시트를 끌어올렸을 때 가장 먼저 보인다.
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: CourseThumbnail(
-                    url: course.thumbnailUrl,
-                    iconSize: 44,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
               const Divider(height: 1, color: Color(0xFFEDEFF2)),
               const SizedBox(height: 20),
               ..._details(context),
@@ -221,28 +207,8 @@ class _ElevationSectionState extends State<_ElevationSection> {
           const SizedBox(height: 10),
           if (profile == null)
             const _ElevationUnavailable()
-          else ...[
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _Chip(
-                  icon: Icons.trending_up_rounded,
-                  label: '누적 상승 ${profile.gainMeters.round()}m',
-                ),
-                _Chip(
-                  icon: Icons.terrain_rounded,
-                  label: '최고 ${profile.maxAltitude.round()}m',
-                ),
-                _Chip(
-                  icon: Icons.waves_rounded,
-                  label: '최저 ${profile.minAltitude.round()}m',
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+          else
             ElevationChart(profile: profile),
-          ],
         ],
       ),
     );
@@ -295,6 +261,14 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox.square(
+            dimension: 72,
+            child: CourseThumbnail(url: course.thumbnailUrl, iconSize: 26),
+          ),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

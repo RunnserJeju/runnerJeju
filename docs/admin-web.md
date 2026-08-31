@@ -51,9 +51,25 @@
 - `DELETE /courses/{id}/thumbnail` — `thumbnail_url`을 null로 + Storage 파일 삭제. 이미 없으면 no-op.
 - 등록도 이 엔드포인트로 올린다 → "처음 설정"과 "교체"가 같은 코드.
 
-**조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함. 앱은 반영 완료(소요시간 표시, 썸네일 카드).
+**조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함.
 
-**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`). **배포 전 Supabase에 `course-thumbnails` Public 버킷 생성 필요.**
+앱 표시 완료 (2026-08-31) — 홈 추천 카드, 코스 탐색 목록·프로필 찜 목록
+(`CourseCard` 좌측 100px), 코스 바텀시트(16:9). 공통 위젯
+`widgets/course_thumbnail.dart`가 `cached_network_image`로 그리고, URL이 없거나
+실패해도 같은 크기의 플레이스홀더를 그려 카드 높이가 흔들리지 않는다.
+바텀시트에서는 **시작 버튼 아래**에 둔다 — 접힘 높이(`_collapsedSize`)가 시작
+버튼까지만 보이도록 맞춰져 있어서 그 위에 끼우면 약속이 깨진다.
+
+**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`).
+
+`course-thumbnails` Public 버킷 **생성 완료 (2026-08-31, 개발·운영 양쪽)**. 서버
+제약과 같은 값으로 맞춰 뒀다 — `public=true`, `file_size_limit=8MB`,
+`allowed_mime_types=[image/jpeg, image/png, image/webp]`
+(`admin/courses.py`의 `MAX_THUMBNAIL_BYTES`·`_ALLOWED_IMAGE_TYPES`와 동일).
+개발 버킷에 업로드→public URL 조회→삭제까지 확인했다.
+
+> `cloudbuild.yaml`은 `SUPABASE_COURSE_BUCKET`을 넘기지 않는다 — 기본값이 곧
+> 버킷 이름이라 그대로 동작한다. 버킷 이름을 바꾸려면 그때 환경변수를 추가한다.
 
 ## 목표 서버 구조
 
