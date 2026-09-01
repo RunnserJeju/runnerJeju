@@ -261,7 +261,7 @@ class TestUpdateCourse:
         course = _course()
         db = UpdateFakeSession(course)
 
-        result = admin_courses_router.update_course(course.id, self._payload(), db, "admin")
+        result = admin_courses_router.update_course(course.id, self._payload(), db)
 
         assert course.name == "새 이름"
         assert course.distance_km == 9
@@ -281,7 +281,7 @@ class TestUpdateCourse:
         db = UpdateFakeSession(course)
 
         admin_courses_router.update_course(
-            course.id, self._payload(estimated_time_min=None), db, "admin"
+            course.id, self._payload(estimated_time_min=None), db
         )
 
         assert course.estimated_time_min is None
@@ -291,7 +291,7 @@ class TestUpdateCourse:
         course = _course(thumbnail_url="https://example.com/keep.png")
         db = UpdateFakeSession(course)
 
-        admin_courses_router.update_course(course.id, self._payload(), db, "admin")
+        admin_courses_router.update_course(course.id, self._payload(), db)
 
         assert course.thumbnail_url == "https://example.com/keep.png"
 
@@ -300,7 +300,7 @@ class TestUpdateCourse:
         db = UpdateFakeSession(course)
 
         admin_courses_router.update_course(
-            course.id, self._payload(parkings=[PARKING], restrooms=[RESTROOM]), db, "admin"
+            course.id, self._payload(parkings=[PARKING], restrooms=[RESTROOM]), db
         )
 
         assert course.parkings == [PARKING]
@@ -311,7 +311,7 @@ class TestUpdateCourse:
         original_path = list(course.path)
         db = UpdateFakeSession(course)
 
-        admin_courses_router.update_course(course.id, self._payload(), db, "admin")
+        admin_courses_router.update_course(course.id, self._payload(), db)
 
         assert course.path == original_path
 
@@ -319,7 +319,7 @@ class TestUpdateCourse:
         db = UpdateFakeSession(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            admin_courses_router.update_course(uuid.uuid4(), self._payload(), db, "admin")
+            admin_courses_router.update_course(uuid.uuid4(), self._payload(), db)
 
         assert exc_info.value.status_code == 404
         assert db.committed is False
@@ -416,7 +416,7 @@ class TestCourseThumbnail:
         db = UpdateFakeSession(course)
 
         result = admin_courses_router.set_course_thumbnail(
-            course.id, FakeUpload(), db, "admin"
+            course.id, FakeUpload(), db
         )
 
         assert course.thumbnail_url == "https://cdn/new.png"
@@ -429,7 +429,7 @@ class TestCourseThumbnail:
         course = _course(thumbnail_url="https://cdn/old.png")
         db = UpdateFakeSession(course)
 
-        admin_courses_router.set_course_thumbnail(course.id, FakeUpload(), db, "admin")
+        admin_courses_router.set_course_thumbnail(course.id, FakeUpload(), db)
 
         assert course.thumbnail_url == "https://cdn/new.png"
         # 교체 시 옛 오브젝트를 지운다.
@@ -442,7 +442,7 @@ class TestCourseThumbnail:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_courses_router.set_course_thumbnail(
-                course.id, FakeUpload(content_type="application/pdf"), db, "admin"
+                course.id, FakeUpload(content_type="application/pdf"), db
             )
 
         assert exc_info.value.status_code == 422
@@ -454,7 +454,7 @@ class TestCourseThumbnail:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_courses_router.set_course_thumbnail(
-                uuid.uuid4(), FakeUpload(), db, "admin"
+                uuid.uuid4(), FakeUpload(), db
             )
 
         assert exc_info.value.status_code == 404
@@ -464,7 +464,7 @@ class TestCourseThumbnail:
         course = _course(thumbnail_url="https://cdn/old.png")
         db = UpdateFakeSession(course)
 
-        result = admin_courses_router.delete_course_thumbnail(course.id, db, "admin")
+        result = admin_courses_router.delete_course_thumbnail(course.id, db)
 
         assert course.thumbnail_url is None
         assert result["thumbnail_url"] is None
@@ -475,7 +475,7 @@ class TestCourseThumbnail:
         course = _course(thumbnail_url=None)
         db = UpdateFakeSession(course)
 
-        admin_courses_router.delete_course_thumbnail(course.id, db, "admin")
+        admin_courses_router.delete_course_thumbnail(course.id, db)
 
         # 지울 게 없으면 Storage 삭제도 부르지 않는다.
         assert deleted == []
@@ -485,7 +485,7 @@ class TestCourseThumbnail:
         db = UpdateFakeSession(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            admin_courses_router.delete_course_thumbnail(uuid.uuid4(), db, "admin")
+            admin_courses_router.delete_course_thumbnail(uuid.uuid4(), db)
 
         assert exc_info.value.status_code == 404
 
@@ -541,7 +541,7 @@ class TestReplaceCourseGpx:
         db = GpxReplaceFakeSession(course, has_activity=False)
 
         result = admin_courses_router.replace_course_gpx(
-            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db
         )
 
         # 경로가 실제로 새 GPX에서 뽑은 점들로 바뀐다.
@@ -557,7 +557,7 @@ class TestReplaceCourseGpx:
         db = GpxReplaceFakeSession(course, has_activity=False)
 
         admin_courses_router.replace_course_gpx(
-            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+            course.id, FakeUpload(content=SAGYE.read_bytes()), db=db
         )
 
         assert course.name == "옛 이름"
@@ -574,8 +574,7 @@ class TestReplaceCourseGpx:
                 FakeUpload(content=SAGYE.read_bytes()),
                 reset_records=False,
                 db=db,
-                user_id="admin",
-            )
+                            )
 
         assert exc_info.value.status_code == 409
         # 경로는 그대로 — 커밋도 초기화도 안 한다.
@@ -593,8 +592,7 @@ class TestReplaceCourseGpx:
             FakeUpload(content=SAGYE.read_bytes()),
             reset_records=True,
             db=db,
-            user_id="admin",
-        )
+                    )
 
         # 경로 교체 + 스탬프/검증 초기화(delete 2건) + 커밋.
         assert course.path != original_path
@@ -613,8 +611,7 @@ class TestReplaceCourseGpx:
                 FakeUpload(content=b""),
                 reset_records=True,
                 db=db,
-                user_id="admin",
-            )
+                            )
 
         assert exc_info.value.status_code == 422
         assert db.delete_count == 0
@@ -625,7 +622,7 @@ class TestReplaceCourseGpx:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_courses_router.replace_course_gpx(
-                uuid.uuid4(), FakeUpload(content=SAGYE.read_bytes()), db=db, user_id="admin"
+                uuid.uuid4(), FakeUpload(content=SAGYE.read_bytes()), db=db
             )
 
         assert exc_info.value.status_code == 404
@@ -636,7 +633,7 @@ class TestReplaceCourseGpx:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_courses_router.replace_course_gpx(
-                course.id, FakeUpload(content=b""), db=db, user_id="admin"
+                course.id, FakeUpload(content=b""), db=db
             )
 
         assert exc_info.value.status_code == 422

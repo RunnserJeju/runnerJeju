@@ -34,6 +34,8 @@ services:
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-banners}
       # 기본값을 두지 않는다. 없으면 app/config_guard.py가 기동을 거부한다.
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+      # 운영 웹(/admin-ui)의 /admin/* 인증 키. 이것도 없으면 기동 거부.
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       # 코스 주차장/화장실 주소→좌표 변환(GET /geo/geocode)용. infra/.env 참고.
       # 없으면 "확인"이 502를 낸다(app/geocoding.py).
       KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:-}

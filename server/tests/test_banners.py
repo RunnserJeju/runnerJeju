@@ -95,7 +95,7 @@ class TestCreateBanner:
         file = FakeUploadFile(b"fake-image-bytes", content_type="image/png")
 
         result = admin_banners_router.create_banner(
-            file=file, sort_order=2, db=db, user_id=str(uuid.uuid4())
+            file=file, sort_order=2, db=db
         )
 
         assert result.image_url == "https://cdn/x.jpg"
@@ -108,7 +108,7 @@ class TestCreateBanner:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_banners_router.create_banner(
-                file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
+                file=file, sort_order=0, db=db
             )
 
         assert exc_info.value.status_code == 422
@@ -119,7 +119,7 @@ class TestCreateBanner:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_banners_router.create_banner(
-                file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
+                file=file, sort_order=0, db=db
             )
 
         assert exc_info.value.status_code == 422
@@ -131,7 +131,7 @@ class TestCreateBanner:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_banners_router.create_banner(
-                file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
+                file=file, sort_order=0, db=db
             )
 
         assert exc_info.value.status_code == 413
@@ -146,7 +146,7 @@ class TestCreateBanner:
 
         with pytest.raises(HTTPException) as exc_info:
             admin_banners_router.create_banner(
-                file=file, sort_order=0, db=db, user_id=str(uuid.uuid4())
+                file=file, sort_order=0, db=db
             )
 
         assert exc_info.value.status_code == 502

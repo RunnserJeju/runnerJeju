@@ -1,0 +1,310 @@
+:root {
+  --ink: #1a1d21;
+  --paper: #f5f6f8;
+  --line: #dcdfe4;
+  --muted: #7a8593;
+  --danger: #c0392b;
+  --accent: #1a1d21;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI',
+    Roboto, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.topbar h1 {
+  font-size: 16px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 4px;
+}
+
+.topbar nav a {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.topbar nav a.active {
+  background: var(--paper);
+}
+
+.apikey {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.apikey label {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.apikey input {
+  width: 220px;
+}
+
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+}
+
+h2 {
+  font-size: 20px;
+  margin: 8px 0 20px;
+}
+
+h3 {
+  font-size: 15px;
+  margin: 28px 0 10px;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  width: 100%;
+}
+
+textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid #9aa4b2;
+  outline-offset: -1px;
+}
+
+button {
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.secondary {
+  background: #fff;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+button.danger {
+  background: #fff;
+  color: var(--danger);
+  border-color: var(--line);
+}
+
+button.small {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field > label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.field .hint {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+}
+
+.row .field {
+  flex: 1;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.error {
+  background: #fdecea;
+  border: 1px solid #f5c6c0;
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  white-space: pre-wrap;
+}
+
+.notice {
+  background: #eef6ee;
+  border: 1px solid #cfe5cf;
+  color: #256029;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+}
+
+.confirm {
+  background: #fff8e6;
+  border: 1px solid #f0dfa8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+
+.confirm .actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+th {
+  background: #fafbfc;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:hover {
+  background: #fafbfc;
+}
+
+.thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--paper);
+  display: block;
+}
+
+.thumb.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.thumb.large {
+  width: 160px;
+  height: 160px;
+}
+
+.facility {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.facility .coord {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.facility .coord.ok {
+  color: #256029;
+}
+
+.candidates {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.candidates button {
+  text-align: left;
+  font-weight: 400;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.submit-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 20px;
+}

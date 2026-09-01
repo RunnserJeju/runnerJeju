@@ -19,6 +19,8 @@
 
 | 엔드포인트 | 용도 |
 |---|---|
+| `GET /admin/courses` | 코스 목록 (운영 웹용 — 공개 GET은 앱 JWT 필요) |
+| `GET /admin/courses/{id}` | 코스 상세 (경로 포함) |
 | `POST /admin/courses/gpx` | 코스 등록 (multipart, GPX + 메타데이터) |
 | `PATCH /admin/courses/{id}` | 코스 메타데이터 수정 |
 | `PUT /admin/courses/{id}/gpx` | 경로 교체 (기록 있으면 409 → `reset_records=true`) |
@@ -139,28 +141,43 @@ DB에 직접 쓰므로 앱·웹과 무관하게 동작한다.
 > **서버는 건드리지 않았다.** `/admin/*` 엔드포인트와 JWT `require_admin`을 그대로
 > 뒀다. 지금은 호출자가 없을 뿐이고, 4단계에서 세션 인증으로 교체하면 된다.
 
-### 4단계 — 운영 웹 (진행 예정)
+### 4단계 — 운영 웹 1차 (2026-09-01) ✅ — API 키 인증, 코스만
 
-**업무 분담:** 백엔드(세션 인증·운영 API)는 팀원, 프론트는 저장소 주인.
+세션 인증(팀원 담당)이 준비되기 전에 코스 등록/수정부터 웹으로 쓸 수 있게,
+**잠정 인증(API 키)** 으로 범위를 좁혀 배포했다. 접속: `https://<서비스 주소>/admin-ui`
 
-백엔드
-- [ ] `admin_users` / `admin_sessions` 마이그레이션 (`0012`)
-- [ ] `bcrypt` 의존성 추가 (현재 없음)
-- [ ] 세션 로그인 API (`POST /admin/login`, `POST /admin/logout`, `GET /admin/me`)
-- [ ] `require_admin`을 세션 기반으로 교체 (JWT 경로 제거 — 앱은 이미 안 쓴다)
-- [ ] 첫 운영자 계정 부트스트랩 (`tools/create_admin.py`)
-- [ ] 운영 목록용 조회 API 필요 여부 판단 — `GET /courses`는 앱용 공개 API라
-      페이징·검색이 없다
+인증 (잠정)
+- [x] `require_admin` → `require_admin_key`(`app/deps.py`) — `X-Admin-Api-Key` 헤더를
+      `ADMIN_API_KEY` 환경변수와 비교(compare_digest). JWT 경로는 제거했다
+- [x] `config_guard`가 `ADMIN_API_KEY` 미설정 시 기동 거부. 로컬은 `infra/.env`,
+      운영은 Secret Manager `admin-key`(cloudbuild deploy 스텝 `--set-secrets`)
+- [x] admin 엔드포인트의 `current_user_id` 의존 제거 — `created_by`는 `"admin-web"`,
+      응답의 `is_completed_by_me`는 False 고정(운영자에겐 무의미)
+- [x] 운영 목록/상세 추가: `GET /admin/courses`, `GET /admin/courses/{id}` —
+      공개 `GET /courses`는 앱 JWT가 필요해 운영 웹이 쓸 수 없다
+- 세션 인증이 오면: `require_admin_key`만 세션 검사로 교체하면 된다. 프론트는
+  API 키 입력칸 → 로그인 화면으로 바꾸고 fetch 헤더 한 곳만 수정
 
-프론트
-- [ ] `frontend/admin/` — Vite + React + TS, TanStack Query, react-hook-form + zod,
-      Mantine, 카카오맵 JS SDK, HashRouter
-- [ ] 화면: 로그인 → 코스 목록 → 코스 등록 → 수정·경로교체(409 흐름)·썸네일 → 배너 → 공지
+프론트 (`frontend/admin/`)
+- [x] Vite + React + TS + HashRouter. **의도적으로 단순화** — TanStack Query·
+      RHF·zod·Mantine·카카오맵 SDK는 쓰지 않았다(폼 3개에 과하다). 필요해지면 도입
+- [x] 화면: 코스 목록 → 등록(GPX·메타·주차/화장실 좌표확인·썸네일) →
+      수정(메타 PATCH·경로교체 409 확인 흐름·썸네일 교체/삭제)
+- [x] API 키는 상단 입력칸 → localStorage → 매 요청 `X-Admin-Api-Key` 헤더
+- 배너·공지 화면은 아직 없다(엔드포인트는 준비됨) — 2차에서
 
-배포
-- [ ] FastAPI가 `/admin-ui`에서 정적 서빙 (`StaticFiles`), `server/static/admin/` gitignore
-- [ ] `cloudbuild.yaml`에 `admin-build` 스텝 (npm ci → build → `server/static/admin`으로 복사)
-- [ ] Vite `base: '/admin-ui/'`, 개발용 프록시 설정
+배포 (동일 오리진)
+- [x] FastAPI가 `/admin-ui`에서 정적 서빙(`app/main.py`, 디렉터리 있을 때만 mount),
+      `server/static/` gitignore
+- [x] `cloudbuild.yaml` `admin-build` 스텝(node:22-slim, npm ci → build →
+      `server/static/admin` 복사) — 테스트 스텝 다음, 이미지 빌드 전
+- [x] Vite `base: '/admin-ui/'`, 개발 프록시 `/admin` → `localhost:8000`
+- 개발: `cd frontend/admin && npm run dev` (서버는 8000에 따로)
+
+남은 것 (2차)
+- [ ] 세션 인증으로 교체 (`admin_users`/`admin_sessions`, bcrypt, 로그인 API — 팀원)
+- [ ] 배너·공지 화면
+- [ ] 목록 페이징·검색 (코스가 수십 개 수준이라 아직 불필요)
 
 ## 결정됨 — 기록 있는 코스의 경로(GPX) 수정
 - **초기화 후 교체**로 결정(2026-08-30). `reset_records=true`면 완주 스탬프·검증을 hard delete, 경로 교체. 개인 러닝 기록(Run)은 유지 → 개인 히스토리 보존 + 감사 흔적

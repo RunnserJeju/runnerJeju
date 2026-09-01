@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app import config_guard, schema_guard
@@ -53,8 +55,15 @@ app.include_router(verifications.router)
 app.include_router(stamps.router)
 app.include_router(notices.router)
 
-# 운영자 전용 — /admin/* 아래, 라우터 레벨에서 require_admin으로 보호(app/admin/__init__.py)
+# 운영자 전용 — /admin/* 아래, 라우터 레벨에서 require_admin_key로 보호(app/admin/__init__.py)
 app.include_router(admin_router)
+
+# 운영 웹(frontend/admin의 vite build 결과). 같은 오리진에서 서빙해 인증을 단순하게
+# 유지한다(docs/admin-web.md "오리진 배치"). 빌드 산출물은 배포 파이프라인이
+# 채운다(cloudbuild.yaml admin-build 스텝) — 로컬에 없으면 API만 뜬다.
+_ADMIN_UI_DIR = Path(__file__).resolve().parent.parent / "static" / "admin"
+if _ADMIN_UI_DIR.is_dir():
+    app.mount("/admin-ui", StaticFiles(directory=_ADMIN_UI_DIR, html=True), name="admin-ui")
 
 
 @app.get("/ping")
