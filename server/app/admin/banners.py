@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
-from app.deps import current_user_id
 from app.models import Banner
 from app.schemas import BannerOut
 
@@ -29,7 +28,6 @@ def create_banner(
     file: UploadFile = File(..., description="배너 이미지 (jpg/png/webp)"),
     sort_order: int = Form(default=0, description="낮을수록 먼저 보인다"),
     db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
 ):
     """배너 이미지를 Storage에 올리고 등록한다. (관리자 전용 — 라우터 레벨에서 강제)"""
     extension = _ALLOWED_CONTENT_TYPES.get(file.content_type or "")
@@ -52,7 +50,8 @@ def create_banner(
     except storage.StorageUploadError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    banner = Banner(image_url=image_url, sort_order=sort_order, created_by=user_id)
+    # API 키 인증이라 개인 식별자가 없다. 세션 인증이 오면 운영자 id로 바꾼다.
+    banner = Banner(image_url=image_url, sort_order=sort_order, created_by="admin-web")
     db.add(banner)
     db.commit()
     db.refresh(banner)

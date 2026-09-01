@@ -1,9 +1,7 @@
-"""요청 단위 의존성(current_user_id, require_admin) 테스트.
+"""요청 단위 의존성(current_user_id, require_admin_key) 테스트.
 
-current_user_id는 DB 없이도 검증 가능하다. require_admin은 role 조회에 DB가
-필요해서, test_auth_apple.py와 같은 방침으로 Session의 최소 인터페이스만
-흉내내는 FakeDb를 쓴다. 실제 카카오 토큰 교환(POST /auth/kakao)처럼 외부 API
-호출과 upsert가 얽힌 부분은 이 파일의 범위 밖이다.
+둘 다 DB 없이 검증 가능하다. require_admin_key는 환경변수(ADMIN_API_KEY)와
+헤더 비교가 전부라 monkeypatch로 충분하다.
 """
 
 import uuid
@@ -13,19 +11,8 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app import deps, security
-from app.models import User
 
 USER_ID = uuid.uuid4()
-
-
-class FakeDb:
-    """require_admin이 쓰는 db.get(User, id) 하나만 흉내낸다."""
-
-    def __init__(self, user: User | None):
-        self._user = user
-
-    def get(self, _model, _id):
-        return self._user
 
 
 def bearer(token: str) -> HTTPAuthorizationCredentials:
@@ -59,26 +46,35 @@ class TestCurrentUserId:
         assert exc_info.value.status_code == 401
 
 
-class TestRequireAdmin:
-    def test_allows_admin_user(self):
-        admin = User(id=USER_ID, role="admin")
-        db = FakeDb(admin)
+class TestRequireAdminKey:
+    KEY = "test-admin-key"
 
-        assert deps.require_admin(str(USER_ID), db) == str(USER_ID)
+    def test_allows_matching_key(self, monkeypatch):
+        monkeypatch.setenv("ADMIN_API_KEY", self.KEY)
 
-    def test_rejects_non_admin_user(self):
-        user = User(id=USER_ID, role="user")
-        db = FakeDb(user)
+        assert deps.require_admin_key(self.KEY) is None
 
-        with pytest.raises(HTTPException) as exc_info:
-            deps.require_admin(str(USER_ID), db)
-
-        assert exc_info.value.status_code == 403
-
-    def test_rejects_when_user_not_found(self):
-        db = FakeDb(None)
+    def test_rejects_wrong_key(self, monkeypatch):
+        monkeypatch.setenv("ADMIN_API_KEY", self.KEY)
 
         with pytest.raises(HTTPException) as exc_info:
-            deps.require_admin(str(USER_ID), db)
+            deps.require_admin_key("wrong-key")
 
-        assert exc_info.value.status_code == 403
+        assert exc_info.value.status_code == 401
+
+    def test_rejects_missing_header(self, monkeypatch):
+        monkeypatch.setenv("ADMIN_API_KEY", self.KEY)
+
+        with pytest.raises(HTTPException) as exc_info:
+            deps.require_admin_key(None)
+
+        assert exc_info.value.status_code == 401
+
+    def test_refuses_when_server_key_unset(self, monkeypatch):
+        # 서버에 키가 없으면 어떤 헤더로도 통과할 수 없어야 한다(빈 값 매칭 금지).
+        monkeypatch.delenv("ADMIN_API_KEY", raising=False)
+
+        with pytest.raises(HTTPException) as exc_info:
+            deps.require_admin_key("")
+
+        assert exc_info.value.status_code == 503

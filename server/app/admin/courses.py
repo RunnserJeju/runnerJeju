@@ -13,17 +13,15 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
-from app.deps import current_user_id
 from app.models import Course, Run, Stamp, Verification
 from app.routers.courses import (
     CourseUploadError,
     _completed_counts,
-    _my_completed_course_ids,
     _to_summary,
     create_course_from_gpx_bytes,
     resample_path_from_gpx,
 )
-from app.schemas import CourseSummary, CourseUpdate, Difficulty, Facility
+from app.schemas import CourseListItem, CourseSummary, CourseUpdate, Difficulty, Facility
 
 router = APIRouter(tags=["courses"])
 
@@ -45,12 +43,30 @@ _ALLOWED_IMAGE_TYPES = {
 _facility_list = TypeAdapter(list[Facility])
 
 
+# 운영 웹용 목록/상세. 공개 GET /courses는 앱 로그인(JWT)이 필요해
+# (is_completed_by_me 계산) 운영 웹이 쓸 수 없다 — API 키로 접근하는 사본을 둔다.
+# is_completed_by_me는 운영자에겐 무의미하므로 False 고정.
+@router.get("/courses", response_model=list[CourseListItem])
+def list_courses(db: Session = Depends(get_db)):
+    """전체 코스 목록. (관리자 전용 — 라우터 레벨에서 강제)"""
+    courses = db.execute(select(Course).order_by(Course.created_at.desc())).scalars().all()
+    counts = _completed_counts(db, [course.id for course in courses])
+    return [_to_summary(course, counts.get(course.id, 0), False) for course in courses]
+
+
+@router.get("/courses/{course_id}", response_model=CourseSummary)
+def get_course(course_id: uuid.UUID, db: Session = Depends(get_db)):
+    """코스 상세(경로 포함). (관리자 전용 — 라우터 레벨에서 강제)"""
+    course = _load_course_or_404(db, course_id)
+    counts = _completed_counts(db, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), False)
+
+
 @router.patch("/courses/{course_id}", response_model=CourseSummary)
 def update_course(
     course_id: uuid.UUID,
     payload: CourseUpdate,
     db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
 ):
     """코스의 메타데이터를 수정한다. (관리자 전용 — 라우터 레벨에서 강제)
 
@@ -75,9 +91,9 @@ def update_course(
     db.refresh(course)
 
     counts = _completed_counts(db, [course.id])
-    mine = _my_completed_course_ids(db, user_id, [course.id])
 
-    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
+    # is_completed_by_me는 앱 사용자 기준 값이라 운영자에겐 의미가 없다 — False 고정.
+    return _to_summary(course, counts.get(course.id, 0), False)
 
 
 @router.post("/courses/gpx", response_model=CourseSummary, status_code=201)
@@ -100,7 +116,6 @@ def create_course_from_gpx(
         default=None, ge=1, description="예상 소요시간(분). 안내값 — 생략 가능"
     ),
     db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
 ):
     """GPX로 코스를 등록한다. (관리자 전용 — 라우터 레벨에서 강제)
 
@@ -139,7 +154,8 @@ def create_course_from_gpx(
             restrooms=[facility.model_dump() for facility in parsed_restrooms],
             description=description,
             estimated_time_min=estimated_time_min,
-            created_by=user_id,
+            # API 키 인증이라 개인 식별자가 없다. 세션 인증이 오면 운영자 id로 바꾼다.
+            created_by="admin-web",
         )
     except CourseUploadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -196,7 +212,6 @@ def replace_course_gpx(
         "완주 스탬프·검증이 초기화된다(개인 러닝 기록은 유지).",
     ),
     db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
 ):
     """코스의 경로(path)를 새 GPX로 교체한다. (관리자 전용 — 라우터 레벨에서 강제)
 
@@ -244,8 +259,7 @@ def replace_course_gpx(
     db.refresh(course)
 
     counts = _completed_counts(db, [course.id])
-    mine = _my_completed_course_ids(db, user_id, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
+    return _to_summary(course, counts.get(course.id, 0), False)
 
 
 @router.put("/courses/{course_id}/thumbnail", response_model=CourseSummary)
@@ -253,7 +267,6 @@ def set_course_thumbnail(
     course_id: uuid.UUID,
     file: UploadFile = File(..., description="썸네일 이미지 (jpg/png/webp)"),
     db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
 ):
     """코스 대표 썸네일을 올린다(교체 포함). (관리자 전용 — 라우터 레벨에서 강제)
 
@@ -299,15 +312,13 @@ def set_course_thumbnail(
         storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
 
     counts = _completed_counts(db, [course.id])
-    mine = _my_completed_course_ids(db, user_id, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
+    return _to_summary(course, counts.get(course.id, 0), False)
 
 
 @router.delete("/courses/{course_id}/thumbnail", response_model=CourseSummary)
 def delete_course_thumbnail(
     course_id: uuid.UUID,
     db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
 ):
     """코스 썸네일을 지운다(컬럼을 NULL로). (관리자 전용 — 라우터 레벨에서 강제)
 
@@ -323,5 +334,4 @@ def delete_course_thumbnail(
         storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
 
     counts = _completed_counts(db, [course.id])
-    mine = _my_completed_course_ids(db, user_id, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
+    return _to_summary(course, counts.get(course.id, 0), False)

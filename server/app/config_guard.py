@@ -31,6 +31,14 @@ def verify() -> None:
             "  로컬은 infra/.env에, 운영은 배포 환경변수에 넣어주세요."
         )
 
+    # 운영자 API 키(/admin/* 가드, app/deps.py의 require_admin_key). 빠뜨린 채
+    # 뜨면 모든 /admin 요청이 503으로만 죽어 원인 찾기가 늦다 — 기동에서 막는다.
+    if not os.environ.get("ADMIN_API_KEY", ""):
+        raise InsecureConfigError(
+            "ADMIN_API_KEY가 설정되지 않았어요. /admin/* 인증에 필요해요.\n"
+            "  로컬은 infra/.env에, 운영은 배포 환경변수(Secret Manager)에 넣어주세요."
+        )
+
 
 def describe_database(engine: Engine) -> str:
     """접속 대상을 비밀번호 없이 한 줄로. 기동 로그에 찍어 개발/운영을 구분한다."""

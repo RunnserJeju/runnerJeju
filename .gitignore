@@ -24,6 +24,13 @@ app/.flutter-plugin-dependencies
 # IDE
 .idea/
 
+# 운영 웹 (frontend/admin)
+frontend/admin/node_modules/
+frontend/admin/dist/
+# 운영 웹 빌드 산출물을 서버가 서빙하는 자리 — 배포 파이프라인이 채운다
+server/static/
+
 # Android 릴리즈 서명
 frontend/app/android/key.properties
 *.jks
+frontend/admin/*.tsbuildinfo
