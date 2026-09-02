@@ -30,7 +30,10 @@
 | `DELETE /admin/courses/{id}/stamp-image` | 스탬프 도안 제거 |
 | `POST /admin/banners` | 배너 등록 |
 | `DELETE /admin/banners/{id}` | 배너 삭제 |
-| `POST /admin/notices` | 공지 등록 |
+| `GET /admin/notices` | 공지 전체 목록 (예약·만료 포함 — 관리용) |
+| `POST /admin/notices` | 공지 등록 (category + 노출 기간) |
+| `PATCH /admin/notices/{id}` | 공지 수정 (전체 교체) |
+| `DELETE /admin/notices/{id}` | 공지 삭제 |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /banners`, `GET /notices`.
@@ -77,6 +80,18 @@
 - **라이브 참조**: 발급된 스탬프(`GET /stamps`)의 `image_url`은 저장값이 아니라 `courses.stamp_image_url`에서 조회 시 가져온다 → 운영자가 나중에 도안을 넣거나 바꿔도 **이미 완주한 사람까지 반영**. (그래서 죽은 컬럼 `stamps.image_url`은 0012에서 제거)
 - 앱: 스탬프 탭 앨범이 획득 칸은 도안, 미획득 칸은 회색 목표 도안으로 그린다.
 - 배포 전 Supabase에 `course-stamps` Public 버킷 생성 필요(썸네일 `course-thumbnails`와 같은 방식).
+
+## 공지사항 관리 (백엔드, 2026-09-02)
+
+공지 = `title, body, category, starts_at?, ends_at?, created_at`. 마이그레이션 `0013`.
+
+- **category** — 고정 5종(운영자가 추가 못 함, "기타(etc)"가 그 외 흡수): `app_guide`(앱 이용 안내) · `new_course`(신규 코스) · `event`(이벤트) · `maintenance`(점검) · `etc`(기타). 영문 키 저장 → 앱이 라벨·칩 색 매핑. 등록 시 **필수**.
+- **노출 기간** `starts_at`/`ends_at` — 둘 다 선택(생략=제한 없음). `starts_at=null` 즉시부터, `ends_at=null` 무기한. 검증: `ends_at ≥ starts_at`(어기면 422).
+- **`GET /notices`(공개, 앱)** — 지금 노출 중인 것만(예약·만료 제외). 앱 JWT 필요.
+- **`GET /admin/notices`(운영)** — 전체(예약·만료 포함). 관리 화면은 이걸 쓴다.
+- **`POST` / `PATCH`(전체 교체) / `DELETE /admin/notices/{id}`** — 작성·수정·삭제.
+
+운영 웹 폼: 제목·본문·카테고리(드롭다운 5종)·노출 시작/종료(선택). 목록은 `GET /admin/notices`로 예약·만료까지 보여주고 상태 뱃지를 붙이면 좋다.
 
 `course-thumbnails` Public 버킷 **생성 완료 (2026-08-31, 개발·운영 양쪽)**. 서버
 제약과 같은 값으로 맞춰 뒀다 — `public=true`, `file_size_limit=8MB`,

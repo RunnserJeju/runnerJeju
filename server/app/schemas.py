@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # 필드 이름은 Flutter 클라이언트의 fromJson/toJson과 1:1로 맞춘다.
 # 이름을 바꾸면 앱이 조용히 깨지므로 양쪽을 같이 수정해야 한다.
@@ -308,9 +308,29 @@ class BannerOut(BaseModel):
 # --- 공지사항 -------------------------------------------------------------
 
 
+# 고정 5종. 앱이 값→라벨·칩 색을 매핑한다("기타(etc)"가 그 외를 흡수).
+NoticeCategory = Literal["app_guide", "new_course", "event", "maintenance", "etc"]
+
+
 class NoticeCreate(BaseModel):
+    """공지 작성. 노출 기간은 생략 가능하며 null은 '제한 없음'이다."""
+
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)
+    category: NoticeCategory
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _check_period(self):
+        # 종료가 시작보다 빠르면 아무 때도 노출되지 않는 죽은 공지가 된다 — 미리 막는다.
+        if self.starts_at and self.ends_at and self.ends_at < self.starts_at:
+            raise ValueError("노출 종료가 시작보다 빠를 수 없어요.")
+        return self
+
+
+class NoticeUpdate(NoticeCreate):
+    """공지 수정(PATCH /admin/notices/{id}). 작성과 같은 필드로 전체를 교체한다."""
 
 
 class NoticeOut(BaseModel):
@@ -319,4 +339,7 @@ class NoticeOut(BaseModel):
     id: uuid.UUID
     title: str
     body: str
+    category: NoticeCategory
+    starts_at: datetime | None
+    ends_at: datetime | None
     created_at: datetime

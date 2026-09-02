@@ -297,6 +297,19 @@ class Notice(Base):
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
 
+    # 고정 5종(app_guide/new_course/event/maintenance/etc) 중 하나. 앱이 라벨·칩을
+    # 매핑한다. "기타(etc)"가 그 외를 흡수해서 운영자가 카테고리를 추가할 필요는 없다.
+    category: Mapped[str] = mapped_column(String(20))
+
+    # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
+    # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
