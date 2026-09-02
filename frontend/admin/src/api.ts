@@ -61,6 +61,19 @@ export function saveApiKey(value: string): void {
   }
 }
 
+/** 저장 전에 키가 유효한지 확인한다 — 틀린 키를 localStorage에 남기지 않기 위해. */
+export async function verifyApiKey(key: string): Promise<void> {
+  const response = await fetch('/admin/courses', {
+    headers: { 'X-Admin-Api-Key': key },
+  })
+  if (response.status === 401) {
+    throw new ApiError(401, 'API 키가 올바르지 않아요.')
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, `요청 실패 (HTTP ${response.status})`)
+  }
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
