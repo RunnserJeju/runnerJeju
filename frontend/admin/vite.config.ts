@@ -9,7 +9,9 @@ export default defineConfig({
   base: '/admin-ui/',
   server: {
     proxy: {
-      '/admin': 'http://localhost:8000',
+      // '/admin'만 쓰면 prefix 매칭이라 /admin-ui(이 앱 자신)까지 FastAPI로
+      // 넘어가 옛 빌드가 보인다 — /admin-ui는 제외한다.
+      '^/admin(?!-ui)': 'http://localhost:8000',
     },
   },
 })

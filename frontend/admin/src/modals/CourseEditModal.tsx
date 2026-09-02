@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { useLocation, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   ApiError,
@@ -16,21 +15,26 @@ import CourseForm, {
   valuesFromCourse,
   type CourseFormValues,
 } from '../components/CourseForm'
+import Modal from '../components/Modal'
 
-export default function CourseEditPage() {
-  const { id } = useParams<{ id: string }>()
-  const location = useLocation()
+interface Props {
+  courseId: string
+  /** 등록 모달에서 이어서 열릴 때 상단에 보여줄 메시지. */
+  initialNotice?: string
+  onClose: () => void
+  /** 저장/교체/삭제가 반영될 때마다 — 목록 새로고침용. */
+  onChanged: () => void
+}
 
+export default function CourseEditModal({ courseId, initialNotice, onClose, onChanged }: Props) {
   const [course, setCourse] = useState<Course | null>(null)
   const [values, setValues] = useState<CourseFormValues | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(
-    (location.state as { notice?: string } | null)?.notice ?? null,
-  )
+  const [notice, setNotice] = useState<string | null>(initialNotice ?? null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (!id) return
-    getCourse(id)
+    getCourse(courseId)
       .then((loaded) => {
         setCourse(loaded)
         setValues(valuesFromCourse(loaded))
@@ -38,36 +42,43 @@ export default function CourseEditPage() {
       .catch((err: unknown) =>
         setLoadError(err instanceof ApiError ? err.message : '코스를 불러오지 못했어요.'),
       )
-  }, [id])
-
-  if (loadError) return <div className="error">{loadError}</div>
-  if (!id || !course || !values) return <p className="muted">불러오는 중…</p>
+  }, [courseId])
 
   // 저장 성공 시 서버 응답으로 화면 상태를 갈아끼운다 — 다음 저장의 기준값이 된다.
   const applySaved = (saved: Course, message: string) => {
     setCourse(saved)
     setValues(valuesFromCourse(saved))
     setNotice(message)
-    window.scrollTo({ top: 0 })
+    onChanged()
+    bodyRef.current?.scrollTo({ top: 0 })
   }
 
   return (
-    <>
-      <h2>코스 수정 — {course.name}</h2>
-      {notice && <div className="notice">{notice}</div>}
+    <Modal
+      title={course ? `코스 수정 — ${course.name}` : '코스 수정'}
+      onClose={onClose}
+      bodyRef={bodyRef}
+    >
+      {loadError && <div className="error">{loadError}</div>}
+      {!loadError && (!course || !values) && <p className="muted">불러오는 중…</p>}
+      {course && values && (
+        <>
+          {notice && <div className="notice" style={{ marginTop: 0 }}>{notice}</div>}
 
-      <MetaSection
-        courseId={id}
-        values={values}
-        onChange={(next) => {
-          setValues(next)
-          setNotice(null)
-        }}
-        onSaved={applySaved}
-      />
-      <GpxSection courseId={id} onSaved={applySaved} />
-      <ThumbnailSection course={course} onSaved={applySaved} />
-    </>
+          <MetaSection
+            courseId={courseId}
+            values={values}
+            onChange={(next) => {
+              setValues(next)
+              setNotice(null)
+            }}
+            onSaved={applySaved}
+          />
+          <GpxSection courseId={courseId} onSaved={applySaved} />
+          <ThumbnailSection course={course} onSaved={applySaved} />
+        </>
+      )}
+    </Modal>
   )
 }
 

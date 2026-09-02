@@ -18,6 +18,7 @@ class StampBadge extends StatelessWidget {
     this.stamp,
     this.courseName,
     this.acquired,
+    this.lockedImageUrl,
     this.size = 104,
     this.onTap,
   }) : assert(
@@ -34,11 +35,19 @@ class StampBadge extends StatelessWidget {
   /// 획득 여부. 없으면 [stamp] 유무로 판단한다.
   final bool? acquired;
 
+  /// 미획득일 때 보여줄 "목표 도안"(코스의 스탬프 이미지). 있으면 grayscale로
+  /// 흐리게 깔아 "이걸 모으면 된다"를 보여준다. 없으면 기본 잠금 도안.
+  final String? lockedImageUrl;
+
   final double size;
   final VoidCallback? onTap;
 
   String get _name => courseName ?? stamp!.courseName;
   bool get _isAcquired => acquired ?? (stamp != null);
+
+  /// 원 안에 그릴 도안 URL. 획득이면 딴 스탬프 도안, 미획득이면 목표 도안.
+  /// (미획득 도안은 build()의 grayscale 필터로 자동으로 흐려진다.)
+  String? get _designUrl => _isAcquired ? stamp?.imageUrl : lockedImageUrl;
 
   /// 휘도 기반 grayscale 매트릭스.
   static const ColorFilter _grayscale = ColorFilter.matrix(<double>[
@@ -83,12 +92,12 @@ class StampBadge extends StatelessWidget {
         border: Border.all(color: AppColors.ink, width: 2.5),
       ),
       clipBehavior: Clip.antiAlias,
-      child: _isAcquired && stamp?.imageUrl != null
+      child: _designUrl != null
           ? Image.network(
-              stamp!.imageUrl!,
+              _designUrl!,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
-                  _DefaultFace(acquiredAt: stamp?.acquiredAt),
+                  _DefaultFace(acquiredAt: _isAcquired ? stamp?.acquiredAt : null),
             )
           : _DefaultFace(acquiredAt: _isAcquired ? stamp?.acquiredAt : null),
     );

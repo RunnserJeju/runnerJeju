@@ -36,6 +36,7 @@ class RunningCourse {
     this.description,
     this.estimatedTimeMin,
     this.thumbnailUrl,
+    this.stampImageUrl,
     this.completedCount = 0,
     this.isCompletedByMe = false,
     this.startPoint,
@@ -72,6 +73,10 @@ class RunningCourse {
 
   /// 대표 썸네일 URL(Supabase Storage public URL). 없으면 null.
   final String? thumbnailUrl;
+
+  /// 이 코스 완주 시 주는 스탬프 도안 URL. 없으면 앱이 기본 도안을 그린다.
+  /// 스탬프 앨범이 잠긴 칸(미획득)의 목표 도안을 그릴 때도 쓴다.
+  final String? stampImageUrl;
 
   /// 코스를 이루는 좌표 목록. 지도에 그대로 폴리라인으로 그린다.
   final List<GeoPoint> path;
@@ -126,6 +131,7 @@ class RunningCourse {
     description: json['description'] as String?,
     estimatedTimeMin: (json['estimated_time_min'] as num?)?.toInt(),
     thumbnailUrl: json['thumbnail_url'] as String?,
+    stampImageUrl: json['stamp_image_url'] as String?,
     path: ((json['path'] as List?) ?? const [])
         .map((e) => GeoPoint.fromJson(e as Map<String, dynamic>))
         .toList(),

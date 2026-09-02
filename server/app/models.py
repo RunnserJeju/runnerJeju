@@ -130,6 +130,13 @@ class Course(Base):
     # 채우고, 코스 등록/수정(GPX·메타데이터)은 이 컬럼을 건드리지 않는다.
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
+    # 이 코스를 완주하면 주는 스탬프 도안(Supabase Storage public URL). 스탬프는
+    # 코스에 1:1로 종속돼서 도안을 코스에 둔다. 발급된 스탬프(stamps)는 이 값을
+    # 조회 시 참조하므로(라이브 참조), 운영자가 나중에 도안을 넣거나 바꿔도 이미
+    # 완주한 사람에게까지 반영된다. 전용 엔드포인트(PUT/DELETE
+    # /courses/{id}/stamp-image)가 채운다.
+    stamp_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
@@ -221,7 +228,9 @@ class Stamp(Base):
         UUID(as_uuid=True), ForeignKey("runs.id"), default=None
     )
 
-    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    # 스탬프 도안은 이 행이 아니라 코스(courses.stamp_image_url)에 있다 — 코스당
+    # 하나이고 운영자가 설정하는 값이라, 완주 인스턴스마다 복제하지 않고 조회 시
+    # course에서 라이브로 가져온다(stamps 라우터 _to_out 참고).
     acquired_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -288,6 +297,59 @@ class Notice(Base):
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
 
+    # 고정 5종(app_guide/new_course/event/maintenance/etc) 중 하나. 앱이 라벨·칩을
+    # 매핑한다. "기타(etc)"가 그 외를 흡수해서 운영자가 카테고리를 추가할 필요는 없다.
+    category: Mapped[str] = mapped_column(String(20))
+
+    # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
+    # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Mission(Base):
+    """이벤트 미션. 운영자가 참여 기간·달성 조건·리워드·내용을 설정한다.
+
+    달성 조건(condition)과 리워드(reward)는 자유 텍스트다 — 자동 판정(런타임)은
+    아직 없고, 운영자가 서술하면 앱이 그대로 보여주는 단계다. 자동 판정이
+    필요해지면 그때 condition을 타입+목표값으로 구조화한다.
+    """
+
+    __tablename__ = "missions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+
+    # 자유 텍스트. 예) "제주 동부 코스 3개 완주" / "굿즈 + 포인트 500".
+    condition: Mapped[str] = mapped_column(String(500))
+    reward: Mapped[str] = mapped_column(String(500))
+
+    # 참여 기간. 둘 다 nullable이고 null은 "제한 없음"이다(공지와 같은 규칙).
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    # 노출 on/off(기간과 별개)와 정렬. 배너와 같은 방식이다.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

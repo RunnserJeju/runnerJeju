@@ -335,3 +335,77 @@ def delete_course_thumbnail(
 
     counts = _completed_counts(db, [course.id])
     return _to_summary(course, counts.get(course.id, 0), False)
+
+
+@router.put("/courses/{course_id}/stamp-image", response_model=CourseSummary)
+def set_course_stamp_image(
+    course_id: uuid.UUID,
+    file: UploadFile = File(..., description="스탬프 도안 (jpg/png/webp)"),
+    db: Session = Depends(get_db),
+):
+    """이 코스 완주 시 주는 스탬프 도안을 올린다(교체 포함). (관리자 전용)
+
+    썸네일과 같은 패턴이지만 스탬프 전용 버킷(SUPABASE_STAMP_BUCKET)에 넣는다 —
+    배너·썸네일과 섞이지 않게. 도안은 코스에 1:1로 붙고, 발급된 스탬프는 조회 때
+    이 값을 참조하므로 나중에 넣거나 바꿔도 기존 완주자까지 반영된다.
+
+    교체면 옛 오브젝트는 새로 올린 뒤 지운다(삭제 실패는 무시).
+    """
+    course = _load_course_or_404(db, course_id)
+
+    extension = _ALLOWED_IMAGE_TYPES.get(file.content_type or "")
+    if extension is None:
+        raise HTTPException(status_code=422, detail="jpg/png/webp 이미지만 올릴 수 있어요.")
+
+    content = file.file.read(MAX_THUMBNAIL_BYTES + 1)
+    if len(content) > MAX_THUMBNAIL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"이미지가 너무 커요. {MAX_THUMBNAIL_BYTES // (1024 * 1024)}MB 이하여야 해요.",
+        )
+    if not content:
+        raise HTTPException(status_code=422, detail="빈 파일이에요.")
+
+    try:
+        new_url = storage.upload_image(
+            content,
+            content_type=file.content_type,
+            extension=extension,
+            bucket=storage.SUPABASE_STAMP_BUCKET,
+        )
+    except storage.StorageUploadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    # 업로드가 성공한 뒤에야 옛 것을 지운다 — 실패하면 옛 도안이 그대로 살아 있게.
+    old_url = course.stamp_image_url
+    course.stamp_image_url = new_url
+    db.commit()
+    db.refresh(course)
+
+    if old_url:
+        storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
+
+    counts = _completed_counts(db, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), False)
+
+
+@router.delete("/courses/{course_id}/stamp-image", response_model=CourseSummary)
+def delete_course_stamp_image(
+    course_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """코스 스탬프 도안을 지운다(컬럼을 NULL로). (관리자 전용)
+
+    이미 없으면 아무 일도 안 한다. Storage 파일도 지우되 실패는 무시한다.
+    """
+    course = _load_course_or_404(db, course_id)
+
+    old_url = course.stamp_image_url
+    if old_url:
+        course.stamp_image_url = None
+        db.commit()
+        db.refresh(course)
+        storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
+
+    counts = _completed_counts(db, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), False)

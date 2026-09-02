@@ -1,26 +1,48 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
 
 import { ApiError, listCourses, type Course } from '../api'
+import CourseCreateModal from '../modals/CourseCreateModal'
+import CourseEditModal from '../modals/CourseEditModal'
 
 const DIFFICULTY_LABEL: Record<number, string> = { 1: '★', 2: '★★', 3: '★★★' }
 
-export default function CourseListPage() {
+interface Props {
+  /** 목록 로딩이 401이면(키 폐기 등) 인증 화면으로 되돌린다. */
+  onUnauthorized: () => void
+}
+
+export default function CourseListPage({ onUnauthorized }: Props) {
   const [courses, setCourses] = useState<Course[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const navigate = useNavigate()
+  const [creating, setCreating] = useState(false)
+  /** 수정 모달 대상. notice는 등록 직후 이어서 열 때 전달된다. */
+  const [editing, setEditing] = useState<{ id: string; notice?: string } | null>(null)
+
+  const reload = useCallback(() => {
+    listCourses()
+      .then((loaded) => {
+        setCourses(loaded)
+        setError(null)
+      })
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 401) {
+          onUnauthorized()
+          return
+        }
+        setError(err instanceof ApiError ? err.message : '코스 목록을 불러오지 못했어요.')
+      })
+  }, [onUnauthorized])
 
   useEffect(() => {
-    listCourses()
-      .then(setCourses)
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : '코스 목록을 불러오지 못했어요.'),
-      )
-  }, [])
+    reload()
+  }, [reload])
 
   return (
     <>
-      <h2>코스 목록</h2>
+      <div className="page-head">
+        <h2>코스 목록</h2>
+        <button onClick={() => setCreating(true)}>+ 코스 추가</button>
+      </div>
       {error && <div className="error">{error}</div>}
       {courses == null && !error && <p className="muted">불러오는 중…</p>}
       {courses && courses.length === 0 && <p className="muted">등록된 코스가 없어요.</p>}
@@ -38,7 +60,7 @@ export default function CourseListPage() {
           </thead>
           <tbody>
             {courses.map((course) => (
-              <tr key={course.id} onClick={() => navigate(`/courses/${course.id}`)}>
+              <tr key={course.id} onClick={() => setEditing({ id: course.id })}>
                 <td style={{ width: 56 }}>
                   {course.thumbnail_url ? (
                     <img className="thumb" src={course.thumbnail_url} alt="" />
@@ -58,6 +80,26 @@ export default function CourseListPage() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {creating && (
+        <CourseCreateModal
+          onClose={() => setCreating(false)}
+          onCreated={(course, notice) => {
+            setCreating(false)
+            reload()
+            // 등록 직후 수정 모달을 이어서 열어 결과를 바로 확인/보완하게 한다.
+            setEditing({ id: course.id, notice })
+          }}
+        />
+      )}
+      {editing && (
+        <CourseEditModal
+          courseId={editing.id}
+          initialNotice={editing.notice}
+          onClose={() => setEditing(null)}
+          onChanged={reload}
+        />
       )}
     </>
   )

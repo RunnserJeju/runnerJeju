@@ -357,11 +357,7 @@ class _NoticeCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(
-                    Icons.campaign_rounded,
-                    size: 18,
-                    color: AppColors.accent,
-                  ),
+                  _CategoryChip(category: notice.category),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -422,6 +418,8 @@ class _NoticeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
+                _CategoryChip(category: notice.category),
+                const SizedBox(height: 10),
                 Text(
                   notice.title,
                   style: const TextStyle(
@@ -449,6 +447,41 @@ class _NoticeCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// 공지 카테고리 뱃지. 카테고리별 색을 옅게 깔고 같은 색 글씨로 찍는다.
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({required this.category});
+
+  final NoticeCategory category;
+
+  static Color _colorOf(NoticeCategory category) => switch (category) {
+    NoticeCategory.appGuide => const Color(0xFF3B82F6),
+    NoticeCategory.newCourse => AppColors.success,
+    NoticeCategory.event => AppColors.accent,
+    NoticeCategory.maintenance => AppColors.danger,
+    NoticeCategory.etc => const Color(0xFF8A909C),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colorOf(category);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        category.label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
     );
   }
 }

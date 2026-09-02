@@ -26,9 +26,19 @@
 | `PUT /admin/courses/{id}/gpx` | 경로 교체 (기록 있으면 409 → `reset_records=true`) |
 | `PUT /admin/courses/{id}/thumbnail` | 썸네일 설정/교체 |
 | `DELETE /admin/courses/{id}/thumbnail` | 썸네일 제거 |
+| `PUT /admin/courses/{id}/stamp-image` | 완주 스탬프 도안 설정/교체 |
+| `DELETE /admin/courses/{id}/stamp-image` | 스탬프 도안 제거 |
 | `POST /admin/banners` | 배너 등록 |
 | `DELETE /admin/banners/{id}` | 배너 삭제 |
-| `POST /admin/notices` | 공지 등록 |
+| `GET /admin/notices` | 공지 전체 목록 (예약·만료 포함 — 관리용) |
+| `POST /admin/notices` | 공지 등록 (category + 노출 기간) |
+| `PATCH /admin/notices/{id}` | 공지 수정 (전체 교체) |
+| `DELETE /admin/notices/{id}` | 공지 삭제 |
+| `GET /admin/missions` | 미션 전체 목록 (비활성·만료 포함) |
+| `GET /admin/missions/{id}` | 미션 상세 |
+| `POST /admin/missions` | 미션 등록 |
+| `PATCH /admin/missions/{id}` | 미션 수정 (전체 교체) |
+| `DELETE /admin/missions/{id}` | 미션 삭제 |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /banners`, `GET /notices`.
@@ -62,7 +72,73 @@
 바텀시트에서는 **시작 버튼 아래**에 둔다 — 접힘 높이(`_collapsedSize`)가 시작
 버튼까지만 보이도록 맞춰져 있어서 그 위에 끼우면 약속이 깨진다.
 
-**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`).
+**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`), 스탬프 도안은 `SUPABASE_STAMP_BUCKET`(기본 `course-stamps`).
+
+## 스탬프 도안 (백엔드, 2026-09-02)
+
+코스 완주 시 주는 스탬프 도안. 마이그레이션 `0012`. 스탬프는 코스에 1:1 종속이라
+도안을 코스에 붙였다(별도 테이블 없음).
+
+- **`courses.stamp_image_url`** 신규 컬럼. `GET /admin/courses`·`GET /courses` 응답에 포함.
+- 설정: `PUT /admin/courses/{id}/stamp-image` (multipart, `file`: jpg/png/webp, ≤8MB, 전용 버킷 `course-stamps`). 교체 시 옛 오브젝트 삭제. 응답 `CourseSummary`.
+- 제거: `DELETE /admin/courses/{id}/stamp-image` → null + Storage 삭제. 없으면 no-op.
+- **라이브 참조**: 발급된 스탬프(`GET /stamps`)의 `image_url`은 저장값이 아니라 `courses.stamp_image_url`에서 조회 시 가져온다 → 운영자가 나중에 도안을 넣거나 바꿔도 **이미 완주한 사람까지 반영**. (그래서 죽은 컬럼 `stamps.image_url`은 0012에서 제거)
+- 앱: 스탬프 탭 앨범이 획득 칸은 도안, 미획득 칸은 회색 목표 도안으로 그린다.
+- 배포 전 Supabase에 `course-stamps` Public 버킷 생성 필요(썸네일 `course-thumbnails`와 같은 방식).
+
+## 공지사항 관리 (백엔드, 2026-09-02)
+
+공지 = `title, body, category, starts_at?, ends_at?, created_at`. 마이그레이션 `0013`.
+
+- **category** — 고정 5종(운영자가 추가 못 함, "기타(etc)"가 그 외 흡수): `app_guide`(앱 이용 안내) · `new_course`(신규 코스) · `event`(이벤트) · `maintenance`(점검) · `etc`(기타). 영문 키 저장 → 앱이 라벨·칩 색 매핑. 등록 시 **필수**.
+- **노출 기간** `starts_at`/`ends_at` — 둘 다 선택(생략=제한 없음). `starts_at=null` 즉시부터, `ends_at=null` 무기한. 검증: `ends_at ≥ starts_at`(어기면 422).
+- **`GET /notices`(공개, 앱)** — 지금 노출 중인 것만(예약·만료 제외). 앱 JWT 필요.
+- **`GET /admin/notices`(운영)** — 전체(예약·만료 포함). 관리 화면은 이걸 쓴다.
+- **`POST` / `PATCH`(전체 교체) / `DELETE /admin/notices/{id}`** — 작성·수정·삭제.
+
+운영 웹 폼: 제목·본문·카테고리(드롭다운 5종)·노출 시작/종료(선택). 목록은 `GET /admin/notices`로 예약·만료까지 보여주고 상태 뱃지를 붙이면 좋다.
+
+## 미션 관리 (백엔드, 2026-09-02)
+
+이벤트 미션 = `title, body, condition, reward, starts_at?, ends_at?, is_active, sort_order`. 마이그레이션 `0014`. **운영자 정의 API만** — 달성 자동 판정·유저 참여/진행·리워드 지급은 아직 없다(런타임은 나중).
+
+- **condition / reward** — **자유 텍스트**(예: "제주 코스 3개 완주" / "굿즈 + 포인트 500"). 자유도를 낮추려 타입 enum이 아니라 서술형으로 뒀다. 등록 시 **필수**. 자동 판정이 필요해지면 그때 condition을 타입+목표값으로 구조화한다.
+- **참여 기간** `starts_at`/`ends_at` — 둘 다 선택(생략=제한 없음). 검증 `ends_at ≥ starts_at`(422).
+- **is_active / sort_order** — 노출 on/off(기간과 별개)와 정렬. 배너와 같은 방식.
+- **CRUD**: `GET /admin/missions`(전체), `GET /admin/missions/{id}`, `POST`, `PATCH`(전체 교체), `DELETE`.
+- 공개 `GET /missions`(앱)는 아직 없음 — 프론트 붙일 때 추가(공지처럼 노출 필터 얹으면 됨).
+
+운영 웹 폼: 제목·내용·달성 조건(텍스트)·리워드(텍스트)·참여 시작/종료(선택)·노출 여부·정렬.
+
+### 미션 — 다음 단계 & 결정 필요 (요구사항 확정 후 이어서)
+
+지금은 **1차 틀 = 운영자 "정의" API(Layer 1)만** 있다. 앱 노출·참여·진행·달성·리워드는 전부 미구현이고, **요구사항이 정해져야 다음 API가 결정된다.**
+
+**전체 레이어**
+| 레이어 | 내용 | 상태 |
+|---|---|---|
+| L1 정의 (운영자) | 미션 CRUD (`/admin/missions`) | ✅ 완료 |
+| L2 노출 (앱) | `GET /missions` — 유저가 미션 목록/상세 조회 | ❌ 미구현 (어느 방향이든 필요) |
+| L3 참여·진행·달성·리워드 | 유저 참여, 진행률, 달성 판정, 리워드 지급 | ❌ 미구현 (방향 미정) |
+
+**⚠️ 핵심 제약**: 현재 `condition`/`reward`는 **자유 텍스트**라 **서버가 달성을 자동 판정할 수 없다**("코스 3개 완주"가 글자일 뿐). L3 방향이 여기서 갈린다.
+
+**L3 방향 3안 (+ 각각 추가될 API)**
+- **A. 전시형(안내만)** — 참여/진행 추적 없음, 리워드는 수동/오프라인. 추가: `GET /missions`(공개)뿐. condition/reward 텍스트 그대로 표시. → 가장 단순, 텍스트 모델 유지.
+- **B. 수동 달성** — 유저 참여 신청 → 운영자가 달성 확인 → 리워드 지급. 추가: `mission_participations` 테이블 + `POST /missions/{id}/join` · `GET /me/missions`(내 참여/상태) · `POST /admin/missions/{id}/participants/{user}/complete`(달성 마킹) · `GET /me/rewards`. → 텍스트 조건 그대로 가능.
+- **C. 자동 판정** — 서버가 스탬프/러닝 데이터로 진행률 자동 계산·달성·지급. 추가: **condition 구조화(자유텍스트 → 타입+목표값, 스키마 변경 필요)** + 진행률 엔진 + `GET /me/missions/{id}/progress` + 자동 지급. → 가장 강력하나 모델 재작업.
+
+**유저(기획)가 정해야 할 것 — 요구사항 체크리스트**
+- [ ] L3 방향: A / B / C 중 무엇?
+- [ ] 참여 방식: 자동 집계(기간 내 활동이 자동 반영) vs 명시적 참여(참여 버튼)?
+- [ ] 달성 조건 종류: 어떤 조건을 지원? (특정 코스 완주 / N개 완주 / 누적 거리 / 러닝 횟수 / 빙고 …) — **C면 이게 곧 condition 타입 enum**이 된다.
+- [ ] 리워드 종류·지급: 포인트 / 배지 / 실물 쿠폰 …? 지급을 앱 안에서 처리? 오프라인?
+- [ ] 반복/동시성: 한 유저가 여러 미션 동시 참여 가능? 같은 미션 반복 달성 가능?
+- [ ] 미션 배너 이미지 필요 여부 (필요 시 썸네일/스탬프와 같은 업로드 패턴으로 `image_url` + 전용 엔드포인트 추가)
+
+**연관 메모 — 빙고**: 이전 논의에서 "스탬프를 격자에 모아 빙고 완성 시 상품" 아이디어가 있었다. 빙고는 사실상 **미션의 한 구체 형태**(달성 조건 = 빙고 라인/블랙아웃, 리워드 = 상품)일 수 있다. 미션 요구사항을 정할 때 빙고를 별도 기능으로 갈지 미션 condition 타입 중 하나로 흡수할지 함께 결정하면 좋다. 빙고는 스탬프(코스 완주)에서 파생되므로, 스탬프 도안 작업(0012)과 이어진다.
+
+**현재 모델을 바꿔야 하는 경우**: C(자동 판정)를 택하면 `missions.condition`(String) 하나로는 부족하다 — `condition_type`(enum) + `condition_config`(JSONB, 예: `{course_ids:[...]}` / `{count:3}` / `{distance_km:50}`)로 재설계가 필요하다. A/B면 지금 텍스트 모델 그대로 간다.
 
 `course-thumbnails` Public 버킷 **생성 완료 (2026-08-31, 개발·운영 양쪽)**. 서버
 제약과 같은 값으로 맞춰 뒀다 — `public=true`, `file_size_limit=8MB`,

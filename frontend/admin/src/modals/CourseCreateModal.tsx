@@ -1,16 +1,21 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
-import { ApiError, createCourse, setCourseThumbnail } from '../api'
+import { ApiError, createCourse, setCourseThumbnail, type Course } from '../api'
 import CourseForm, { emptyValues, validate } from '../components/CourseForm'
+import Modal from '../components/Modal'
 
-export default function CourseCreatePage() {
+interface Props {
+  onClose: () => void
+  /** 등록 성공. notice는 수정 모달로 이어서 보여줄 메시지. */
+  onCreated: (course: Course, notice: string) => void
+}
+
+export default function CourseCreateModal({ onClose, onCreated }: Props) {
   const [values, setValues] = useState(emptyValues)
   const [gpxFile, setGpxFile] = useState<File | null>(null)
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const navigate = useNavigate()
 
   const submit = async () => {
     setError(null)
@@ -41,32 +46,29 @@ export default function CourseCreatePage() {
       })
 
       // 썸네일은 등록과 분리된 전용 엔드포인트다(docs/admin-web.md). 등록이 성공한
-      // 뒤에 올리고, 실패해도 코스는 이미 만들어졌으므로 수정 화면에서 재시도한다.
+      // 뒤에 올리고, 실패해도 코스는 이미 만들어졌으므로 수정 모달에서 재시도한다.
       if (thumbnailFile) {
         try {
           await setCourseThumbnail(course.id, thumbnailFile)
         } catch (thumbError) {
-          navigate(`/courses/${course.id}`, {
-            state: {
-              notice: `코스는 등록됐지만 썸네일 업로드에 실패했어요: ${
-                thumbError instanceof ApiError ? thumbError.message : '알 수 없는 오류'
-              }`,
-            },
-          })
+          onCreated(
+            course,
+            `코스는 등록됐지만 썸네일 업로드에 실패했어요: ${
+              thumbError instanceof ApiError ? thumbError.message : '알 수 없는 오류'
+            }`,
+          )
           return
         }
       }
-      navigate(`/courses/${course.id}`, { state: { notice: '코스를 등록했어요.' } })
+      onCreated(course, '코스를 등록했어요.')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '등록에 실패했어요.')
-    } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <>
-      <h2>새 코스 등록</h2>
+    <Modal title="새 코스 등록" onClose={onClose} closable={!submitting}>
       <div className="card">
         <div className="field">
           <label htmlFor="gpx-file">GPX 파일 (필수)</label>
@@ -100,6 +102,6 @@ export default function CourseCreatePage() {
           </button>
         </div>
       </div>
-    </>
+    </Modal>
   )
 }
