@@ -7,11 +7,12 @@
 
 from fastapi import APIRouter, Depends
 
-from app.admin import banners, courses, geo, notices
+from app.admin import banners, courses, geo, missions, notices
 from app.deps import require_admin_key
 
 admin_router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin_key)])
 admin_router.include_router(courses.router)
 admin_router.include_router(banners.router)
 admin_router.include_router(notices.router)
+admin_router.include_router(missions.router)
 admin_router.include_router(geo.router)

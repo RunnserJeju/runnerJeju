@@ -343,3 +343,48 @@ class NoticeOut(BaseModel):
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime
+
+
+# --- 미션 -----------------------------------------------------------------
+
+
+class MissionCreate(BaseModel):
+    """이벤트 미션 작성. 달성 조건·리워드는 자유 텍스트로 서술한다(자동 판정 없음).
+
+    참여 기간(starts_at/ends_at)은 생략 가능하며 null은 '제한 없음'이다.
+    """
+
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1)
+    condition: str = Field(min_length=1, max_length=500)
+    reward: str = Field(min_length=1, max_length=500)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool = True
+    sort_order: int = 0
+
+    @model_validator(mode="after")
+    def _check_period(self):
+        # 종료가 시작보다 빠르면 아무 때도 참여할 수 없는 죽은 미션이 된다 — 미리 막는다.
+        if self.starts_at and self.ends_at and self.ends_at < self.starts_at:
+            raise ValueError("참여 종료가 시작보다 빠를 수 없어요.")
+        return self
+
+
+class MissionUpdate(MissionCreate):
+    """미션 수정(PATCH /admin/missions/{id}). 작성과 같은 필드로 전체를 교체한다."""
+
+
+class MissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    body: str
+    condition: str
+    reward: str
+    starts_at: datetime | None
+    ends_at: datetime | None
+    is_active: bool
+    sort_order: int
+    created_at: datetime
