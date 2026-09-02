@@ -130,6 +130,13 @@ class Course(Base):
     # 채우고, 코스 등록/수정(GPX·메타데이터)은 이 컬럼을 건드리지 않는다.
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
+    # 이 코스를 완주하면 주는 스탬프 도안(Supabase Storage public URL). 스탬프는
+    # 코스에 1:1로 종속돼서 도안을 코스에 둔다. 발급된 스탬프(stamps)는 이 값을
+    # 조회 시 참조하므로(라이브 참조), 운영자가 나중에 도안을 넣거나 바꿔도 이미
+    # 완주한 사람에게까지 반영된다. 전용 엔드포인트(PUT/DELETE
+    # /courses/{id}/stamp-image)가 채운다.
+    stamp_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
@@ -221,7 +228,9 @@ class Stamp(Base):
         UUID(as_uuid=True), ForeignKey("runs.id"), default=None
     )
 
-    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    # 스탬프 도안은 이 행이 아니라 코스(courses.stamp_image_url)에 있다 — 코스당
+    # 하나이고 운영자가 설정하는 값이라, 완주 인스턴스마다 복제하지 않고 조회 시
+    # course에서 라이브로 가져온다(stamps 라우터 _to_out 참고).
     acquired_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

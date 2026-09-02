@@ -167,6 +167,10 @@ class CourseListItem(BaseModel):
     # 대표 썸네일 public URL. 전용 엔드포인트로만 설정/삭제된다(등록·수정 폼과 별개).
     thumbnail_url: str | None
 
+    # 이 코스 완주 시 주는 스탬프 도안 public URL. 스탬프 앨범이 코스 목록만으로
+    # 잠긴 칸(미획득)의 목표 도안까지 그릴 수 있게 코스 응답에 함께 내린다.
+    stamp_image_url: str | None
+
     completed_count: int
     is_completed_by_me: bool
 

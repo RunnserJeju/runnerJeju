@@ -30,6 +30,7 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "description": course.description,
         "estimated_time_min": course.estimated_time_min,
         "thumbnail_url": course.thumbnail_url,
+        "stamp_image_url": course.stamp_image_url,
         "path": path,
         # 목록 응답(CourseListItem)에는 path가 빠지므로, 지도에 라벨을 찍을 점은
         # 여기서 따로 뽑아 준다. 상세 응답에도 같이 들어가지만 값은 path[0]과

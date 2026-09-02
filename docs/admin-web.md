@@ -26,6 +26,8 @@
 | `PUT /admin/courses/{id}/gpx` | 경로 교체 (기록 있으면 409 → `reset_records=true`) |
 | `PUT /admin/courses/{id}/thumbnail` | 썸네일 설정/교체 |
 | `DELETE /admin/courses/{id}/thumbnail` | 썸네일 제거 |
+| `PUT /admin/courses/{id}/stamp-image` | 완주 스탬프 도안 설정/교체 |
+| `DELETE /admin/courses/{id}/stamp-image` | 스탬프 도안 제거 |
 | `POST /admin/banners` | 배너 등록 |
 | `DELETE /admin/banners/{id}` | 배너 삭제 |
 | `POST /admin/notices` | 공지 등록 |
@@ -62,7 +64,19 @@
 바텀시트에서는 **시작 버튼 아래**에 둔다 — 접힘 높이(`_collapsedSize`)가 시작
 버튼까지만 보이도록 맞춰져 있어서 그 위에 끼우면 약속이 깨진다.
 
-**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`).
+**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`), 스탬프 도안은 `SUPABASE_STAMP_BUCKET`(기본 `course-stamps`).
+
+## 스탬프 도안 (백엔드, 2026-09-02)
+
+코스 완주 시 주는 스탬프 도안. 마이그레이션 `0012`. 스탬프는 코스에 1:1 종속이라
+도안을 코스에 붙였다(별도 테이블 없음).
+
+- **`courses.stamp_image_url`** 신규 컬럼. `GET /admin/courses`·`GET /courses` 응답에 포함.
+- 설정: `PUT /admin/courses/{id}/stamp-image` (multipart, `file`: jpg/png/webp, ≤8MB, 전용 버킷 `course-stamps`). 교체 시 옛 오브젝트 삭제. 응답 `CourseSummary`.
+- 제거: `DELETE /admin/courses/{id}/stamp-image` → null + Storage 삭제. 없으면 no-op.
+- **라이브 참조**: 발급된 스탬프(`GET /stamps`)의 `image_url`은 저장값이 아니라 `courses.stamp_image_url`에서 조회 시 가져온다 → 운영자가 나중에 도안을 넣거나 바꿔도 **이미 완주한 사람까지 반영**. (그래서 죽은 컬럼 `stamps.image_url`은 0012에서 제거)
+- 앱: 스탬프 탭 앨범이 획득 칸은 도안, 미획득 칸은 회색 목표 도안으로 그린다.
+- 배포 전 Supabase에 `course-stamps` Public 버킷 생성 필요(썸네일 `course-thumbnails`와 같은 방식).
 
 `course-thumbnails` Public 버킷 **생성 완료 (2026-08-31, 개발·운영 양쪽)**. 서버
 제약과 같은 값으로 맞춰 뒀다 — `public=true`, `file_size_limit=8MB`,

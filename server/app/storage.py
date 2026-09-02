@@ -26,6 +26,7 @@ SUPABASE_API_SECRET_KEY = os.environ.get("SUPABASE_API_SECRET_KEY")
 # 배너 버킷을 기본으로 쓴다(기존 배너 코드가 그대로 도는 하위호환).
 SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "banners")
 SUPABASE_COURSE_BUCKET = os.environ.get("SUPABASE_COURSE_BUCKET", "course-thumbnails")
+SUPABASE_STAMP_BUCKET = os.environ.get("SUPABASE_STAMP_BUCKET", "course-stamps")
 
 
 class StorageUploadError(RuntimeError):

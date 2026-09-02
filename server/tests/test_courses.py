@@ -20,8 +20,9 @@ from pydantic import ValidationError
 
 from app import geocoding, storage
 from app.admin import courses as admin_courses_router
-from app.models import Course
+from app.models import Course, Stamp
 from app.routers import courses as courses_router
+from app.routers import stamps as stamps_router
 from app.schemas import CourseUpdate, Facility
 from tools import push_courses
 
@@ -132,6 +133,7 @@ class TestToSummary:
             restrooms=[],
             estimated_time_min=75,
             thumbnail_url="https://example.com/a.png",
+            stamp_image_url="https://example.com/stamp.png",
         )
 
         summary = courses_router._to_summary(course, 0, False)
@@ -140,6 +142,7 @@ class TestToSummary:
         assert summary["restrooms"] == []
         assert summary["estimated_time_min"] == 75
         assert summary["thumbnail_url"] == "https://example.com/a.png"
+        assert summary["stamp_image_url"] == "https://example.com/stamp.png"
 
     def test_estimated_time_and_thumbnail_default_none(self):
         course = Course(
@@ -157,6 +160,7 @@ class TestToSummary:
 
         assert summary["estimated_time_min"] is None
         assert summary["thumbnail_url"] is None
+        assert summary["stamp_image_url"] is None
 
     def test_empty_when_columns_are_none(self):
         # JSONB 기본값이 아직 안 붙은 옛 행 등에서 None이 와도 빈 리스트로 내려간다.
@@ -637,3 +641,116 @@ class TestReplaceCourseGpx:
             )
 
         assert exc_info.value.status_code == 422
+
+
+class TestCourseStampImage:
+    """스탬프 도안 등록/수정/삭제. 썸네일과 같은 패턴이되 스탬프 전용 버킷을 쓴다."""
+
+    def _patch_storage(self, monkeypatch, *, url="https://cdn/stamp-new.png"):
+        deleted: list[str] = []
+        buckets: list = []
+        monkeypatch.setattr(
+            storage,
+            "upload_image",
+            lambda content, *, content_type, extension, bucket=None: buckets.append(bucket)
+            or url,
+        )
+        monkeypatch.setattr(
+            storage, "delete_image", lambda old, *, bucket=None: deleted.append(old)
+        )
+        return deleted, buckets
+
+    def test_sets_stamp_image_when_none(self, monkeypatch):
+        deleted, buckets = self._patch_storage(monkeypatch)
+        course = _course(stamp_image_url=None)
+        db = UpdateFakeSession(course)
+
+        result = admin_courses_router.set_course_stamp_image(course.id, FakeUpload(), db)
+
+        assert course.stamp_image_url == "https://cdn/stamp-new.png"
+        assert result["stamp_image_url"] == "https://cdn/stamp-new.png"
+        assert deleted == []
+        # 스탬프 전용 버킷에 올린다(썸네일·배너와 분리).
+        assert buckets == [storage.SUPABASE_STAMP_BUCKET]
+
+    def test_replaces_and_deletes_old(self, monkeypatch):
+        deleted, _ = self._patch_storage(monkeypatch)
+        course = _course(stamp_image_url="https://cdn/stamp-old.png")
+        db = UpdateFakeSession(course)
+
+        admin_courses_router.set_course_stamp_image(course.id, FakeUpload(), db)
+
+        assert course.stamp_image_url == "https://cdn/stamp-new.png"
+        assert deleted == ["https://cdn/stamp-old.png"]
+
+    def test_rejects_non_image_type(self, monkeypatch):
+        self._patch_storage(monkeypatch)
+        course = _course(stamp_image_url=None)
+        db = UpdateFakeSession(course)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.set_course_stamp_image(
+                course.id, FakeUpload(content_type="application/pdf"), db
+            )
+
+        assert exc_info.value.status_code == 422
+        assert course.stamp_image_url is None
+
+    def test_set_404_when_course_missing(self, monkeypatch):
+        self._patch_storage(monkeypatch)
+        db = UpdateFakeSession(None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.set_course_stamp_image(uuid.uuid4(), FakeUpload(), db)
+
+        assert exc_info.value.status_code == 404
+
+    def test_delete_clears_and_removes_object(self, monkeypatch):
+        deleted, _ = self._patch_storage(monkeypatch)
+        course = _course(stamp_image_url="https://cdn/stamp-old.png")
+        db = UpdateFakeSession(course)
+
+        result = admin_courses_router.delete_course_stamp_image(course.id, db)
+
+        assert course.stamp_image_url is None
+        assert result["stamp_image_url"] is None
+        assert deleted == ["https://cdn/stamp-old.png"]
+
+    def test_delete_is_noop_when_already_none(self, monkeypatch):
+        deleted, _ = self._patch_storage(monkeypatch)
+        course = _course(stamp_image_url=None)
+        db = UpdateFakeSession(course)
+
+        admin_courses_router.delete_course_stamp_image(course.id, db)
+
+        assert deleted == []
+
+    def test_delete_404_when_course_missing(self, monkeypatch):
+        self._patch_storage(monkeypatch)
+        db = UpdateFakeSession(None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.delete_course_stamp_image(uuid.uuid4(), db)
+
+        assert exc_info.value.status_code == 404
+
+
+class TestStampToOut:
+    def test_sources_image_from_course(self):
+        # 스탬프 응답의 도안은 stamps 행이 아니라 코스에서 라이브로 온다.
+        course = _course(name="사계 해안", stamp_image_url="https://cdn/stamp.png")
+        stamp = Stamp(id=uuid.uuid4(), user_id="u", course_id=course.id, course=course)
+
+        out = stamps_router._to_out(stamp)
+
+        assert out["image_url"] == "https://cdn/stamp.png"
+        assert out["course_name"] == "사계 해안"
+        assert out["course_id"] == course.id
+
+    def test_image_none_when_course_has_no_design(self):
+        course = _course(stamp_image_url=None)
+        stamp = Stamp(id=uuid.uuid4(), user_id="u", course_id=course.id, course=course)
+
+        out = stamps_router._to_out(stamp)
+
+        assert out["image_url"] is None

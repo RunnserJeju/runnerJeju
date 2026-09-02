@@ -18,7 +18,9 @@ def _to_out(stamp: Stamp) -> dict:
         "course_id": stamp.course_id,
         "course_name": stamp.course.name,
         "acquired_at": stamp.acquired_at,
-        "image_url": stamp.image_url,
+        # 도안은 코스에 설정된 값을 라이브로 참조한다(stamps엔 도안 컬럼이 없다).
+        # 운영자가 나중에 도안을 넣거나 바꿔도 이미 딴 스탬프까지 반영된다.
+        "image_url": stamp.course.stamp_image_url,
         "record_id": stamp.run_id,
     }
 

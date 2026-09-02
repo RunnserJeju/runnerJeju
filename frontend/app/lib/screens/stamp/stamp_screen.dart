@@ -230,6 +230,7 @@ class _StampGrid extends StatelessWidget {
                         : StampBadge(
                             courseName: slot.courseName,
                             acquired: false,
+                            lockedImageUrl: slot.stampImageUrl,
                           ),
                   );
                 },
@@ -300,6 +301,7 @@ class _StampSlot {
     required this.courseName,
     required this.acquired,
     this.stamp,
+    this.stampImageUrl,
   });
 
   factory _StampSlot.fromCourse(RunningCourse course, RunStamp? stamp) =>
@@ -308,6 +310,8 @@ class _StampSlot {
         courseName: stamp?.courseName ?? course.name,
         acquired: stamp != null,
         stamp: stamp,
+        // 미획득 칸의 목표 도안. 코스가 스탬프 도안을 설정했을 때만 있다.
+        stampImageUrl: course.stampImageUrl,
       );
 
   factory _StampSlot.fromStamp(RunStamp stamp) => _StampSlot(
@@ -321,4 +325,7 @@ class _StampSlot {
   final String courseName;
   final bool acquired;
   final RunStamp? stamp;
+
+  /// 코스가 설정한 스탬프 도안 URL(미획득 칸의 목표 도안용). 없으면 null.
+  final String? stampImageUrl;
 }
