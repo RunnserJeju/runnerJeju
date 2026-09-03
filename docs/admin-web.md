@@ -171,8 +171,10 @@ server/app/
 
 ## 웹 인증 (자체 세션)
 
+> 구현 완료 → **5단계 (2026-09-03)** 참조. 아래는 원안이며, 실제로는 즉시 무효화를 row 삭제가 아니라 `revoked_at`으로, 쿠키는 `SameSite=Strict`로 구현.
+
 - 로그인 수단: 기존 User는 소셜로그인뿐(비밀번호 없음) → 운영자용 `admin_users`(아이디 + BCrypt 해시) 테이블 신설
-- 세션: opaque session_id를 HttpOnly·Secure·SameSite 쿠키로. 서버측 `admin_sessions` 테이블에서 조회 → row 삭제로 즉시 무효화
+- 세션: opaque session_id를 HttpOnly·Secure·SameSite 쿠키로. 서버측 `admin_sessions` 테이블에서 조회 → 즉시 무효화
 - 앱의 JWT 흐름과 독립 (공유 시크릿·role 클레임 문제 없음)
 
 ## 계획 (단계)
@@ -251,9 +253,36 @@ DB에 직접 쓰므로 앱·웹과 무관하게 동작한다.
 - 개발: `cd frontend/admin && npm run dev` (서버는 8000에 따로)
 
 남은 것 (2차)
-- [ ] 세션 인증으로 교체 (`admin_users`/`admin_sessions`, bcrypt, 로그인 API — 팀원)
+- [x] 세션 인증으로 교체 → 5단계 (2026-09-03)
 - [ ] 배너·공지 화면
 - [ ] 목록 페이징·검색 (코스가 수십 개 수준이라 아직 불필요)
+
+### 5단계 — 세션 인증 (2026-09-03) ✅ — API 키 하드 컷오버
+
+임시 API 키(`X-Admin-Api-Key`/`ADMIN_API_KEY`)를 **운영자별 세션 쿠키 로그인**으로 교체. 앱 JWT 흐름과 완전 독립.
+
+백엔드
+- [x] 테이블 신설 (마이그레이션 `0015`): `admin_users`(username unique, bcrypt `password_hash`, `disabled_at`), `admin_sessions`(`token_hash`=쿠키토큰 sha256, `expires_at`, `revoked_at`)
+- [x] `app/admin/auth.py`: `POST /admin/auth/login`·`POST /admin/auth/logout`·`GET /admin/auth/me` + 가드 `require_admin_session`
+- [x] 라우터 분리 — 로그인 라우터(`admin_auth_router`)는 가드 밖, 나머지 `/admin/*`(`admin_router`)는 라우터레벨 `require_admin_session`. `main.py`가 둘 다 include
+- [x] `require_admin_key`(`app/deps.py`)·`ADMIN_API_KEY` 기동 검사(`config_guard`) 제거. `docker-compose`·`cloudbuild`·`.env.example`에서 `ADMIN_API_KEY` 제거
+- [x] 순수 유틸 `app/admin/security.py`: bcrypt 해시/검증, 세션 토큰 생성(원본)+sha256, 쿠키 설정
+- [x] 로그인 사용자 열거 방지 — 아이디 없어도 더미 해시로 bcrypt 1회 수행(타이밍 평탄화), 실패 메시지 단일화
+
+쿠키
+- [x] `HttpOnly` + `Secure` + `SameSite=Strict` + `Path=/admin` + 12h TTL
+- [x] `Secure`는 `SESSION_COOKIE_SECURE` env로 게이트(운영 기본 true, 로컬 http는 false). 로컬 docker-compose가 false로 설정
+
+운영자 계정
+- [x] 가입 API 없음. 시드 CLI `server/tools/create_admin.py` — `uv run python -m tools.create_admin [--username X]` (비번은 프롬프트, CLI 인자 아님)
+- 배포 전: 대상 DB에 `0015` 적용 + `create_admin`으로 첫 계정 시드 필요(안 하면 아무도 로그인 못 함 — 의도된 컷오버)
+
+프론트 (`frontend/admin/`)
+- [x] API 키 입력칸/localStorage 제거 → 아이디·비번 로그인 폼(`AuthPage`). 모든 fetch `credentials:'include'`
+- [x] 로드 시 `GET /admin/auth/me`로 세션 확인 — 401=로그인 화면, 일시 오류(네트워크/5xx)=재시도 화면(유효 세션을 로그인 화면으로 숨기지 않음), 상단 로그아웃 버튼
+
+검증
+- [x] `tests/test_admin_auth.py` 신규(비번 해시·로그인·가드·로그아웃 15개). E2E: 로컬 Postgres+`0015`+curl로 로그인·미인증 401·쿠키 통과·로그아웃 후 폐기(401)까지 확인. 어드버서리얼 4렌즈 리뷰 인증우회·세션보안 0건
 
 ## 결정됨 — 기록 있는 코스의 경로(GPX) 수정
 - **초기화 후 교체**로 결정(2026-08-30). `reset_records=true`면 완주 스탬프·검증을 hard delete, 경로 교체. 개인 러닝 기록(Run)은 유지 → 개인 히스토리 보존 + 감사 흔적
@@ -277,7 +306,7 @@ DB에 직접 쓰므로 앱·웹과 무관하게 동작한다.
 피하면 된다.
 
 ## 보류 / 검토 필요
-- CSRF — `SameSite=Lax`로도 완전히 없어지진 않는다. 토큰 방식(쿠키+헤더) 필요
+- CSRF — 같은 오리진 + `SameSite=Strict` 쿠키로 처리(5단계). 상태변경 API가 전부 비-GET이라 타 사이트발 요청엔 쿠키가 안 실린다. 별도 CSRF 토큰은 넣지 않았다 — 다른 오리진으로 배포를 쪼개면 그때 토큰 방식 재검토
 - 세션 저장소 — Postgres 테이블로 시작(Redis 불필요). 트래픽·인스턴스 늘면 재검토
 - `User.role` — 운영자가 `admin_users`로 분리되면 갈 곳이 없다. 컬럼 유지 여부 미정
   (앱에서는 이미 `isAdmin`을 걷어냈다)

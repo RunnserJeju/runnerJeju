@@ -132,7 +132,9 @@ steps:
       - --max-instances=4
       - --labels=commit-sha=${SHORT_SHA}
       - --set-env-vars=SUPABASE_URL=${_SUPABASE_URL},SUPABASE_STORAGE_BUCKET=${_STORAGE_BUCKET}
-      - --set-secrets=DATABASE_URL=db-url:latest,JWT_SECRET_KEY=jwt-key:latest,SUPABASE_API_SECRET_KEY=sb-key:latest,KAKAO_REST_API_KEY=kakao-key:latest,ADMIN_API_KEY=admin-key:latest
+      # 운영자 인증은 세션 로그인으로 바뀌어 ADMIN_API_KEY 시크릿이 필요 없다
+      # (운영자 계정은 tools/create_admin.py로 시드). 세션 쿠키는 HTTPS라 기본 Secure.
+      - --set-secrets=DATABASE_URL=db-url:latest,JWT_SECRET_KEY=jwt-key:latest,SUPABASE_API_SECRET_KEY=sb-key:latest,KAKAO_REST_API_KEY=kakao-key:latest
 
 # 테스트 + 이미지 빌드 + 배포까지 기본 10분으로는 빠듯하다.
 timeout: 1800s

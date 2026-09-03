@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app import config_guard, schema_guard
-from app.admin import admin_router
+from app.admin import admin_auth_router, admin_router
 from app.db import engine
 from app.routers import (
     auth,
@@ -55,7 +55,9 @@ app.include_router(verifications.router)
 app.include_router(stamps.router)
 app.include_router(notices.router)
 
-# 운영자 전용 — /admin/* 아래, 라우터 레벨에서 require_admin_key로 보호(app/admin/__init__.py)
+# 운영자 전용. 로그인 라우터(admin_auth_router)는 가드 밖, 나머지(admin_router)는
+# 라우터 레벨에서 require_admin_session으로 보호된다(app/admin/__init__.py).
+app.include_router(admin_auth_router)
 app.include_router(admin_router)
 
 # 운영 웹(frontend/admin의 vite build 결과). 같은 오리진에서 서빙해 인증을 단순하게

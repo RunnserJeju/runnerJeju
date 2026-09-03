@@ -353,3 +353,56 @@ class Mission(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class AdminUser(Base):
+    """운영 웹에 로그인하는 운영자 계정. 앱 사용자(users)와 완전히 별개다 —
+    앱은 소셜 로그인 전용이라 비밀번호가 없고, 운영자는 아이디/비밀번호로 로그인한다.
+
+    가입 API는 없다. 운영자는 소수라 tools/create_admin.py로 직접 시드한다.
+    disabled_at을 채우면 로그인·기존 세션이 모두 막힌다(계정 비활성화).
+    """
+
+    __tablename__ = "admin_users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    # bcrypt 해시(app/admin/security.py). 평문은 어디에도 저장하지 않는다.
+    password_hash: Mapped[str] = mapped_column(String(100))
+    display_name: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 채워지면 비활성 계정 — 로그인 거부 + 기존 세션 무효(require_admin_session).
+    disabled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AdminSession(Base):
+    """운영자 로그인 세션 1개. 로그인 시 발급, 로그아웃/만료 시 무효화한다.
+
+    쿠키에는 불투명 랜덤 토큰이 실리고, 여기엔 그 토큰의 sha256 해시만 저장한다
+    (비밀번호와 같은 논리 — DB가 유출돼도 원본 세션 토큰은 드러나지 않는다).
+    앱의 RefreshToken과 같은 패턴이되, 쿠키 기반이라 별도 테이블로 둔다.
+    """
+
+    __tablename__ = "admin_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    admin_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("admin_users.id"), index=True
+    )
+    # 쿠키 토큰의 sha256 hex(64자). 조회 키라 unique + index.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

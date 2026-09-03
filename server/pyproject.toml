@@ -15,6 +15,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     # courses.yaml 명단을 읽어 업로드 API로 올리는 tools/push_courses.py용.
     "pyyaml>=6.0",
+    "bcrypt>=5.0.0",
 ]
 
 [dependency-groups]

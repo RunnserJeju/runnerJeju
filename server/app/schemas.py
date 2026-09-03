@@ -110,6 +110,22 @@ class AccessTokenOut(BaseModel):
     access_token: str
 
 
+# --- 운영자 인증 --------------------------------------------------------
+# 앱 로그인(위)과 완전히 별개. 운영 웹에서만 쓰며, 세션 쿠키로 인증한다.
+
+
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AdminIdentityOut(BaseModel):
+    """로그인·세션 확인(GET /admin/auth/me) 응답. 비밀번호/해시는 절대 담지 않는다."""
+
+    username: str
+    display_name: str | None
+
+
 # --- 코스 ---------------------------------------------------------------
 
 
