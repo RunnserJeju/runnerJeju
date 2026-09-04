@@ -11,7 +11,6 @@ from app.admin import admin_auth_router, admin_router
 from app.db import engine
 from app.routers import (
     auth,
-    banners,
     courses,
     favorites,
     notices,
@@ -47,7 +46,6 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
-app.include_router(banners.router)
 app.include_router(courses.router)
 app.include_router(favorites.router)
 app.include_router(runs.router)

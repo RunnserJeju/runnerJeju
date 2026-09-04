@@ -7,7 +7,7 @@
   - push_courses가 명단 주소를 geocode해 좌표를 채우는지
 
 DB 없이 라우터 함수를 직접 부르고 Session은 FakeSession으로 흉내낸다
-(test_banners.py와 같은 방침). GPX는 실제 코스 파일(sagye-coastal.gpx)을 쓴다.
+(test_notices.py와 같은 방침). GPX는 실제 코스 파일(sagye-coastal.gpx)을 쓴다.
 """
 
 import io

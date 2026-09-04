@@ -2,17 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/home_banner.dart';
+import '../models/notice.dart';
 import '../theme/app_theme.dart';
 
 /// 홈 화면 상단 이미지 배너. 스와이프로 넘기고, 4초마다 자동으로도 넘어간다.
 ///
+/// 배너는 이미지가 있는 공지다 — 누르면 [onTap]으로 그 공지를 연다.
 /// 배너 사진 품질이 들쭉날쭉해서 이미지 위에 하단 그라디언트(scrim)를 덮어 톤을
 /// 잡아준다. 자동 슬라이드 타이머는 [dispose]에서 반드시 취소한다.
 class BannerCarousel extends StatefulWidget {
-  const BannerCarousel({super.key, required this.banners});
+  const BannerCarousel({super.key, required this.banners, required this.onTap});
 
-  final List<HomeBanner> banners;
+  /// 이미지가 있는 공지만 넘긴다.
+  final List<Notice> banners;
+  final ValueChanged<Notice> onTap;
 
   @override
   State<BannerCarousel> createState() => _BannerCarouselState();
@@ -78,11 +81,14 @@ class _BannerCarouselState extends State<BannerCarousel> {
                     controller: _controller,
                     itemCount: banners.length,
                     onPageChanged: (page) => setState(() => _page = page),
-                    itemBuilder: (context, index) => Image.network(
-                      banners[index].imageUrl,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (_, _, _) => const _BannerFallback(),
+                    itemBuilder: (context, index) => GestureDetector(
+                      onTap: () => widget.onTap(banners[index]),
+                      child: Image.network(
+                        banners[index].imageUrl!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, _, _) => const _BannerFallback(),
+                      ),
                     ),
                   ),
                   // 사진 위에 얹는 하단 그라디언트 — 저품질 사진도 톤이 잡히고,

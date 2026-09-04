@@ -10,7 +10,7 @@ require_admin_session으로 보호된다 — 개별 엔드포인트에 가드를
 
 from fastapi import APIRouter, Depends
 
-from app.admin import banners, courses, geo, missions, notices
+from app.admin import courses, geo, missions, notices
 from app.admin.auth import require_admin_session
 from app.admin.auth import router as admin_auth_router
 
@@ -18,7 +18,6 @@ admin_router = APIRouter(
     prefix="/admin", dependencies=[Depends(require_admin_session)]
 )
 admin_router.include_router(courses.router)
-admin_router.include_router(banners.router)
 admin_router.include_router(notices.router)
 admin_router.include_router(missions.router)
 admin_router.include_router(geo.router)

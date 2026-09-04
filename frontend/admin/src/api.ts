@@ -20,7 +20,27 @@ export interface Course {
   description: string | null
   estimated_time_min: number | null
   thumbnail_url: string | null
+  stamp_image_url: string | null
   completed_count: number
+}
+
+/** 공지. image_url이 있으면 앱 홈 상단 배너로도 실린다. */
+export interface Notice {
+  id: string
+  title: string
+  body: string
+  image_url: string | null
+  starts_at: string | null
+  ends_at: string | null
+  created_at: string
+}
+
+/** 등록/수정(전체 교체) 페이로드. 서버 NoticeCreate/NoticeUpdate와 1:1. */
+export interface NoticePayload {
+  title: string
+  body: string
+  starts_at: string | null
+  ends_at: string | null
 }
 
 export interface GeocodeResult {
@@ -169,6 +189,53 @@ export function setCourseThumbnail(id: string, file: File): Promise<Course> {
 
 export function deleteCourseThumbnail(id: string): Promise<Course> {
   return request(`/admin/courses/${id}/thumbnail`, { method: 'DELETE' })
+}
+
+export function setCourseStampImage(id: string, file: File): Promise<Course> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/courses/${id}/stamp-image`, { method: 'PUT', body: form })
+}
+
+export function deleteCourseStampImage(id: string): Promise<Course> {
+  return request(`/admin/courses/${id}/stamp-image`, { method: 'DELETE' })
+}
+
+// --- 공지 ---------------------------------------------------------------
+
+/** 전체 목록(예약·만료 포함). 공개 GET /notices는 노출 중인 것만 주고 앱 JWT가 필요하다. */
+export function listNotices(): Promise<Notice[]> {
+  return request('/admin/notices')
+}
+
+export function createNotice(payload: NoticePayload): Promise<Notice> {
+  return request('/admin/notices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateNotice(id: string, payload: NoticePayload): Promise<Notice> {
+  return request(`/admin/notices/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteNotice(id: string): Promise<void> {
+  return request(`/admin/notices/${id}`, { method: 'DELETE' })
+}
+
+export function setNoticeImage(id: string, file: File): Promise<Notice> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/notices/${id}/image`, { method: 'PUT', body: form })
+}
+
+export function deleteNoticeImage(id: string): Promise<Notice> {
+  return request(`/admin/notices/${id}/image`, { method: 'DELETE' })
 }
 
 export function geocode(address: string): Promise<{ results: GeocodeResult[] }> {

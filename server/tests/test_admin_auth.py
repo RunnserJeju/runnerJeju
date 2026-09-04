@@ -1,6 +1,6 @@
 """운영자 세션 인증 테스트 — 비밀번호 해시, 로그인, 세션 가드, 로그아웃.
 
-DB 없이 돌린다. 다른 admin 테스트(test_banners 등)의 FakeSession은 execute가
+DB 없이 돌린다. 다른 admin 테스트(test_notices 등)의 FakeSession은 execute가
 저장된 행을 통째로 돌려주지만, 여기선 로그인/가드가 username·token_hash로
 정확히 한 행을 집어야 하므로 select(...).where(col == value)를 최소 해석하는
 FakeSession을 쓴다 — 라우터의 실제 쿼리 코드를 그대로 태운다.

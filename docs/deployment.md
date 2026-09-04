@@ -73,7 +73,7 @@ engine = create_engine(
 | `JWT_SECRET_KEY` | 로그인 토큰 서명 | **조용히 뜬 뒤** 누구나 관리자 토큰 위조 가능 |
 | `SUPABASE_URL` | Storage API (같은 project-ref) | Storage 호출 시 실패 |
 | `SUPABASE_API_SECRET_KEY` | Storage 업로드 (BYPASSRLS 키) | **업로드 시점에야** 터짐 |
-| `SUPABASE_STORAGE_BUCKET` | 배너 버킷 (예: `banners`) | 업로드 시점에 터짐 |
+| `SUPABASE_STORAGE_BUCKET` | 공지 배너 이미지 버킷 (예: `banners`) | 업로드 시점에 터짐 |
 
 **JWT만 조용히 뜬다**는 게 핵심이다. 나머지는 빠뜨리면 바로/곧 티가 나지만
 `JWT_SECRET_KEY`는 개발 기본값 그대로도 서버가 멀쩡히 떠버린다. 그래서 이 키만

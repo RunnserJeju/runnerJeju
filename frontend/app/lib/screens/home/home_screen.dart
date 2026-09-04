@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../data/curated_partners.dart';
-import '../../models/home_banner.dart';
 import '../../models/notice.dart';
 import '../../models/running_course.dart';
 import '../../services/service_locator.dart';
@@ -12,7 +11,7 @@ import '../../widgets/banner_carousel.dart';
 import '../../widgets/course_recommend_card.dart';
 import '../course/course_detail_screen.dart';
 
-/// 홈: 배너 + 추천 코스 + 러닝 코스 큐레이션 + 공지사항.
+/// 홈: 배너(이미지 있는 공지) + 추천 코스 + 러닝 코스 큐레이션 + 공지사항.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -22,7 +21,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Notice>> _noticesFuture;
-  late Future<List<HomeBanner>> _bannersFuture;
   late Future<List<RunningCourse>> _coursesFuture;
 
   @override
@@ -33,14 +31,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _load() {
     _noticesFuture = Services.instance.notice.loadNotices();
-    _bannersFuture = Services.instance.banner.loadBanners();
     _coursesFuture = Services.instance.course.loadCourses();
   }
 
   Future<void> _refresh() async {
     setState(_load);
     await _noticesFuture.catchError((_) => <Notice>[]);
-    await _bannersFuture.catchError((_) => <HomeBanner>[]);
     await _coursesFuture.catchError((_) => <RunningCourse>[]);
   }
 
@@ -62,16 +58,21 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(0, 8, 0, 120),
           children: [
-            // ── 상단 배너 ──
+            // ── 상단 배너 (이미지 있는 공지) ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: FutureBuilder<List<HomeBanner>>(
-                future: _bannersFuture,
+              child: FutureBuilder<List<Notice>>(
+                future: _noticesFuture,
                 builder: (context, snapshot) {
-                  final banners = snapshot.data ?? const <HomeBanner>[];
+                  final banners = (snapshot.data ?? const <Notice>[])
+                      .where((n) => n.hasImage)
+                      .toList();
                   // 배너가 없으면 접지 않고 브랜드 히어로를 대신 띄운다.
                   if (banners.isEmpty) return const BrandHeroBanner();
-                  return BannerCarousel(banners: banners);
+                  return BannerCarousel(
+                    banners: banners,
+                    onTap: (notice) => showNoticeDetail(context, notice),
+                  );
                 },
               ),
             ),
@@ -349,7 +350,7 @@ class _NoticeCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _showDetail(context, notice),
+        onTap: () => showNoticeDetail(context, notice),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -357,7 +358,11 @@ class _NoticeCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _CategoryChip(category: notice.category),
+                  const Icon(
+                    Icons.campaign_rounded,
+                    size: 18,
+                    color: AppColors.accent,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -396,92 +401,71 @@ class _NoticeCard extends StatelessWidget {
       ),
     );
   }
-
-  void _showDetail(BuildContext context, Notice notice) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            20,
-            20,
-            20 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _CategoryChip(category: notice.category),
-                const SizedBox(height: 10),
-                Text(
-                  notice.title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  Formatters.date(notice.createdAt),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(notice.body, style: const TextStyle(height: 1.5)),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
-/// 공지 카테고리 뱃지. 카테고리별 색을 옅게 깔고 같은 색 글씨로 찍는다.
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({required this.category});
 
-  final NoticeCategory category;
-
-  static Color _colorOf(NoticeCategory category) => switch (category) {
-    NoticeCategory.appGuide => const Color(0xFF3B82F6),
-    NoticeCategory.newCourse => AppColors.success,
-    NoticeCategory.event => AppColors.accent,
-    NoticeCategory.maintenance => AppColors.danger,
-    NoticeCategory.etc => const Color(0xFF8A909C),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _colorOf(category);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        category.label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: color,
+/// 공지 상세 바텀시트. 카드와 상단 배너 양쪽에서 연다.
+void showNoticeDetail(BuildContext context, Notice notice) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.of(context).viewInsets.bottom,
         ),
-      ),
-    );
-  }
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (notice.hasImage) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: AspectRatio(
+                    aspectRatio: 3 / 1,
+                    child: Image.network(
+                      notice.imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              Text(
+                notice.title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                Formatters.date(notice.createdAt),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(notice.body, style: const TextStyle(height: 1.5)),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }

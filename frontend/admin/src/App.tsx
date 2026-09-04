@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { ApiError, getMe, logout, type AdminIdentity } from './api'
 import AuthPage from './pages/AuthPage'
 import CourseListPage from './pages/CourseListPage'
+import NoticeListPage from './pages/NoticeListPage'
 
 type Auth =
   | { status: 'checking' }
@@ -10,10 +11,18 @@ type Auth =
   | { status: 'error' }
   | { status: 'authed'; who: AdminIdentity }
 
-// 페이지는 코스 목록 하나뿐이라 라우터 없이 인증 여부로만 화면을 가른다.
+type Tab = 'courses' | 'notices'
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'courses', label: '코스' },
+  { key: 'notices', label: '공지사항' },
+]
+
+// 페이지가 둘뿐이라 라우터 없이 상단 탭(state)으로 가른다.
 // 등록/수정은 목록 위 모달로 처리한다.
 export default function App() {
   const [auth, setAuth] = useState<Auth>({ status: 'checking' })
+  const [tab, setTab] = useState<Tab>('courses')
 
   // 최초 로드 시 세션이 살아있는지 서버에 물어본다(쿠키는 JS가 못 읽으므로).
   const checkSession = () => {
@@ -62,6 +71,21 @@ export default function App() {
     <>
       <header className="topbar">
         <h1>Runners Jeju Dashboard</h1>
+        <nav>
+          {TABS.map((t) => (
+            <a
+              key={t.key}
+              href={`#${t.key}`}
+              className={tab === t.key ? 'active' : undefined}
+              onClick={(event) => {
+                event.preventDefault()
+                setTab(t.key)
+              }}
+            >
+              {t.label}
+            </a>
+          ))}
+        </nav>
         <span className="muted" style={{ marginLeft: 'auto' }}>
           {auth.who.display_name ?? auth.who.username}
         </span>
@@ -70,7 +94,11 @@ export default function App() {
         </button>
       </header>
       <main>
-        <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+        {tab === 'courses' ? (
+          <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+        ) : (
+          <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+        )}
       </main>
     </>
   )

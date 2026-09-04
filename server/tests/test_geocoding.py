@@ -1,7 +1,7 @@
 """지오코딩(app.geocoding.geocode) 테스트.
 
 카카오 호출은 실제 네트워크를 타므로 httpx.get을 monkeypatch로 갈아끼운다.
-test_banners.py가 Supabase 호출을 갈아끼우는 것과 같은 방침이다. 이 파일은
+test_notices.py가 Supabase 호출을 갈아끼우는 것과 같은 방침이다. 이 파일은
 '찾음 / 못 찾음 / 호출 실패 / 키 미설정' 네 갈래가 각각 맞게 갈리는지만 본다.
 """
 

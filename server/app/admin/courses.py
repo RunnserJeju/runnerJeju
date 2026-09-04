@@ -29,7 +29,7 @@ router = APIRouter(tags=["courses"])
 # 제한이 없으면 거대한 파일 하나로 워커 메모리를 채울 수 있다.
 MAX_GPX_BYTES = 5 * 1024 * 1024
 
-# 썸네일 이미지 제한. 배너(admin/banners.py)와 같은 규칙 — 폰 원본 사진이
+# 썸네일 이미지 제한. 공지 배너 이미지(admin/notices.py)와 같은 규칙 — 폰 원본 사진이
 # 올라올 수 있어 넉넉히 두고, 확장자는 Storage 오브젝트 경로로도 쓰인다.
 MAX_THUMBNAIL_BYTES = 8 * 1024 * 1024
 _ALLOWED_IMAGE_TYPES = {
