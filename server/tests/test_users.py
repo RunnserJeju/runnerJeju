@@ -226,3 +226,10 @@ class TestGetUser:
         with pytest.raises(HTTPException) as exc:
             users_router.get_user(uuid.uuid4(), DetailFakeSession(None))
         assert exc.value.status_code == 404
+
+    def test_404_when_withdrawn(self):
+        # 탈퇴(익명화)된 husk는 상세에서도 없는 것으로 취급한다.
+        u = _user(deleted_at=NOW)
+        with pytest.raises(HTTPException) as exc:
+            users_router.get_user(u.id, DetailFakeSession(u))
+        assert exc.value.status_code == 404

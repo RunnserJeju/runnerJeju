@@ -61,6 +61,18 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    # 최근 로그인/토큰 리프레시 시각. 로그인(_issue_tokens)과 refresh에서 갱신한다.
+    # 활성 이용자 통계·휴면 판정의 근거. 요청마다 갱신하지 않는다(무상태 인증 유지).
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # 채워지면 탈퇴(익명화)된 계정. PII가 스크럽된 husk이고 provider id도 null이라
+    # 재로그인 시 새 계정이 생긴다. 회원 목록·활성 통계에서 이 값으로 거른다. 활동
+    # (완주·찜)은 익명으로 남겨 역사적 집계에 유지한다.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
 
 class RefreshToken(Base):
     """발급된 refresh token 1개. 로그아웃 시 revoked_at을 채워 폐기한다."""

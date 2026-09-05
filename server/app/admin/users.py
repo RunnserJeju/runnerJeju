@@ -101,7 +101,8 @@ def list_users(
     완주 수는 이 페이지 유저들만 한 번에 배치 집계한다(N+1 없음). total은 같은 필터의
     전체 개수로, 페이지 UI가 쓴다.
     """
-    filters = []
+    # 탈퇴(익명화)된 husk는 항상 제외한다. keyword 필터가 있으면 뒤에 덧붙는다.
+    filters = [User.deleted_at.is_(None)]
     if keyword:
         like = f"%{keyword}%"
         filters.append(or_(User.nickname.ilike(like), User.email.ilike(like)))
@@ -136,7 +137,7 @@ def get_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
     완주 수는 완주 목록의 길이라 따로 집계하지 않는다.
     """
     user = db.get(User, user_id)
-    if user is None:
+    if user is None or user.deleted_at is not None:
         raise HTTPException(status_code=404, detail="회원을 찾을 수 없어요.")
 
     courses = _completed_courses(db, user)
