@@ -422,6 +422,10 @@ class _RunMapViewState extends State<RunMapView>
   ///
   /// 보간기까지 비우는 이유는, 남겨 두면 끊기기 전 마지막 점과 재개 후 첫 점
   /// 사이를 "이동 중"으로 보고 그 사이를 채워 그리기 때문이다.
+  ///
+  /// [_lastSample]은 비우지 않는다. 재개 직후 위젯이 들고 있는 currentPosition은
+  /// 아직 멈추기 전 마지막 점이라, 비우면 그 점이 새 구간의 첫 점으로 다시 들어가
+  /// 멈춘 자리와 재개한 자리가 선으로 이어진다. 남겨 두면 같은 점이라 걸러진다.
   Future<void> _breakLiveRoute() async {
     final live = _liveRoute;
     if (live == null) return;
@@ -434,7 +438,6 @@ class _RunMapViewState extends State<RunMapView>
     _interpolator.clear();
     _pendingSettled.clear();
     _pendingPosition = null;
-    _lastSample = null;
     _renderedPosition = null;
 
     await live.breakHere();
