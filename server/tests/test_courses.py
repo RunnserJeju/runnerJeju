@@ -754,3 +754,49 @@ class TestStampToOut:
         out = stamps_router._to_out(stamp)
 
         assert out["image_url"] is None
+
+
+class _GetCourseFake:
+    """get_course가 부르는 것만: get(Course), execute(insert/select), commit."""
+
+    def __init__(self, course):
+        self._course = course
+        self.executed = []
+        self.committed = False
+
+    def get(self, _model, cid):
+        if self._course is not None and self._course.id == cid:
+            return self._course
+        return None
+
+    def execute(self, stmt):
+        self.executed.append(stmt)
+        return _EmptyResult()
+
+    def commit(self):
+        self.committed = True
+
+    @property
+    def insert_count(self) -> int:
+        return sum(1 for s in self.executed if type(s).__name__ == "Insert")
+
+
+class TestGetCourseRecordsView:
+    def test_records_one_view(self):
+        course = _course()
+        db = _GetCourseFake(course)
+
+        result = courses_router.get_course(course.id, db=db, user_id="u1")
+
+        assert result["id"] == course.id
+        assert db.insert_count == 1  # 상세 조회 1건 기록(하루 1회 중복제거)
+        assert db.committed is True
+
+    def test_404_does_not_record(self):
+        db = _GetCourseFake(None)
+
+        with pytest.raises(HTTPException) as exc:
+            courses_router.get_course(uuid.uuid4(), db=db, user_id="u1")
+
+        assert exc.value.status_code == 404
+        assert db.insert_count == 0

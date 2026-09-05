@@ -41,6 +41,8 @@
 | `DELETE /admin/missions/{id}` | 미션 삭제 |
 | `GET /admin/users` | 회원 목록 (검색·페이지네이션, 완주 수 포함) |
 | `GET /admin/users/{id}` | 회원 상세 (기본정보 + 완주 코스 목록) |
+| `GET /admin/stats/overview` | 이용 통계 — 사이트 전체 요약 |
+| `GET /admin/stats/courses` | 이용 통계 — 코스별 지표(완주·찜·이용자, 정렬) |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /notices`.
@@ -167,6 +169,18 @@
 - 페이지네이션 offset 방식(정렬 인덱스 `ix_users_created_at_id`는 keyset 전환 시 재사용).
 - **검색 성능(보류, 2026-09-05)**: `keyword`는 `%..%` ILIKE라 앞 와일드카드 때문에 인덱스를 못 타고 seq scan(O(n))이다. 회원 규모가 작고 검색이 저QPS(운영자 소수)라 지금은 그대로 둔다. 회원이 커지면(대략 5만+ 또는 검색 체감 저하) `pg_trgm` GIN 인덱스(`nickname`/`email`에 `gin_trgm_ops`)로 전환 — 같은 `ILIKE`가 인덱스를 타게 되어 검색 코드는 안 바뀐다.
 - 미구현(제재와 함께): 상태 컬럼·이용 제한/해제·상태 필터·러닝 기록·완주수 등 정렬 옵션.
+
+## 이용 통계 (백엔드, 2026-09-06)
+
+운영자가 코스 이용 현황을 본다. 완주·찜·이용자·회원은 이미 있는 데이터로 집계하고, **조회수는 새 이벤트 테이블 `course_views`로 추가**(마이그레이션 `0020`). 라우터 `app/admin/stats.py`. 기간별 추이·인기 지역은 이후.
+
+- **`GET /admin/stats/overview`** — 사이트 전체 요약. 응답 `registered_users, active_users, total_runs, total_completions, total_favorites, total_views`.
+  - `registered_users`(가입 회원)·`active_users`(러닝 1회+ 한 고유 사용자)는 **탈퇴자 제외**(`deleted_at IS NULL`, 현재 기준). 누적 활동(runs/completions/favorites/views)은 **탈퇴자 포함** 역사적 총계. 쿼리 count 6방.
+- **`GET /admin/stats/courses?sort=completions|runners|favorites|views`** — 코스별 지표 표. 응답 `id, name, address, completed_count, favorite_count, runner_count, view_count`. 정렬 내림차순(기본 완주순), 동점은 이름→id.
+  - `completed_count`=완주자(=획득 스탬프), `favorite_count`=찜, `runner_count`=그 코스를 달린 고유 사용자(완주자의 상위 집합), `view_count`=조회수(아래). **탈퇴자 포함**(역사적 누적).
+  - 코스가 수십 개라 배치 집계(코스 1 + 완주·찜·이용자·조회수 각 group_by 1 = 5쿼리, N+1 없음) 후 Python 정렬.
+- **조회수 (하루 1회 중복제거)**: `course_views(course_id, user_id, view_date)` + `(course_id, user_id, view_date)` 유니크. 공개 `GET /courses/{id}`(앱)가 서버측에서 `ON CONFLICT DO NOTHING`으로 기록 → **앱 변경 없음**. 같은 사람이 하루에 여러 번 열어도 1 → **raw 클릭 수가 아니라 '고유 조회(사람·일)'**. 시간축은 `view_date`(일 단위)뿐이라 **기간별(period) 추이는 이후**.
+- **인기 '지역' 보류**: 코스에 구조화된 지역 필드가 없어(주소·태그는 자유 텍스트) 지역 집계는 안 한다. 코스 정렬이 곧 인기 코스. region 필드가 생기면 그때.
 
 ## 목표 서버 구조
 

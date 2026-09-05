@@ -435,3 +435,36 @@ class UserListOut(BaseModel):
 
     total: int
     items: list[UserSummaryOut]
+
+
+# --- 이용 통계 (운영자) ---------------------------------------------------
+# 완주·찜·이용자·회원·조회수를 집계한다. registered/active는 탈퇴자 제외(현재),
+# 누적 활동·코스 지표는 탈퇴자 포함(역사적 누적).
+
+
+class StatsOverviewOut(BaseModel):
+    """사이트 전체 요약."""
+
+    # 탈퇴자 제외(현재 기준).
+    registered_users: int
+    # 러닝 1회 이상 한 고유 사용자(탈퇴자 제외).
+    active_users: int
+    # 누적 총계(탈퇴자 포함).
+    total_runs: int
+    total_completions: int
+    total_favorites: int
+    total_views: int
+
+
+class CourseStatsOut(BaseModel):
+    """코스별 이용 지표 한 행. completed_count = 완주자 수 = 획득 스탬프 수."""
+
+    id: uuid.UUID
+    name: str
+    address: str
+    completed_count: int
+    favorite_count: int
+    # 그 코스를 달린 고유 사용자(완주자의 상위 집합).
+    runner_count: int
+    # 코스별 조회수(하루 1회 중복제거한 고유 조회).
+    view_count: int

@@ -1,8 +1,9 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -400,6 +401,41 @@ class AdminSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class CourseView(Base):
+    """코스 상세 조회 기록. '코스별 조회수'의 원천 데이터다.
+
+    하루 1회 중복제거: (course_id, user_id, view_date)가 유일하다 — 같은 사람이 하루에
+    같은 코스를 여러 번 열어도 행은 하나다. 그래서 조회수는 raw 클릭 수가 아니라
+    '고유 조회(사람·일 단위)'다. GET /courses/{id}가 ON CONFLICT DO NOTHING으로 남긴다.
+
+    user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
+    """
+
+    __tablename__ = "course_views"
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id", "user_id", "view_date", name="uq_course_view_user_day"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # 유니크 제약(course_id, user_id, view_date)의 인덱스가 course_id 조회를 이미
+    # 커버하므로 course_id엔 따로 index를 걸지 않는다.
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("courses.id")
+    )
+    # user_id로 거르는 쿼리가 아직 없어 단독 인덱스는 두지 않는다(핫한 조회 insert의
+    # 쓰기 비용만 늘 뿐). '내가 본 코스' 같은 기능이 생기면 그때 추가한다.
+    user_id: Mapped[str] = mapped_column(String(100))
+    # 조회한 날짜(중복제거 단위). KST 기준 날짜(routers/courses._record_view).
+    view_date: Mapped[date] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
