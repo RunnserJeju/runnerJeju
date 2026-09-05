@@ -39,6 +39,8 @@
 | `POST /admin/missions` | 미션 등록 |
 | `PATCH /admin/missions/{id}` | 미션 수정 (전체 교체) |
 | `DELETE /admin/missions/{id}` | 미션 삭제 |
+| `GET /admin/users` | 회원 목록 (검색·페이지네이션, 완주 수 포함) |
+| `GET /admin/users/{id}` | 회원 상세 (기본정보 + 완주 코스 목록) |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /notices`.
@@ -152,6 +154,18 @@
 
 > `cloudbuild.yaml`은 `SUPABASE_COURSE_BUCKET`을 넘기지 않는다 — 기본값이 곧
 > 버킷 이름이라 그대로 동작한다. 버킷 이름을 바꾸려면 그때 환경변수를 추가한다.
+
+## 회원 관리 (조회, 백엔드, 2026-09-05)
+
+운영자가 가입 회원의 기본정보와 완주 현황을 조회한다. **조회 전용** — 이용 제한(제재)·상태 표시·감사 로그·러닝 기록은 이번 범위 밖(제재와 함께 추후). `User` 스키마 변경 없음. 라우터 `app/admin/users.py`, 마이그레이션 `0016`(목록 정렬용 인덱스만).
+
+- **`GET /admin/users`** — 목록. 쿼리 `keyword`(닉네임·이메일 부분일치), `limit`(기본 20, 1~100), `offset`(기본 0). 응답 `{ total, items[] }`. `items[]` = `id, nickname, providers[], email, created_at, completed_count`. 정렬은 가입일 최신순(+id 2차키). 완주 수는 이 페이지 유저만 배치 집계(`IN(...) GROUP BY`)해서 N+1이 없다. `total`은 같은 필터의 전체 개수(페이지 UI용).
+- **`GET /admin/users/{id}`** — 상세. 응답 `id, nickname, providers[], email, profile_image_url, created_at, completed_count, completed_courses[{course_id, name, acquired_at}]`. 완주 목록은 스탬프↔코스 단일 조인(코스명). 없으면 404.
+- **완주 = 스탬프**: 스탬프는 코스 완주로만, 유저·코스당 1개 발급(`uq_stamp_user_course`). "완주 코스 = 획득 스탬프"라 목록 `completed_count`·상세 `completed_courses`가 곧 획득 스탬프다.
+- **`providers`**: 가입에 쓰인 소셜 종류만 파생(`kakao`/`apple`/`google`). 내부 식별자(`kakao_id` 등) 원본은 응답에 없다.
+- **조인 주의**: `Stamp.user_id`는 `users.id` FK가 아니라 토큰 sub(UUID 문자열) 복사본(String)이라 유저↔완주 매칭은 `str(users.id)`로 한다. `Stamp.course_id`는 진짜 UUID FK라 코스명은 조인.
+- 페이지네이션 offset 방식(정렬 인덱스 `ix_users_created_at_id`는 keyset 전환 시 재사용).
+- 미구현(제재와 함께): 상태 컬럼·이용 제한/해제·상태 필터·러닝 기록·완주수 등 정렬 옵션.
 
 ## 목표 서버 구조
 

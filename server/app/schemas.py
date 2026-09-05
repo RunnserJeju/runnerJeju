@@ -388,3 +388,50 @@ class MissionOut(BaseModel):
     is_active: bool
     sort_order: int
     created_at: datetime
+
+
+# --- 회원 (운영자 조회) ---------------------------------------------------
+# 운영 웹이 가입 회원을 조회한다. 조회 전용 — 상태/제재/러닝은 범위 밖.
+# "완주 코스 = 획득 스탬프"다(스탬프는 코스 완주로만, 유저·코스당 1개 발급).
+
+
+class CompletedCourseOut(BaseModel):
+    """상세에서 보여줄 완주 코스 하나(=획득 스탬프 하나)."""
+
+    course_id: uuid.UUID
+    name: str
+    acquired_at: datetime
+
+
+class UserSummaryOut(BaseModel):
+    """회원 목록의 한 행. 내부 식별자(kakao_id 등) 원본은 담지 않고 가입 provider
+    종류만 파생해 준다."""
+
+    id: uuid.UUID
+    nickname: str | None
+    # 가입에 쓰인 소셜 provider. 보통 하나: ["kakao"] / ["apple"] / ["google"].
+    providers: list[str]
+    email: str | None
+    created_at: datetime
+    # 완주 코스 수 = 획득 스탬프 수.
+    completed_count: int
+
+
+class UserDetailOut(BaseModel):
+    """회원 상세 — 기본정보 + 완주(스탬프) 코스 목록."""
+
+    id: uuid.UUID
+    nickname: str | None
+    providers: list[str]
+    email: str | None
+    profile_image_url: str | None
+    created_at: datetime
+    completed_count: int
+    completed_courses: list[CompletedCourseOut]
+
+
+class UserListOut(BaseModel):
+    """회원 목록 응답. total은 필터 적용된 전체 개수(offset 페이지네이션 UI용)."""
+
+    total: int
+    items: list[UserSummaryOut]

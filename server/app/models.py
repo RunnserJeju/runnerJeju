@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -28,6 +29,10 @@ from app.db import Base
 
 class User(Base):
     __tablename__ = "users"
+    # 운영 웹 회원 목록이 가입일 최신순 + id 2차키로 페이지네이션한다. 복합 인덱스로
+    # 정렬을 인덱스 순서대로 읽어 전체 정렬을 피한다(PostgreSQL은 이 오름차순 인덱스를
+    # 역방향으로 읽어 DESC 정렬도 처리한다). 나중에 keyset로 바꿔도 그대로 재사용한다.
+    __table_args__ = (Index("ix_users_created_at_id", "created_at", "id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
