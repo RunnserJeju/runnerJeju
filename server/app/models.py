@@ -262,32 +262,12 @@ class Favorite(Base):
     course: Mapped[Course] = relationship()
 
 
-class Banner(Base):
-    """홈 화면 상단 이미지 배너. 관리자가 앱에서 직접 올린다.
-
-    image_url은 Supabase Storage의 public URL이다(app.storage 참고) — 이 테이블은
-    이미지 파일 자체가 아니라 어디 있는지와 노출 여부/순서만 안다.
-    """
-
-    __tablename__ = "banners"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    image_url: Mapped[str] = mapped_column(String(500))
-
-    # 낮을수록 먼저 보인다. 같은 값이면 created_at으로 tie-break(목록 쿼리 참고).
-    sort_order: Mapped[int] = mapped_column(Integer, default=0)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-
-    created_by: Mapped[str | None] = mapped_column(String(100), default=None)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-
 class Notice(Base):
-    """홈 화면에 노출되는 공지사항. 관리자가 DB에 직접 등록한다."""
+    """홈 화면 공지사항. 이미지가 있으면 상단 배너 캐러셀에도 실린다.
+
+    옛 banners 테이블(이미지만 있던 별도 리소스)은 0017에서 이쪽으로 합쳤다 —
+    배너가 곧 공지 내용이라 두 번 등록할 이유가 없었다.
+    """
 
     __tablename__ = "notices"
 
@@ -297,9 +277,9 @@ class Notice(Base):
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
 
-    # 고정 5종(app_guide/new_course/event/maintenance/etc) 중 하나. 앱이 라벨·칩을
-    # 매핑한다. "기타(etc)"가 그 외를 흡수해서 운영자가 카테고리를 추가할 필요는 없다.
-    category: Mapped[str] = mapped_column(String(20))
+    # 배너 이미지(Supabase Storage public URL, app.storage). null이면 텍스트 공지만,
+    # 있으면 홈 상단 캐러셀에도 실린다. PUT/DELETE /admin/notices/{id}/image로 관리.
+    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
     # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
     # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).
@@ -352,4 +332,57 @@ class Mission(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AdminUser(Base):
+    """운영 웹에 로그인하는 운영자 계정. 앱 사용자(users)와 완전히 별개다 —
+    앱은 소셜 로그인 전용이라 비밀번호가 없고, 운영자는 아이디/비밀번호로 로그인한다.
+
+    가입 API는 없다. 운영자는 소수라 tools/create_admin.py로 직접 시드한다.
+    disabled_at을 채우면 로그인·기존 세션이 모두 막힌다(계정 비활성화).
+    """
+
+    __tablename__ = "admin_users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    # bcrypt 해시(app/admin/security.py). 평문은 어디에도 저장하지 않는다.
+    password_hash: Mapped[str] = mapped_column(String(100))
+    display_name: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 채워지면 비활성 계정 — 로그인 거부 + 기존 세션 무효(require_admin_session).
+    disabled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AdminSession(Base):
+    """운영자 로그인 세션 1개. 로그인 시 발급, 로그아웃/만료 시 무효화한다.
+
+    쿠키에는 불투명 랜덤 토큰이 실리고, 여기엔 그 토큰의 sha256 해시만 저장한다
+    (비밀번호와 같은 논리 — DB가 유출돼도 원본 세션 토큰은 드러나지 않는다).
+    앱의 RefreshToken과 같은 패턴이되, 쿠키 기반이라 별도 테이블로 둔다.
+    """
+
+    __tablename__ = "admin_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    admin_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("admin_users.id"), index=True
+    )
+    # 쿠키 토큰의 sha256 hex(64자). 조회 키라 unique + index.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )

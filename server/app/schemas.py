@@ -110,6 +110,22 @@ class AccessTokenOut(BaseModel):
     access_token: str
 
 
+# --- 운영자 인증 --------------------------------------------------------
+# 앱 로그인(위)과 완전히 별개. 운영 웹에서만 쓰며, 세션 쿠키로 인증한다.
+
+
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AdminIdentityOut(BaseModel):
+    """로그인·세션 확인(GET /admin/auth/me) 응답. 비밀번호/해시는 절대 담지 않는다."""
+
+    username: str
+    display_name: str | None
+
+
 # --- 코스 ---------------------------------------------------------------
 
 
@@ -293,23 +309,7 @@ class StampOut(BaseModel):
     record_id: uuid.UUID | None
 
 
-# --- 배너 -----------------------------------------------------------------
-
-
-class BannerOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    image_url: str
-    sort_order: int
-    created_at: datetime
-
-
 # --- 공지사항 -------------------------------------------------------------
-
-
-# 고정 5종. 앱이 값→라벨·칩 색을 매핑한다("기타(etc)"가 그 외를 흡수).
-NoticeCategory = Literal["app_guide", "new_course", "event", "maintenance", "etc"]
 
 
 class NoticeCreate(BaseModel):
@@ -317,7 +317,6 @@ class NoticeCreate(BaseModel):
 
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)
-    category: NoticeCategory
     starts_at: datetime | None = None
     ends_at: datetime | None = None
 
@@ -339,7 +338,8 @@ class NoticeOut(BaseModel):
     id: uuid.UUID
     title: str
     body: str
-    category: NoticeCategory
+    # 있으면 앱이 홈 상단 배너로도 그린다. 이미지는 전용 엔드포인트로 올린다.
+    image_url: str | None
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime

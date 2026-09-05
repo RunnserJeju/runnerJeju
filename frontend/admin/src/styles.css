@@ -253,6 +253,55 @@ tbody tr:hover {
   height: 160px;
 }
 
+.thumb.round {
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+/* 공지 배너 미리보기 — 앱 홈 상단 캐러셀과 같은 3:1. */
+.thumb.wide {
+  width: 96px;
+  height: 32px;
+}
+
+.thumb.banner {
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  aspect-ratio: 3 / 1;
+}
+
+.clamp {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge.live {
+  background: #eef6ee;
+  color: #256029;
+}
+
+.badge.scheduled {
+  background: #eaf1fb;
+  color: #2a5db0;
+}
+
+.badge.expired {
+  background: #f0f1f3;
+  color: var(--muted);
+}
+
 .facility {
   border: 1px solid var(--line);
   border-radius: 8px;

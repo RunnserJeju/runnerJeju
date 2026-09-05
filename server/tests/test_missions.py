@@ -1,8 +1,8 @@
 """미션 운영자 라우터 테스트 — CRUD와 값 검증.
 
 DB 없이 Session의 최소 인터페이스만 흉내내는 FakeSession을 쓴다(test_notices.py와
-같은 방침). require_admin_key 권한 검사는 라우터 함수를 직접 부르면 우회되므로
-test_deps.py에서 따로 검증한다.
+같은 방침). require_admin_session 권한 검사는 라우터 함수를 직접 부르면 우회되므로
+test_admin_auth.py에서 따로 검증한다.
 """
 
 import uuid

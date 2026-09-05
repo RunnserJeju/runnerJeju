@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 
 import {
   ApiError,
+  deleteCourseStampImage,
   deleteCourseThumbnail,
   getCourse,
   replaceCourseGpx,
+  setCourseStampImage,
   setCourseThumbnail,
   updateCourse,
   type Course,
@@ -15,6 +17,7 @@ import CourseForm, {
   valuesFromCourse,
   type CourseFormValues,
 } from '../components/CourseForm'
+import { STAMP_SPEC, validateStampImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
 
 interface Props {
@@ -76,6 +79,7 @@ export default function CourseEditModal({ courseId, initialNotice, onClose, onCh
           />
           <GpxSection courseId={courseId} onSaved={applySaved} />
           <ThumbnailSection course={course} onSaved={applySaved} />
+          <StampImageSection course={course} onSaved={applySaved} />
         </>
       )}
     </Modal>
@@ -271,6 +275,97 @@ function ThumbnailSection({
         {course.thumbnail_url && (
           <button className="danger" onClick={remove} disabled={saving}>
             썸네일 삭제
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function StampImageSection({
+  course,
+  onSaved,
+}: {
+  course: Course
+  onSaved: (course: Course, message: string) => void
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  // 고르는 순간 규격을 검사해 틀린 파일은 선택 자체를 무효로 한다.
+  const pick = async (picked: File | null) => {
+    setError(null)
+    if (!picked) {
+      setFile(null)
+      return
+    }
+    const problem = await validateStampImage(picked)
+    if (problem) {
+      setError(problem)
+      setFile(null)
+      return
+    }
+    setFile(picked)
+  }
+
+  const upload = async () => {
+    if (!file) {
+      setError('이미지 파일을 선택해 주세요.')
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      const saved = await setCourseStampImage(course.id, file)
+      setFile(null)
+      onSaved(saved, '스탬프 도안을 저장했어요. 이미 완주한 사람에게도 반영돼요.')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '스탬프 도안 업로드에 실패했어요.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async () => {
+    setError(null)
+    setSaving(true)
+    try {
+      const saved = await deleteCourseStampImage(course.id)
+      onSaved(saved, '스탬프 도안을 지웠어요. 앱은 기본 도안을 보여줘요.')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '스탬프 도안 삭제에 실패했어요.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>완주 스탬프 도안</h3>
+      <p className="muted">
+        코스를 완주하면 받는 스탬프 그림. 앱이 원 안에 꽉 채워 그려요. {STAMP_SPEC.hint}.
+      </p>
+      {course.stamp_image_url ? (
+        <img className="thumb large round" src={course.stamp_image_url} alt="현재 스탬프 도안" />
+      ) : (
+        <p className="muted">등록된 도안이 없어요(앱은 기본 도안을 써요).</p>
+      )}
+      <div className="field" style={{ marginTop: 12 }}>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(event) => pick(event.target.files?.[0] ?? null)}
+        />
+      </div>
+      {error && <div className="error">{error}</div>}
+      <div className="submit-row">
+        <button onClick={upload} disabled={saving || !file}>
+          {saving ? '처리 중…' : course.stamp_image_url ? '도안 교체' : '도안 등록'}
+        </button>
+        {course.stamp_image_url && (
+          <button className="danger" onClick={remove} disabled={saving}>
+            도안 삭제
           </button>
         )}
       </div>

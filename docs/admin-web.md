@@ -28,12 +28,12 @@
 | `DELETE /admin/courses/{id}/thumbnail` | 썸네일 제거 |
 | `PUT /admin/courses/{id}/stamp-image` | 완주 스탬프 도안 설정/교체 |
 | `DELETE /admin/courses/{id}/stamp-image` | 스탬프 도안 제거 |
-| `POST /admin/banners` | 배너 등록 |
-| `DELETE /admin/banners/{id}` | 배너 삭제 |
 | `GET /admin/notices` | 공지 전체 목록 (예약·만료 포함 — 관리용) |
-| `POST /admin/notices` | 공지 등록 (category + 노출 기간) |
+| `POST /admin/notices` | 공지 등록 (노출 기간 선택) |
 | `PATCH /admin/notices/{id}` | 공지 수정 (전체 교체) |
-| `DELETE /admin/notices/{id}` | 공지 삭제 |
+| `DELETE /admin/notices/{id}` | 공지 삭제 (배너 이미지 파일도 삭제) |
+| `PUT /admin/notices/{id}/image` | 배너 이미지 설정/교체 → 홈 상단 캐러셀에 실림 |
+| `DELETE /admin/notices/{id}/image` | 배너 이미지 제거 (텍스트 공지로) |
 | `GET /admin/missions` | 미션 전체 목록 (비활성·만료 포함) |
 | `GET /admin/missions/{id}` | 미션 상세 |
 | `POST /admin/missions` | 미션 등록 |
@@ -41,7 +41,7 @@
 | `DELETE /admin/missions/{id}` | 미션 삭제 |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
-공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /banners`, `GET /notices`.
+공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /notices`.
 
 ## 코스 관리 필드·썸네일 (백엔드, 2026-08-30)
 
@@ -72,7 +72,7 @@
 바텀시트에서는 **시작 버튼 아래**에 둔다 — 접힘 높이(`_collapsedSize`)가 시작
 버튼까지만 보이도록 맞춰져 있어서 그 위에 끼우면 약속이 깨진다.
 
-**Storage 버킷**: 배너와 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 배너는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`), 스탬프 도안은 `SUPABASE_STAMP_BUCKET`(기본 `course-stamps`).
+**Storage 버킷**: 용도별 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 공지 배너 이미지는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`), 스탬프 도안은 `SUPABASE_STAMP_BUCKET`(기본 `course-stamps`).
 
 ## 스탬프 도안 (백엔드, 2026-09-02)
 
@@ -84,19 +84,23 @@
 - 제거: `DELETE /admin/courses/{id}/stamp-image` → null + Storage 삭제. 없으면 no-op.
 - **라이브 참조**: 발급된 스탬프(`GET /stamps`)의 `image_url`은 저장값이 아니라 `courses.stamp_image_url`에서 조회 시 가져온다 → 운영자가 나중에 도안을 넣거나 바꿔도 **이미 완주한 사람까지 반영**. (그래서 죽은 컬럼 `stamps.image_url`은 0012에서 제거)
 - 앱: 스탬프 탭 앨범이 획득 칸은 도안, 미획득 칸은 회색 목표 도안으로 그린다.
+- **도안 규격(운영 웹, 2026-09-05)**: 앱이 원 안에 꽉 채워 그리므로 **정사각형(1:1), 한 변 512~2048px**, jpg/png/webp ≤8MB. 배경 투명 png 권장. 서버는 타입·용량만 보고 픽셀은 안 본다(이미지 디코딩 라이브러리 없음) — 운영 웹 `components/imageSpec.ts`가 올리기 전에 검사해 규격 밖 파일은 선택을 막는다.
 - 배포 전 Supabase에 `course-stamps` Public 버킷 생성 필요(썸네일 `course-thumbnails`와 같은 방식).
 
 ## 공지사항 관리 (백엔드, 2026-09-02)
 
-공지 = `title, body, category, starts_at?, ends_at?, created_at`. 마이그레이션 `0013`.
+공지 = `title, body, image_url?, starts_at?, ends_at?, created_at`. 마이그레이션 `0013`(기간 추가)·`0016`(category 제거)·`0017`(배너 합침).
 
-- **category** — 고정 5종(운영자가 추가 못 함, "기타(etc)"가 그 외 흡수): `app_guide`(앱 이용 안내) · `new_course`(신규 코스) · `event`(이벤트) · `maintenance`(점검) · `etc`(기타). 영문 키 저장 → 앱이 라벨·칩 색 매핑. 등록 시 **필수**.
+- **category 없음** — 0013에서 고정 5종 카테고리를 넣었다가 불필요하다고 판단해 0016에서 뗐다(2026-09-05). 앱의 카테고리 칩도 같이 제거.
+- **배너 = 이미지 있는 공지 (2026-09-05, `0017`)** — 옛 `banners` 테이블(이미지만 있던 별도 리소스)을 공지로 합쳤다. 배너가 곧 공지 내용이라 두 번 등록할 이유가 없었고, 합치면 배너에도 노출 기간·상세(탭하면 공지 시트)가 생긴다. `image_url`이 있는 공지를 앱이 홈 상단 캐러셀에 최신순으로 그린다. 없으면 텍스트 공지만. 정렬 컬럼은 안 가져왔다(필요하면 그때).
+  - 이미지는 `PUT /admin/notices/{id}/image`(multipart `file`: jpg/png/webp ≤8MB, 버킷 `banners`)·`DELETE`로 관리 — 코스 썸네일과 같은 패턴. 공지 삭제 시 이미지 파일도 삭제.
+  - 0017이 기존 배너 행을 공지로 옮긴다(이미지 URL 그대로, Storage 파일 손대지 않음). 제목·본문은 자리표시 문구(`(배너) 제목을 입력해 주세요`)라 운영 웹에서 채워야 한다. 비활성 배너는 `ends_at`을 과거로 둬서 안 보인다.
 - **노출 기간** `starts_at`/`ends_at` — 둘 다 선택(생략=제한 없음). `starts_at=null` 즉시부터, `ends_at=null` 무기한. 검증: `ends_at ≥ starts_at`(어기면 422).
 - **`GET /notices`(공개, 앱)** — 지금 노출 중인 것만(예약·만료 제외). 앱 JWT 필요.
 - **`GET /admin/notices`(운영)** — 전체(예약·만료 포함). 관리 화면은 이걸 쓴다.
 - **`POST` / `PATCH`(전체 교체) / `DELETE /admin/notices/{id}`** — 작성·수정·삭제.
 
-운영 웹 폼: 제목·본문·카테고리(드롭다운 5종)·노출 시작/종료(선택). 목록은 `GET /admin/notices`로 예약·만료까지 보여주고 상태 뱃지를 붙이면 좋다.
+운영 웹 폼: 제목·본문·노출 시작/종료(선택). 목록은 `GET /admin/notices`로 예약·만료까지 보여주고 상태 뱃지를 붙이면 좋다.
 
 ## 미션 관리 (백엔드, 2026-09-02)
 
@@ -104,7 +108,7 @@
 
 - **condition / reward** — **자유 텍스트**(예: "제주 코스 3개 완주" / "굿즈 + 포인트 500"). 자유도를 낮추려 타입 enum이 아니라 서술형으로 뒀다. 등록 시 **필수**. 자동 판정이 필요해지면 그때 condition을 타입+목표값으로 구조화한다.
 - **참여 기간** `starts_at`/`ends_at` — 둘 다 선택(생략=제한 없음). 검증 `ends_at ≥ starts_at`(422).
-- **is_active / sort_order** — 노출 on/off(기간과 별개)와 정렬. 배너와 같은 방식.
+- **is_active / sort_order** — 노출 on/off(기간과 별개)와 정렬.
 - **CRUD**: `GET /admin/missions`(전체), `GET /admin/missions/{id}`, `POST`, `PATCH`(전체 교체), `DELETE`.
 - 공개 `GET /missions`(앱)는 아직 없음 — 프론트 붙일 때 추가(공지처럼 노출 필터 얹으면 됨).
 
@@ -155,15 +159,13 @@
 server/app/
   routers/            # 공개(앱) API 전용 — 사실상 read-only
     courses.py        # GET 목록/상세만
-    banners.py        # GET 목록만
     notices.py        # GET 목록만
     auth.py runs.py stamps.py verifications.py
   admin/              # 운영자 전용
     __init__.py       # admin_router = APIRouter(prefix="/admin",
                       #   dependencies=[Depends(require_admin)])
-    courses.py        # PATCH, POST /gpx
-    banners.py        # POST, DELETE
-    notices.py        # POST
+    courses.py        # PATCH, POST /gpx, 썸네일·스탬프 이미지
+    notices.py        # CRUD + 배너 이미지
     geo.py            # GET /geocode
 ```
 
@@ -171,8 +173,10 @@ server/app/
 
 ## 웹 인증 (자체 세션)
 
+> 구현 완료 → **5단계 (2026-09-03)** 참조. 아래는 원안이며, 실제로는 즉시 무효화를 row 삭제가 아니라 `revoked_at`으로, 쿠키는 `SameSite=Strict`로 구현.
+
 - 로그인 수단: 기존 User는 소셜로그인뿐(비밀번호 없음) → 운영자용 `admin_users`(아이디 + BCrypt 해시) 테이블 신설
-- 세션: opaque session_id를 HttpOnly·Secure·SameSite 쿠키로. 서버측 `admin_sessions` 테이블에서 조회 → row 삭제로 즉시 무효화
+- 세션: opaque session_id를 HttpOnly·Secure·SameSite 쿠키로. 서버측 `admin_sessions` 테이블에서 조회 → 즉시 무효화
 - 앱의 JWT 흐름과 독립 (공유 시크릿·role 클레임 문제 없음)
 
 ## 계획 (단계)
@@ -251,9 +255,47 @@ DB에 직접 쓰므로 앱·웹과 무관하게 동작한다.
 - 개발: `cd frontend/admin && npm run dev` (서버는 8000에 따로)
 
 남은 것 (2차)
-- [ ] 세션 인증으로 교체 (`admin_users`/`admin_sessions`, bcrypt, 로그인 API — 팀원)
-- [ ] 배너·공지 화면
+- [x] 세션 인증으로 교체 → 5단계 (2026-09-03)
+- [x] 공지 화면(배너 포함) → 6단계 (2026-09-05)
 - [ ] 목록 페이징·검색 (코스가 수십 개 수준이라 아직 불필요)
+
+### 5단계 — 세션 인증 (2026-09-03) ✅ — API 키 하드 컷오버
+
+임시 API 키(`X-Admin-Api-Key`/`ADMIN_API_KEY`)를 **운영자별 세션 쿠키 로그인**으로 교체. 앱 JWT 흐름과 완전 독립.
+
+백엔드
+- [x] 테이블 신설 (마이그레이션 `0015`): `admin_users`(username unique, bcrypt `password_hash`, `disabled_at`), `admin_sessions`(`token_hash`=쿠키토큰 sha256, `expires_at`, `revoked_at`)
+- [x] `app/admin/auth.py`: `POST /admin/auth/login`·`POST /admin/auth/logout`·`GET /admin/auth/me` + 가드 `require_admin_session`
+- [x] 라우터 분리 — 로그인 라우터(`admin_auth_router`)는 가드 밖, 나머지 `/admin/*`(`admin_router`)는 라우터레벨 `require_admin_session`. `main.py`가 둘 다 include
+- [x] `require_admin_key`(`app/deps.py`)·`ADMIN_API_KEY` 기동 검사(`config_guard`) 제거. `docker-compose`·`cloudbuild`·`.env.example`에서 `ADMIN_API_KEY` 제거
+- [x] 순수 유틸 `app/admin/security.py`: bcrypt 해시/검증, 세션 토큰 생성(원본)+sha256, 쿠키 설정
+- [x] 로그인 사용자 열거 방지 — 아이디 없어도 더미 해시로 bcrypt 1회 수행(타이밍 평탄화), 실패 메시지 단일화
+
+쿠키
+- [x] `HttpOnly` + `Secure` + `SameSite=Strict` + `Path=/admin` + 12h TTL
+- [x] `Secure`는 `SESSION_COOKIE_SECURE` env로 게이트(운영 기본 true, 로컬 http는 false). 로컬 docker-compose가 false로 설정
+
+운영자 계정
+- [x] 가입 API 없음. 시드 CLI `server/tools/create_admin.py` — `uv run python -m tools.create_admin [--username X]` (비번은 프롬프트, CLI 인자 아님)
+- 배포 전: 대상 DB에 `0015` 적용 + `create_admin`으로 첫 계정 시드 필요(안 하면 아무도 로그인 못 함 — 의도된 컷오버)
+
+프론트 (`frontend/admin/`)
+- [x] API 키 입력칸/localStorage 제거 → 아이디·비번 로그인 폼(`AuthPage`). 모든 fetch `credentials:'include'`
+- [x] 로드 시 `GET /admin/auth/me`로 세션 확인 — 401=로그인 화면, 일시 오류(네트워크/5xx)=재시도 화면(유효 세션을 로그인 화면으로 숨기지 않음), 상단 로그아웃 버튼
+
+검증
+- [x] `tests/test_admin_auth.py` 신규(비번 해시·로그인·가드·로그아웃 15개). E2E: 로컬 Postgres+`0015`+curl로 로그인·미인증 401·쿠키 통과·로그아웃 후 폐기(401)까지 확인. 어드버서리얼 4렌즈 리뷰 인증우회·세션보안 0건
+
+### 6단계 — 공지 화면 + 스탬프 도안 (2026-09-05) ✅
+
+배너를 공지에 합친(`0017`) 뒤 운영 웹에 공지 관리를 붙였다. 미션 API는 손대지 않았다.
+
+- [x] 상단 탭 `코스 | 공지사항` (`App.tsx`, 라우터 없이 state)
+- [x] 공지 목록(`pages/NoticeListPage`) — 배너 미리보기·제목·상태 뱃지(노출 중/예약/만료, 서버 `_is_visible`과 같은 규칙)·노출 기간·등록일. 행 클릭 → 수정
+- [x] 등록 모달 — 제목·내용·노출 시작/종료(`datetime-local`, 비우면 제한 없음)·배너 이미지(선택, 등록 직후 업로드). 코스 등록과 같은 흐름
+- [x] 수정 모달 — 내용 저장 / 배너 이미지 등록·교체·삭제 / 공지 삭제(확인 후). 단건 조회 API가 없어 목록에서 고른다
+- [x] 코스 등록·수정 모달에 **완주 스탬프 도안** 섹션 — 규격(위 "스탬프 도안" 참조)을 파일 선택 시점에 검사, 원형 미리보기
+- [x] `npm run build`(tsc 포함) 통과
 
 ## 결정됨 — 기록 있는 코스의 경로(GPX) 수정
 - **초기화 후 교체**로 결정(2026-08-30). `reset_records=true`면 완주 스탬프·검증을 hard delete, 경로 교체. 개인 러닝 기록(Run)은 유지 → 개인 히스토리 보존 + 감사 흔적
@@ -277,7 +319,7 @@ DB에 직접 쓰므로 앱·웹과 무관하게 동작한다.
 피하면 된다.
 
 ## 보류 / 검토 필요
-- CSRF — `SameSite=Lax`로도 완전히 없어지진 않는다. 토큰 방식(쿠키+헤더) 필요
+- CSRF — 같은 오리진 + `SameSite=Strict` 쿠키로 처리(5단계). 상태변경 API가 전부 비-GET이라 타 사이트발 요청엔 쿠키가 안 실린다. 별도 CSRF 토큰은 넣지 않았다 — 다른 오리진으로 배포를 쪼개면 그때 토큰 방식 재검토
 - 세션 저장소 — Postgres 테이블로 시작(Redis 불필요). 트래픽·인스턴스 늘면 재검토
 - `User.role` — 운영자가 `admin_users`로 분리되면 갈 곳이 없다. 컬럼 유지 여부 미정
   (앱에서는 이미 `isAdmin`을 걷어냈다)
