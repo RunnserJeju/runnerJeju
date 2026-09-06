@@ -468,3 +468,75 @@ class CourseStatsOut(BaseModel):
     runner_count: int
     # 코스별 조회수(하루 1회 중복제거한 고유 조회).
     view_count: int
+
+
+# --- 쿠폰 (운영자 + 앱) ----------------------------------------------------
+# 템플릿(coupons) + 발급 인스턴스(user_coupons). 혜택은 자유텍스트, 발급분은 템플릿을
+# 라이브 참조(수정 즉시 반영). 상태는 used_at으로, '만료'는 valid_until로 계산한다.
+
+CouponStatus = Literal["available", "used", "expired"]
+
+
+class CouponCreate(BaseModel):
+    """쿠폰 제작. 혜택은 자유 텍스트, 유효기간은 생략 가능(무기한)."""
+
+    name: str = Field(min_length=1, max_length=200)
+    benefit: str = Field(min_length=1, max_length=500)
+    description: str | None = None
+    valid_until: datetime | None = None
+
+
+class CouponUpdate(CouponCreate):
+    """쿠폰 수정(PATCH). 작성과 같은 필드로 전체 교체한다."""
+
+
+class CouponOut(BaseModel):
+    """운영자 쿠폰 목록/상세. 발급/사용 수를 함께 준다."""
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    benefit: str
+    valid_until: datetime | None
+    created_at: datetime
+    issued_count: int
+    used_count: int
+
+
+class IssueRequest(BaseModel):
+    """대량 지급. 존재하는(비탈퇴) 회원에게만 발급된다."""
+
+    user_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+class IssueResult(BaseModel):
+    issued: int
+
+
+class IssuedCouponOut(BaseModel):
+    """발급 현황 한 행 — 누구에게 발급됐고 사용했는지."""
+
+    id: uuid.UUID  # user_coupon id
+    user_id: uuid.UUID
+    nickname: str | None  # 탈퇴/미설정이면 null
+    issued_at: datetime
+    used_at: datetime | None
+    status: CouponStatus
+
+
+class IssuedListOut(BaseModel):
+    total: int
+    items: list[IssuedCouponOut]
+
+
+class MyCouponOut(BaseModel):
+    """앱: 내 쿠폰 한 장. 혜택·유효기간은 템플릿을 라이브 참조."""
+
+    id: uuid.UUID  # user_coupon id
+    name: str
+    description: str | None
+    benefit: str
+    issued_at: datetime
+    used_at: datetime | None
+    valid_until: datetime | None
+    status: CouponStatus

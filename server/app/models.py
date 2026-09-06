@@ -439,3 +439,59 @@ class CourseView(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Coupon(Base):
+    """쿠폰 템플릿(종류). 운영자가 제작하고 유저에게 발급(user_coupons)한다.
+
+    혜택(benefit)은 자유 텍스트다 — 커머스가 없어 서버가 자동 적용하지 않고, 유저가
+    오프라인/이벤트에서 쓰는 증표다. 발급된 쿠폰은 이 템플릿을 라이브 참조하므로
+    (혜택/이름을 복사하지 않음) 운영자가 나중에 고치면 발급분에도 즉시 반영된다.
+    """
+
+    __tablename__ = "coupons"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(2000), default=None)
+    # 예) "아메리카노 1잔", "굿즈 교환권". 서버가 해석하지 않는다.
+    benefit: Mapped[str] = mapped_column(String(500))
+    # 유효기간. null이면 무기한. now > valid_until이면 발급분이 '만료'(사용 불가)로 계산된다.
+    valid_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class UserCoupon(Base):
+    """유저에게 발급된 쿠폰 한 장. 템플릿(coupons)을 라이브 참조한다.
+
+    상태는 used_at 하나로 표현한다 — null이면 미사용(사용가능/만료), 값이 있으면
+    사용완료. '만료'는 저장하지 않고 coupons.valid_until로 계산한다. 템플릿을 삭제하면
+    FK ON DELETE CASCADE로 발급분·사용기록도 함께 사라진다(운영 웹이 확인 후 삭제).
+
+    user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
+    """
+
+    __tablename__ = "user_coupons"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    coupon_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
