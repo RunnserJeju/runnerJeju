@@ -110,6 +110,10 @@ class Course(Base):
 
     name: Mapped[str] = mapped_column(String(200))
 
+    # 'public' | 'admin'. admin이면 role='admin'인 앱 사용자에게만 내려간다(테스트
+    # 코스). 기본값 없음 — NULL은 공개가 아니라서 일반 사용자에게 보이지 않는다.
+    visibility: Mapped[str | None] = mapped_column(String(20), default=None)
+
     # 왕복 기준 km. GPX에서 계산한 실측 거리가 아니라 명단에 적힌 안내값이라
     # 정수로 충분하다. 러닝 진행률처럼 정확도가 필요한 계산은 이 값이 아니라
     # path에서 직접 거리를 재서 쓴다.

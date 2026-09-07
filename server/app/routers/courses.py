@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app import gpx
 from app.db import get_db
-from app.deps import current_user_id
+from app.deps import current_user_id, current_user_is_admin
 from app.models import Course, CourseView, Stamp
 from app.schemas import CourseListItem, CourseSummary
 
@@ -101,6 +101,13 @@ def _record_view(db: Session, course_id: uuid.UUID, user_id: str) -> None:
         db.rollback()
 
 
+def visible_courses(stmt, is_admin: bool):
+    """일반 사용자에게는 visibility='public'인 코스만. NULL(미설정)도 숨긴다."""
+    if is_admin:
+        return stmt
+    return stmt.where(Course.visibility == "public")
+
+
 def _escape_like(keyword: str) -> str:
     """사용자 입력의 LIKE 와일드카드(%, _)를 글자 그대로 찾게 한다."""
     return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -112,8 +119,9 @@ def list_courses(
     limit: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
-    stmt = select(Course).order_by(Course.created_at.desc())
+    stmt = visible_courses(select(Course), is_admin).order_by(Course.created_at.desc())
 
     keyword = (keyword or "").strip()
     if keyword:
@@ -138,8 +146,12 @@ def get_course(
     course_id: uuid.UUID,
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
-    course = db.get(Course, course_id)
+    # 숨긴 코스는 없는 것과 같이 404 — 있다는 사실도 알리지 않는다.
+    course = db.scalar(
+        visible_courses(select(Course).where(Course.id == course_id), is_admin)
+    )
     if course is None:
         raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
 
