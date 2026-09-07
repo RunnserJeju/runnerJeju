@@ -8,6 +8,7 @@ import '../models/run_record.dart';
 import '../models/running_course.dart';
 import '../utils/course_coverage.dart';
 import '../utils/geo_utils.dart';
+import 'current_location.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
 
@@ -18,14 +19,20 @@ enum RunStatus { idle, running, paused, finished }
 /// 위치 스트림을 구독해 경로/거리/시간을 누적하고, 화면은 여기만 바라본다.
 /// 서버 전송은 [RunTracker]의 책임이 아니라 [buildRecord] 결과를 받아 처리한다.
 class RunTracker extends ChangeNotifier {
-  RunTracker(this._locationService, this._motionService);
+  RunTracker(this._locationService, this._motionService, this._currentLocation);
 
   final LocationService _locationService;
   final MotionService _motionService;
 
-  /// 이번 러닝에 모션 게이트를 쓰는지. 시뮬레이션 러닝은 폰을 가만히 둔 채
-  /// 돌리므로 켜면 거리가 영원히 안 쌓인다 — 실제 GPS일 때만 켠다.
-  bool _useMotionGate = false;
+  /// 앱 전역의 최신 현위치. 실제 GPS 러닝은 위치 스트림을 여기서 가져갔다
+  /// 돌려주고, 받은 점을 흘려 넣는다([CurrentLocation] 참고). 시뮬레이션은
+  /// geolocator를 안 쓰므로 건드리지 않는다.
+  final CurrentLocation _currentLocation;
+
+  /// 이번 러닝이 실제 GPS인지(시뮬레이션이 아닌지). 모션 게이트와 전역 현위치
+  /// 교대는 실제 GPS일 때만 한다 — 시뮬레이션은 폰을 가만히 둔 채 돌리므로
+  /// 모션 게이트를 켜면 거리가 영원히 안 쌓이고, geolocator도 안 쓴다.
+  bool _isRealGps = false;
 
   StreamSubscription<GeoPoint>? _positionSubscription;
   Timer? _ticker;
@@ -100,9 +107,9 @@ class RunTracker extends ChangeNotifier {
   /// 최근 페이스의 창(m). 러닝 앱들이 흔히 쓰는 "최근 1km".
   static const double _recentPaceWindowMeters = 1000;
 
-  /// 이 거리 전에는 최근 페이스를 내지 않는다. 몇십 m 위의 페이스는 GPS
-  /// 오차가 그대로 숫자가 된다.
-  static const double _minPaceMeters = 100;
+  /// 이 거리 전에는 페이스를 내지 않는다(평균·최근 둘 다). 확정 게이트가 5m라
+  /// 30m면 확정점 여섯 개 남짓인데, 그 전에는 점 하나의 오차가 그대로 숫자가 된다.
+  static const double _minPaceMeters = 30;
 
   /// [_maxPlausibleSpeed]에 연속으로 걸린 횟수.
   int _jumpRejections = 0;
@@ -154,9 +161,13 @@ class RunTracker extends ChangeNotifier {
   /// 흐르지 않는다([elapsed]). 화면이 이걸 보고 "GPS 잡는 중"을 띄운다.
   bool get isAwaitingFix => _status == RunStatus.running && _startedAt == null;
 
-  /// 러닝 전체의 평균 페이스(km당 초). 아직 움직이지 않았으면 null.
+  /// 러닝 전체의 평균 페이스(km당 초). [_minPaceMeters] 전에는 null.
+  ///
+  /// 최근 페이스와 같은 문턱을 쓴다. 화면의 주 지표는 최근 페이스이고 평균은
+  /// 그 아래 보조로 붙는데, 문턱이 다르면 주 지표는 "--"인데 보조만 먼저 숫자가
+  /// 뜨고, 그 숫자가 바로 문턱으로 가리려던 초반 오차다.
   double? get paceSecondsPerKm {
-    if (_distanceMeters <= 0) return null;
+    if (_distanceMeters < _minPaceMeters) return null;
     return elapsed.inMilliseconds / 1000 / (_distanceMeters / 1000);
   }
 
@@ -242,8 +253,12 @@ class RunTracker extends ChangeNotifier {
     _status = RunStatus.running;
     _activeLocation = location;
 
-    _useMotionGate = source == null;
-    if (_useMotionGate) _motionService.start();
+    _isRealGps = source == null;
+    if (_isRealGps) {
+      _motionService.start();
+      // 평상시 스트림을 먼저 닫아야 아래 구독이 러닝 설정으로 열린다.
+      _currentLocation.yieldToRun();
+    }
 
     _subscribeToPositions(location);
     _startTicker();
@@ -255,7 +270,11 @@ class RunTracker extends ChangeNotifier {
   void _subscribeToPositions(LocationService location) {
     _positionSubscription?.cancel(); //재구독 방어 
     _positionSubscription = location.trackPosition().listen(
-      _onPosition,
+      (point) {
+        // 일시정지 중에도(아래 _onPosition은 버린다) 최신 위치는 갱신한다.
+        if (_isRealGps) _currentLocation.report(point);
+        _onPosition(point);
+      },
       // 에러를 받지 않으면 스트림이 끊긴 채로 앱이 진행되기 때문에 사용자가 에러가 난 줄도 모른다.  
       onError: (Object error) => _handlePositionLost(location.interruptionFrom(error)),
       onDone: () => _handlePositionLost(LocationInterruption.lost),
@@ -339,6 +358,9 @@ class RunTracker extends ChangeNotifier {
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _motionService.stop();
+    // 러닝 구독이 끊긴 뒤에 돌려준다. 순서가 바뀌면 평상시 스트림이 러닝
+    // 설정을 물려받는다.
+    if (_isRealGps) _currentLocation.reclaimFromRun();
     notifyListeners();
   }
 
@@ -392,7 +414,7 @@ class RunTracker extends ChangeNotifier {
     // 갱신하지 않는다 — 서 있는 동안 마커가 돌아다니고 경로가 자라는 것을 막는다.
     // 첫 유효 위치(위의 anchor == null)는 게이트보다 먼저 처리한다: 출발선에
     // 가만히 서서 GPS를 기다리는 동안에도 마커와 시작 시각은 잡혀야 한다.
-    if (_useMotionGate && _motionService.isStill) return;
+    if (_isRealGps && _motionService.isStill) return;
 
     final moved = GeoUtils.distanceBetween(anchor, point);
 
@@ -481,7 +503,7 @@ class RunTracker extends ChangeNotifier {
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _motionService.stop();
-    _useMotionGate = false;
+    _isRealGps = false;
 
     _status = RunStatus.idle;
     _path.clear();

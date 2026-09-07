@@ -7,12 +7,13 @@ class CourseApi {
 
   final ApiClient _client;
 
-  /// 코스 목록. keyword는 서버 쿼리 파라미터로 그대로 넘긴다.
-  Future<List<RunningCourse>> fetchCourses({String? keyword}) async {
+  /// 코스 목록. keyword(이름 부분 일치)와 limit은 서버 쿼리 파라미터로 그대로 넘긴다.
+  Future<List<RunningCourse>> fetchCourses({String? keyword, int? limit}) async {
     final response = await _client.dio.get(
       '/courses',
       queryParameters: {
         if (keyword != null && keyword.isNotEmpty) 'keyword': keyword,
+        'limit': ?limit,
       },
     );
 

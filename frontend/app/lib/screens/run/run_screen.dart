@@ -45,6 +45,10 @@ class _RunScreenState extends State<RunScreen> {
 
   GeoPoint? _initialCenter;
 
+  /// 카메라가 현위치를 따라가는지. 러닝을 시작하면 켜지고, 사용자가 지도를
+  /// 밀면 꺼진다. 꺼진 동안 "내 위치로" 버튼이 뜨고, 누르면 다시 켜진다.
+  bool _isFollowing = true;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +60,7 @@ class _RunScreenState extends State<RunScreen> {
   @override
   void dispose() {
     _tracker.removeListener(_onTrackerChanged);
+    Services.instance.currentLocation.removeListener(_onFirstLocation);
     // 화면을 벗어나면 잠금화면 위젯도 걷어낸다 — 유령 위젯이 남지 않게.
     // (정상 종료는 _finish에서 이미 걷지만, 여기서 한 번 더 안전망을 둔다.)
     unawaited(_liveWidget.stop());
@@ -90,22 +95,36 @@ class _RunScreenState extends State<RunScreen> {
     setState(() {});
   }
 
-  /// 지도를 놓을 자리를 직접 조회한다. 넘겨받은 [RunScreen.initialCenter]가
-  /// 없을 때만 — 즉 지도 화면에서도 위치를 못 잡았던 경우에만 — 돈다.
+  /// 지도를 놓을 자리를 전역 현위치에서 가져온다. 넘겨받은
+  /// [RunScreen.initialCenter]가 없을 때만 — 즉 지도 화면에서도 위치를 못
+  /// 잡았던 경우에만 — 돈다.
   ///
   /// 코스 러닝도 예외가 아니다. 코스 한가운데를 보여주고 시작하면 정작 사용자가
   /// 서 있는 곳이 화면 밖일 수 있다.
-  Future<void> _resolveInitialCenter() async {
-    final availability = await Services.instance.location.ensurePermission();
-    if (!availability.isReady || !mounted) return;
-
-    try {
-      final position = await Services.instance.location.currentPosition();
-      if (mounted) setState(() => _initialCenter = position);
-    } catch (_) {
-      // 끝내 못 잡으면 코스 러닝은 코스 중심으로, 자유 러닝은 로딩인 채로
-      // 남는다. 어느 쪽이든 첫 위치가 들어오면 카메라가 따라간다.
+  ///
+  /// 아직 한 점도 없으면 첫 점을 기다린다. 러닝이 시작되면 러닝 스트림이 받은
+  /// 점도 전역 현위치로 흘러오므로([RunTracker]), 여기서 따로 조회하지 않는다.
+  void _resolveInitialCenter() {
+    final currentLocation = Services.instance.currentLocation;
+    final latest = currentLocation.latest;
+    if (latest != null) {
+      _initialCenter = latest;
+      return;
     }
+
+    currentLocation.addListener(_onFirstLocation);
+    // 권한이 없으면 여기서도 못 잡는다. 코스 러닝은 코스 중심으로, 자유
+    // 러닝은 로딩인 채로 남고, 권한 안내는 시작 버튼이 띄운다.
+    unawaited(currentLocation.ensureStarted());
+  }
+
+  void _onFirstLocation() {
+    final currentLocation = Services.instance.currentLocation;
+    final latest = currentLocation.latest;
+    if (latest == null) return;
+
+    currentLocation.removeListener(_onFirstLocation);
+    if (mounted) setState(() => _initialCenter = latest);
   }
 
   /// [source]를 주면 실제 GPS 대신 그 위치원으로 달린다(디버그 빌드의 시뮬레이션).
@@ -115,6 +134,7 @@ class _RunScreenState extends State<RunScreen> {
       source: source,
     );
     if (availability.isReady) {
+      _isFollowing = true;
       // 잠금화면 위젯을 띄운다(Android 상시 알림 / iOS Live Activity).
       unawaited(_liveWidget.start(_snapshot()));
     }
@@ -177,6 +197,16 @@ class _RunScreenState extends State<RunScreen> {
     );
   }
 
+  void _onUserMovedCamera() {
+    if (!_isFollowing || !mounted) return;
+    setState(() => _isFollowing = false);
+  }
+
+  void _followAgain() {
+    if (_isFollowing) return;
+    setState(() => _isFollowing = true);
+  }
+
   /// 러닝 중에는 뒤로가기로 화면을 벗어나지 못하게 막는다.
   ///
   /// 뒤로가기는 연달아 눌리기 쉬워서, 안내를 그냥 띄우면 같은 문장이 누른
@@ -207,13 +237,17 @@ class _RunScreenState extends State<RunScreen> {
                 runPath: tracker.path,
                 currentPosition: tracker.currentPosition,
                 initialCenter: _initialCenter,
-                followCurrentPosition: tracker.status == RunStatus.running,
+                isRunning: tracker.status == RunStatus.running,
+                followCurrentPosition: _isFollowing,
+                onUserMovedCamera: _onUserMovedCamera,
                 // 넘겨받은 좌표도 없고 직접 조회도 아직이면 지도를 띄울 자리를
                 // 모른다. 그동안 지도 자리에 로딩이 보인다.
                 isAwaitingLocation: _initialCenter == null,
                 showCourseDirection: isActive,
               ),
             ),
+            if (isActive && !_isFollowing)
+              Center(child: _FollowButton(onPressed: _followAgain)),
             SafeArea(
               child: Column(
                 children: [
@@ -239,6 +273,43 @@ class _RunScreenState extends State<RunScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 카메라가 현위치를 놓쳤을 때 화면 한가운데 뜨는 "내 위치로". 누르면 사라진다.
+class _FollowButton extends StatelessWidget {
+  const _FollowButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(999),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.my_location_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Text(
+                '내 위치로',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

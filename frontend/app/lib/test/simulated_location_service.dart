@@ -38,8 +38,17 @@ class SimulatedLocationService implements LocationService {
   static const double _fallbackRadiusMeters = 400;
 
   @override
+  Future<LocationAvailability> checkAvailability() async =>
+      LocationAvailability.ready;
+
+  @override
   Future<LocationAvailability> ensurePermission() async =>
       LocationAvailability.ready;
+
+  /// 시뮬레이션은 러닝 한 번에만 꽂히는 위치원이라 평상시 스트림은 쓸 일이
+  /// 없다. 러닝 스트림과 같은 것을 돌려준다.
+  @override
+  Stream<GeoPoint> ambientPositions() => trackPosition();
 
   // 시뮬레이션은 좌표를 즉시 만들어 내므로 timeLimit을 볼 일이 없다.
   @override

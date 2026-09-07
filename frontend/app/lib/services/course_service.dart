@@ -8,9 +8,9 @@ class CourseService {
 
   final CourseApi _courseApi;
 
-  Future<List<RunningCourse>> loadCourses({String? keyword}) async {
+  Future<List<RunningCourse>> loadCourses({String? keyword, int? limit}) async {
     try {
-      return await _courseApi.fetchCourses(keyword: keyword);
+      return await _courseApi.fetchCourses(keyword: keyword, limit: limit);
     } catch (e) {
       throw AppException('코스 목록을 불러오지 못했어요.', e);
     }

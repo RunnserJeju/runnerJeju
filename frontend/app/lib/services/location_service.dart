@@ -72,6 +72,43 @@ class LocationService {
     );
   }
 
+  /// 평상시(러닝 밖) 위치 스트림 설정. [CurrentLocation]이 쓴다.
+  ///
+  /// 정확도는 러닝과 같은 GPS급이다. 지도 화면의 내 위치 점과 코스 시작점까지의
+  /// 거리 판정(100m 문턱)에 쓰이는데, Wi-Fi급(100m 안팎)이면 그 판정이 흔들린다.
+  /// 대신 10m 단위로만 받아 러닝(1m)보다 훨씬 성기고, 포그라운드 서비스나
+  /// 백그라운드 갱신은 걸지 않는다 — 앱이 뒤로 가면 닫히는 게 맞다.
+  static const int _ambientMeters = 10;
+
+  static LocationSettings get _ambientSettings {
+    if (Platform.isAndroid) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: _ambientMeters,
+        intervalDuration: const Duration(seconds: 2),
+      );
+    }
+    if (Platform.isIOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: _ambientMeters,
+        activityType: ActivityType.fitness,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: _ambientMeters,
+    );
+  }
+
+  /// 권한 상태만 본다. 사용자에게 요청하지는 않는다.
+  Future<LocationAvailability> checkAvailability() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      return LocationAvailability.serviceDisabled;
+    }
+    return _toAvailability(await Geolocator.checkPermission());
+  }
+
   /// 권한 상태를 확인하고, 필요하면 사용자에게 요청한다.
   Future<LocationAvailability> ensurePermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
@@ -83,12 +120,15 @@ class LocationService {
       permission = await Geolocator.requestPermission();
     }
 
-    return switch (permission) {
-      LocationPermission.denied => LocationAvailability.denied,
-      LocationPermission.deniedForever => LocationAvailability.deniedForever,
-      _ => LocationAvailability.ready,
-    };
+    return _toAvailability(permission);
   }
+
+  static LocationAvailability _toAvailability(LocationPermission permission) =>
+      switch (permission) {
+        LocationPermission.denied => LocationAvailability.denied,
+        LocationPermission.deniedForever => LocationAvailability.deniedForever,
+        _ => LocationAvailability.ready,
+      };
 
   /// 현재 위치 1회 조회. 권한이 없으면 예외가 난다.
   ///
@@ -104,6 +144,15 @@ class LocationService {
     );
     return _toGeoPoint(position);
   }
+
+  /// 평상시 위치 스트림. 설정은 [_ambientSettings] 참고.
+  ///
+  /// [trackPosition]과 동시에 열 수 없다. geolocator는 플랫폼당 스트림을 하나만
+  /// 두고, 열린 채로 다시 요청하면 새 설정을 무시하고 그 스트림을 돌려준다.
+  /// 교대는 [CurrentLocation]이 맡는다.
+  Stream<GeoPoint> ambientPositions() => Geolocator.getPositionStream(
+    locationSettings: _ambientSettings,
+  ).map(_toGeoPoint);
 
   /// 러닝 중 위치 스트림.
   ///

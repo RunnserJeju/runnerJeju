@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
+import '../../services/current_location.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
@@ -12,6 +15,7 @@ import '../../widgets/sheet_handle.dart';
 import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
 import 'course_preview_sheet.dart';
+import 'course_search_results.dart';
 
 /// '러닝' 탭: 지도에서 코스를 고르거나, 고르지 않고 바로 자유 러닝을 시작한다.
 ///
@@ -29,6 +33,7 @@ class RunningScreen extends StatefulWidget {
 class _RunningScreenState extends State<RunningScreen> {
   final CourseMapController _mapController = CourseMapController();
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   /// 짧은 안내는 겹쳐 쌓이지 않게 이쪽을 거친다. '준비 중' 버튼들은 연달아
   /// 눌리기 쉬워서, 그냥 띄우면 같은 문장이 누른 횟수만큼 줄을 선다.
@@ -38,7 +43,18 @@ class _RunningScreenState extends State<RunningScreen> {
   bool _isLoadingCourses = true;
   Object? _coursesError;
 
+  /// 코스 이름 검색. 결과 목록만 서버(ILIKE)를 따르고 지도 마커는 전부 남긴다 —
+  /// 글자를 지울 때마다 라벨이 사라졌다 나타나면 눈에 거슬린다.
   String _query = '';
+  List<RunningCourse> _searchResults = const [];
+  bool _isSearching = false;
+  Object? _searchError;
+  bool _isSearchOpen = false;
+  Timer? _searchDebounce;
+  int _searchRequestId = 0;
+
+  static const Duration _searchDelay = Duration(milliseconds: 300);
+  static const int _searchLimit = 20;
 
   /// 지도에서 고른 코스. 목록에서 온 값이라 경로([RunningCourse.path])가 없다.
   RunningCourse? _selected;
@@ -58,11 +74,9 @@ class _RunningScreenState extends State<RunningScreen> {
   /// 코스를 고르면 목록이 닫히고 그 코스의 상세 시트가 그 자리에 온다.
   bool _isExploring = false;
 
-  GeoPoint? _myPosition;
-
-  /// 코스 시작을 눌러 놓고 현위치를 다시 잡는 동안인지. 그동안 시작 버튼이
-  /// 기다리는 중임을 보여준다([CoursePreviewSheet.isPreparingStart]).
-  bool _isPreparingStart = false;
+  /// 앱 전역의 최신 현위치. 이 화면은 조회하지 않고 읽기만 한다 — 내 위치
+  /// 점, 내 위치 버튼, 시작점까지의 거리 판정이 전부 이 값을 쓴다.
+  CurrentLocation get _currentLocation => Services.instance.currentLocation;
 
   /// 러닝 화면이 위에 떠 있는 동안인지.
   ///
@@ -75,12 +89,19 @@ class _RunningScreenState extends State<RunningScreen> {
   @override
   void initState() {
     super.initState();
+    _searchFocus.addListener(_onSearchFocusChanged);
     _loadCourses();
-    _locateQuietly();
+    _currentLocation.addListener(_onLocationChanged);
+    // 권한을 아직 안 물어봤으면 여기서 묻는다 — 지도가 떠 있는 맥락이라
+    // 왜 필요한지 자명하다. 거부해도 지도는 제주 전체를 보여주면 된다.
+    unawaited(_currentLocation.ensureStarted());
   }
 
   @override
   void dispose() {
+    _currentLocation.removeListener(_onLocationChanged);
+    _searchDebounce?.cancel();
+    _searchFocus.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -111,20 +132,91 @@ class _RunningScreenState extends State<RunningScreen> {
     }
   }
 
-  /// 검색어로 거른 코스. 서버를 다시 부르지 않는다 — 코스는 전부 받아 두었고,
-  /// 지도에서는 글자를 지울 때마다 라벨이 사라졌다 나타나면 눈에 거슬린다.
-  List<RunningCourse> get _visibleCourses {
-    final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return _courses;
+  // ---------------------------------------------------------------------------
+  // 검색
+  // ---------------------------------------------------------------------------
 
-    return _courses.where((course) {
-      final haystack = [
-        course.name,
-        course.address,
-        course.tags ?? '',
-      ].join(' ').toLowerCase();
-      return haystack.contains(query);
-    }).toList();
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    final keyword = value.trim();
+
+    if (keyword.isEmpty) {
+      _searchRequestId++;
+      setState(() {
+        _query = value;
+        _searchResults = const [];
+        _isSearching = false;
+        _searchError = null;
+        _isSearchOpen = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _query = value;
+      _isSearchOpen = true;
+      _isSearching = true;
+      _searchError = null;
+    });
+    _searchDebounce = Timer(_searchDelay, () => _runSearch(keyword));
+  }
+
+  Future<void> _runSearch(String keyword) async {
+    final requestId = ++_searchRequestId;
+    setState(() {
+      _isSearching = true;
+      _searchError = null;
+    });
+
+    try {
+      final results = await Services.instance.course.loadCourses(
+        keyword: keyword,
+        limit: _searchLimit,
+      );
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _searchError = error;
+        _isSearching = false;
+      });
+    }
+  }
+
+  /// 키보드의 검색 버튼. 디바운스를 기다리지 않고 바로 찾아 첫 결과로 간다.
+  Future<void> _onSearchSubmitted(String value) async {
+    final keyword = value.trim();
+    if (keyword.isEmpty) return;
+
+    if (_searchDebounce?.isActive ?? false) {
+      _searchDebounce!.cancel();
+      await _runSearch(keyword);
+      if (!mounted) return;
+    }
+
+    if (_searchResults.isNotEmpty) _selectSearchResult(_searchResults.first);
+  }
+
+  void _selectSearchResult(RunningCourse course) {
+    _searchFocus.unfocus();
+    setState(() => _isSearchOpen = false);
+    _selectCourse(course);
+  }
+
+  /// 검색창을 다시 누르면 남아 있던 결과를 다시 펼친다.
+  void _onSearchFocusChanged() {
+    if (_searchFocus.hasFocus && _query.trim().isNotEmpty && !_isSearchOpen) {
+      setState(() => _isSearchOpen = true);
+    }
+  }
+
+  void _closeSearch() {
+    _searchFocus.unfocus();
+    if (_isSearchOpen) setState(() => _isSearchOpen = false);
   }
 
   Future<void> _selectCourse(RunningCourse course) async {
@@ -169,6 +261,7 @@ class _RunningScreenState extends State<RunningScreen> {
 
   /// 지도 바닥을 눌렀을 때. 아래에 떠 있는 것을 모두 걷는다.
   void _clearSelection() {
+    _closeSearch();
     if (_selected == null && !_isExploring) return;
 
     // 순번을 올려 두면 아직 오는 중인 상세 응답이 도착해도 무시된다.
@@ -192,66 +285,45 @@ class _RunningScreenState extends State<RunningScreen> {
     });
   }
 
-  /// 화면을 열자마자 내 위치를 한 번 찍어 둔다. 권한이 없으면 그냥 넘어간다 —
-  /// 지도를 보기만 하는 데는 위치가 필요 없고, 권한 안내는 러닝을 시작할 때 나온다.
-  Future<void> _locateQuietly() async {
-    final availability = await Services.instance.location.ensurePermission();
-    if (!availability.isReady || !mounted) return;
-
-    try {
-      final position = await Services.instance.location.currentPosition();
-      if (!mounted) return;
-      setState(() => _myPosition = position);
-    } catch (_) {
-      // 위치를 못 잡아도 지도는 제주 전체를 보여주면 된다.
-    }
+  /// 최신 현위치가 바뀌었다. 지도의 내 위치 점만 다시 그린다.
+  void _onLocationChanged() {
+    if (mounted) setState(() {});
   }
 
   // ---------------------------------------------------------------------------
   // 동작
   // ---------------------------------------------------------------------------
 
+  /// 내 위치 버튼. 위치를 조회하는 버튼이 아니라 **최신 위치로 카메라를 옮기는**
+  /// 버튼이다. 위치는 [CurrentLocation]이 스트림으로 계속 받고 있어서 누르는
+  /// 즉시 한 번 움직이고 끝난다.
   Future<void> _moveToMyLocation() async {
-    final availability = await Services.instance.location.ensurePermission();
-    if (!mounted) return;
-
-    if (!availability.isReady) {
-      _showMessage(availability.message);
+    final position = _currentLocation.latest;
+    if (position != null) {
+      _mapController.moveTo(position, zoomLevel: 15);
       return;
     }
 
-    try {
-      final position = await Services.instance.location.currentPosition();
-      if (!mounted) return;
-      setState(() => _myPosition = position);
-      _mapController.moveTo(position, zoomLevel: 15);
-    } catch (_) {
-      if (mounted) _showMessage('현재 위치를 확인하지 못했어요.');
-    }
+    // 아직 한 점도 없다. 권한 문제면 그 안내를, 아니면 잡는 중이라고 알린다.
+    final availability = await _currentLocation.ensureStarted();
+    if (!mounted) return;
+    _showMessage(
+      availability.isReady ? '위치를 잡는 중이에요.' : availability.message,
+    );
   }
 
   /// 코스 시작점에서 이만큼 넘게 떨어져 있으면 길찾기를 권한다. 코스 초입에
   /// 서 있을 때의 GPS 오차(도심에서 수십 m)에는 걸리지 않을 만큼 넉넉하다.
   static const double _routeGuideThreshold = 100;
 
-  /// 시작 직전 현위치 조회에 줄 시간. 넘기면 화면을 열 때 잡아 둔 값으로 간다 —
-  /// 시작 버튼을 눌렀는데 하염없이 기다리는 것보다 낫다.
-  static const Duration _startFixTimeout = Duration(seconds: 3);
-
   Future<void> _startRun({RunningCourse? course}) async {
-    var origin = _myPosition;
+    // 스트림이 계속 갱신하는 값이라 다시 잡지 않는다. 코스를 둘러보다 시작점에
+    // 걸어서 도착했으면 이미 그 자리가 들어와 있다.
+    final origin = _currentLocation.latest;
 
-    // 코스 러닝은 시작점까지의 거리를 봐야 해서 위치를 다시 잡는다.
-    // _myPosition은 화면을 열 때 한 번 잡은 값이라, 코스를 둘러보는 사이에
-    // 사용자가 이동했으면 이미 시작점에 도착했는데도 길찾기를 묻게 된다.
     final start = course?.startPoint;
     if (start != null) {
-      setState(() => _isPreparingStart = true);
-      origin = await _freshPosition() ?? origin;
-      if (!mounted) return;
-      setState(() => _isPreparingStart = false);
-
-      // 위치를 끝내 못 잡았으면 거리를 알 수 없다. 묻지 않고 그냥 시작한다 —
+      // 위치가 아직 없으면 거리를 알 수 없다. 묻지 않고 그냥 시작한다 —
       // 위치 권한 안내는 러닝 화면이 따로 띄운다.
       final distance =
           origin == null ? null : GeoUtils.distanceBetween(origin, start);
@@ -287,20 +359,6 @@ class _RunningScreenState extends State<RunningScreen> {
 
     // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다.
     await _loadCourses();
-  }
-
-  /// 현위치를 다시 한 번 잡는다. 실패하거나 [_startFixTimeout]을 넘기면 null.
-  Future<GeoPoint?> _freshPosition() async {
-    try {
-      final position = await Services.instance.location.currentPosition(
-        timeLimit: _startFixTimeout,
-      );
-      if (mounted) setState(() => _myPosition = position);
-      return position;
-    } catch (_) {
-      // 권한이 없거나 실내라 못 잡은 경우. 부르는 쪽이 이전 값으로 간다.
-      return null;
-    }
   }
 
   /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
@@ -377,7 +435,7 @@ class _RunningScreenState extends State<RunningScreen> {
                 ? const ColoredBox(color: AppColors.paper)
                 : CourseMapView(
                     controller: _mapController,
-                    courses: _visibleCourses,
+                    courses: _courses,
                     selectedCourseId: selected?.id,
                     selectedPath: _selectedDetail?.path ?? const [],
                     // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
@@ -388,7 +446,7 @@ class _RunningScreenState extends State<RunningScreen> {
                     selectedRestrooms: selected == null
                         ? const []
                         : (_selectedDetail ?? selected).restrooms,
-                    myPosition: _myPosition,
+                    myPosition: _currentLocation.latest,
                     onCourseTap: _selectCourse,
                     onMapTap: _clearSelection,
                     // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
@@ -405,31 +463,42 @@ class _RunningScreenState extends State<RunningScreen> {
                 children: [
                   _SearchField(
                     controller: _searchController,
-                    onChanged: (value) => setState(() => _query = value),
+                    focusNode: _searchFocus,
+                    onChanged: _onSearchChanged,
+                    onSubmitted: _onSearchSubmitted,
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: _statusPill()),
-                      _SideActions(
-                        onTapFavorite: () => _showComingSoon('찜'),
-                        onTapExplore: _openExplore,
-                        onTapPartner: () => _showComingSoon('협력업체'),
-                        onTapMyLocation: _moveToMyLocation,
-                      ),
-                    ],
-                  ),
+                  // 결과 목록이 열려 있는 동안은 그 자리를 목록이 쓴다.
+                  if (_isSearchOpen)
+                    CourseSearchResults(
+                      results: _searchResults,
+                      isLoading: _isSearching,
+                      hasError: _searchError != null,
+                      onSelect: _selectSearchResult,
+                      onRetry: () => _runSearch(_query.trim()),
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _statusPill()),
+                        _SideActions(
+                          onTapFavorite: () => _showComingSoon('찜'),
+                          onTapExplore: _openExplore,
+                          onTapPartner: () => _showComingSoon('협력업체'),
+                          onTapMyLocation: _moveToMyLocation,
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
           ),
           if (_isExploring)
             CourseListSheet(
-              courses: _visibleCourses,
+              courses: _courses,
               isLoading: _isLoadingCourses,
               hasError: _coursesError != null,
-              isFiltered: _query.trim().isNotEmpty,
               onSelect: _selectCourse,
               onClose: () => setState(() => _isExploring = false),
               onRetry: _loadCourses,
@@ -450,7 +519,6 @@ class _RunningScreenState extends State<RunningScreen> {
               onToggleFavorite: _toggleSelectedFavorite,
               onClose: _clearSelection,
               onRetryDetail: () => _selectCourse(selected),
-              isPreparingStart: _isPreparingStart,
               onStart: () => _startRun(course: _selectedDetail),
             ),
         ],
@@ -458,7 +526,7 @@ class _RunningScreenState extends State<RunningScreen> {
     );
   }
 
-  /// 검색 결과나 로딩 상태를 지도 위에 얹어 알린다. 지도를 가리지 않으려고
+  /// 코스 로딩 상태를 지도 위에 얹어 알린다. 지도를 가리지 않으려고
   /// 화면 전체를 덮는 [AsyncView] 대신 작은 알약 하나만 띄운다.
   Widget _statusPill() {
     if (_coursesError != null) {
@@ -479,23 +547,23 @@ class _RunningScreenState extends State<RunningScreen> {
       );
     }
 
-    if (_query.trim().isNotEmpty && _visibleCourses.isEmpty) {
-      return const Align(
-        alignment: Alignment.centerLeft,
-        child: _StatusPill(label: '검색 결과가 없어요', icon: Icons.search_off_rounded),
-      );
-    }
-
     return const SizedBox.shrink();
   }
 }
 
-/// 지역·코스 이름·태그를 한 칸에서 찾는 검색바.
+/// 코스 이름 검색바.
 class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.onChanged});
+  const _SearchField({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -506,10 +574,12 @@ class _SearchField extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       child: TextField(
         controller: controller,
+        focusNode: focusNode,
         textInputAction: TextInputAction.search,
         onChanged: onChanged,
+        onSubmitted: onSubmitted,
         decoration: InputDecoration(
-          hintText: '지역, 코스 이름으로 검색',
+          hintText: '코스 이름으로 검색',
           prefixIcon: const Icon(Icons.search_rounded, size: 22),
           suffixIcon: ValueListenableBuilder<TextEditingValue>(
             valueListenable: controller,

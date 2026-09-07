@@ -101,16 +101,25 @@ def _record_view(db: Session, course_id: uuid.UUID, user_id: str) -> None:
         db.rollback()
 
 
+def _escape_like(keyword: str) -> str:
+    """사용자 입력의 LIKE 와일드카드(%, _)를 글자 그대로 찾게 한다."""
+    return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/courses", response_model=list[CourseListItem])
 def list_courses(
     keyword: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ):
     stmt = select(Course).order_by(Course.created_at.desc())
 
+    keyword = (keyword or "").strip()
     if keyword:
-        stmt = stmt.where(Course.name.ilike(f"%{keyword}%"))
+        stmt = stmt.where(Course.name.ilike(f"%{_escape_like(keyword)}%", escape="\\"))
+    if limit is not None:
+        stmt = stmt.limit(limit)
 
     courses = list(db.execute(stmt).scalars())
     course_ids = [course.id for course in courses]

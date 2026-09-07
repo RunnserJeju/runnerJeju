@@ -10,7 +10,7 @@ import '../../widgets/sheet_handle.dart';
 /// 지도는 "어디에 있나"를 보여주지만 "어떤 코스인가"를 훑기에는 나쁘다 —
 /// 라벨을 하나씩 눌러 봐야 설명이 나오기 때문이다. 그래서 같은 코스 목록을
 /// 목록 형태로도 볼 수 있게 한다. 지도와 이 시트는 **같은 코스 목록의 두
-/// 표현**이라, 검색어로 걸러진 결과도 양쪽이 똑같이 따른다.
+/// 표현**이다. 이름 검색은 검색바 아래 결과 목록이 따로 맡는다.
 ///
 /// 항목을 고르면 별도 상세 화면으로 가지 않고 시트를 닫으며 지도에서 그 코스를
 /// 선택한다. 코스 상세는 [CoursePreviewSheet]가 이미 맡고 있고, 화면을 하나 더
@@ -21,7 +21,6 @@ class CourseListSheet extends StatelessWidget {
     required this.courses,
     required this.isLoading,
     required this.hasError,
-    required this.isFiltered,
     required this.onSelect,
     required this.onClose,
     required this.onRetry,
@@ -31,10 +30,6 @@ class CourseListSheet extends StatelessWidget {
   final bool isLoading;
   final bool hasError;
 
-  /// 검색어가 걸려 있는지. 비어 있을 때 "코스가 없다"와 "검색 결과가 없다"는
-  /// 사용자가 할 일이 다르다.
-  final bool isFiltered;
-
   final ValueChanged<RunningCourse> onSelect;
   final VoidCallback onClose;
   final VoidCallback onRetry;
@@ -42,8 +37,7 @@ class CourseListSheet extends StatelessWidget {
   /// 접힌 높이. 목록을 훑는 화면이라 지도보다 목록에 무게를 둔다.
   static const double _collapsedSize = 0.55;
 
-  /// 펼친 높이. 검색바는 가리지 않고 남겨 둔다 — 목록을 훑다가 바로 걸러낼 수
-  /// 있어야 하고, 검색은 지도와 이 목록에 동시에 걸린다.
+  /// 펼친 높이. 검색바는 가리지 않고 남겨 둔다.
   static const double _expandedSize = 0.82;
 
   @override
@@ -120,14 +114,6 @@ class CourseListSheet extends StatelessWidget {
           icon: const Icon(Icons.refresh_rounded),
           label: const Text('다시 시도'),
         ),
-      );
-    }
-
-    if (isFiltered) {
-      return const _Empty(
-        icon: Icons.search_off_rounded,
-        title: '조건에 맞는 코스가 없어요',
-        message: '검색어를 바꿔보세요',
       );
     }
 

@@ -29,7 +29,9 @@ class RunMapView extends StatefulWidget {
     this.runPath = const [],
     this.currentPosition,
     this.initialCenter,
+    this.isRunning = false,
     this.followCurrentPosition = false,
+    this.onUserMovedCamera,
     this.showCourseDirection = false,
     this.isAwaitingLocation = false,
   });
@@ -56,8 +58,19 @@ class RunMapView extends StatefulWidget {
   /// 옮기면 그 이동이 화면에서 점프로 보인다([isAwaitingLocation]).
   final GeoPoint? initialCenter;
 
-  /// true면 현재 위치를 따라 지도 중심을 이동한다.
+  /// 지금 기록 중인지(일시정지·종료가 아닌지). 렌더 루프를 돌릴지, 일시정지에서
+  /// 재개했을 때 라이브 경로를 끊을지를 이걸로 정한다.
+  final bool isRunning;
+
+  /// true면 카메라가 현위치 마커를 따라다닌다. [isRunning]과 별개다 — 달리는
+  /// 중에도 사용자가 지도를 밀면 따라가기를 멈추고, 일시정지 중에도 "내 위치로"를
+  /// 누르면 다시 따라간다.
   final bool followCurrentPosition;
+
+  /// 사용자가 손으로 카메라를 움직였다(드래그·핀치 등). 따라가는 중이었다면
+  /// 화면이 이걸 받아 [followCurrentPosition]을 내린다. 코드가 옮긴 이동
+  /// (러닝 시작 시 배율 당기기, 추적 자체)에는 불리지 않는다.
+  final VoidCallback? onUserMovedCamera;
 
   /// true면 코스 선에 진행방향 화살표를 얹는다. 달리는 중에만 필요한 안내라
   /// 시작 전에는 코스 모양만 깔끔하게 보여준다.
@@ -165,13 +178,18 @@ class _RunMapViewState extends State<RunMapView>
   //
   // 그래서 배율을 여기서 직접 들고 있는다. 러닝을 시작할 때 _runningZoomLevel로
   // 맞추고, 사용자가 손으로 확대/축소하면 onCameraMoveEnd로 그 값을 받아 따른다.
-  // 그래야 달리는 중에 축소해서 앞길을 봐도 다음 위치 갱신에 되돌아가지 않는다.
+  // 그래야 달리는 중에 축소해서 앞길을 봐도 다음 위치 갱신에 되돌아가지 않고,
+  // 따라가기를 껐다 켜도 쓰던 배율로 돌아온다.
   int _followZoomLevel = _runningZoomLevel;
   bool _isFollowing = false;
 
-  /// 직전 갱신에서 위치를 따라가고 있었는지. false -> true로 바뀌는 순간이
+  /// 이번 러닝에서 러닝용 배율로 당긴 적이 있는지. 처음 따라갈 때 한 번만
+  /// 당기고, 그 뒤 따라가기를 다시 켤 때는 [_followZoomLevel]을 그대로 쓴다.
+  bool _hasAppliedRunningZoom = false;
+
+  /// 직전 갱신에서 기록 중이었는지. false -> true로 바뀌는 순간이
   /// 러닝 시작 아니면 일시정지에서의 재개다([_syncLivePosition]).
-  bool _wasFollowing = false;
+  bool _wasRunning = false;
 
   // 네이티브 키 인증에 실패하면 지도는 아무것도 그리지 않은 채 빈 화면으로 남는다.
   // 그대로 두면 키 문제인지, 좌표 문제인지, 빌드 문제인지 구분할 수 없어서
@@ -188,9 +206,9 @@ class _RunMapViewState extends State<RunMapView>
   /// 지도 초기 확대 수준. 값이 클수록 확대된다.
   static const int _initialZoomLevel = 16;
 
-  /// 러닝 중 확대 수준. 코스 전체가 아니라 발밑 몇 십 미터를 보는 화면이라
-  /// 초기값보다 더 당긴다.
-  static const int _runningZoomLevel = 18;
+  /// 러닝 중 확대 수준. 앞으로 갈 길이 한 화면에 어느 정도 들어와야 해서
+  /// 초기값보다 조금 물린다. 사용자가 핀치로 바꾸면 그 값을 따른다.
+  static const int _runningZoomLevel = 14;
 
   /// 현재 위치 마커의 화면 크기(dp). 지도 배율과 무관하게 일정하다.
   static const int _currentPositionMarkerSize = 14;
@@ -236,6 +254,7 @@ class _RunMapViewState extends State<RunMapView>
   }
 
   bool _hasMapInputChanged(RunMapView old) =>
+      old.isRunning != widget.isRunning ||
       old.followCurrentPosition != widget.followCurrentPosition ||
       old.showCourseDirection != widget.showCourseDirection ||
       !identical(_lastSample, widget.currentPosition) ||
@@ -291,6 +310,13 @@ class _RunMapViewState extends State<RunMapView>
       onMapReady: (controller) {
         _controller = controller;
         _redraw();
+      },
+      // 손가락 제스처만 사용자 이동으로 본다. moveCamera나 추적이 옮긴 경우는
+      // SDK가 unknown을 준다.
+      onCameraMoveStart: (gestureType) {
+        if (gestureType != kakao.GestureType.unknown) {
+          widget.onUserMovedCamera?.call();
+        }
       },
       // 사용자가 손으로 바꾼 배율을 러닝 중 카메라 추적에 이어서 쓴다.
       // 우리가 옮긴 경우에도 불리지만, 방금 지정한 값이 그대로 돌아올 뿐이다.
@@ -368,12 +394,12 @@ class _RunMapViewState extends State<RunMapView>
       return;
     }
 
-    // 일시정지 동안에는 followCurrentPosition이 false다. 다시 true가 되었다면
-    // 재개한 것이고, 멈춰 있는 동안의 이동은 달린 것이 아니므로 선을 이으면
-    // 안 된다. 지금까지 그린 선은 그 자리에 그대로 두고 여기서 끊는다.
+    // 일시정지 동안에는 isRunning이 false다. 다시 true가 되었다면 재개한
+    // 것이고, 멈춰 있는 동안의 이동은 달린 것이 아니므로 선을 이으면 안 된다.
+    // 지금까지 그린 선은 그 자리에 그대로 두고 여기서 끊는다.
     // (러닝을 막 시작한 경우에도 지나가지만 끊을 선이 없어 아무 일도 없다.)
-    final isResuming = widget.followCurrentPosition && !_wasFollowing;
-    _wasFollowing = widget.followCurrentPosition;
+    final isResuming = widget.isRunning && !_wasRunning;
+    _wasRunning = widget.isRunning;
     if (isResuming) await _breakLiveRoute();
 
     // 위치는 프로퍼티로 한 점씩 들어온다. 한 프레임 안에 두 점이 오면 뒤엣것만
@@ -408,7 +434,7 @@ class _RunMapViewState extends State<RunMapView>
 
     _liveRoute ??= _GrowingRoute(controller.routeLayer, _runStyle, _runZOrder);
 
-    if (widget.followCurrentPosition) {
+    if (widget.isRunning) {
       _startRenderLoop();
       return;
     }
@@ -504,7 +530,8 @@ class _RunMapViewState extends State<RunMapView>
     _pendingPosition = null;
     _lastSample = null;
     _renderedPosition = null;
-    _wasFollowing = false;
+    _wasRunning = false;
+    _hasAppliedRunningZoom = false;
 
     final marker = _currentPositionMarker;
     if (marker != null) {
@@ -784,11 +811,15 @@ class _RunMapViewState extends State<RunMapView>
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {
     final position = widget.currentPosition;
     if (widget.followCurrentPosition && position != null) {
-      // 러닝이 막 시작됐으면 코스 전체를 보던 배율에서 러닝용 배율로 당긴다.
-      // 위치 갱신마다 카메라를 옮기지는 않는다 — 그건 TrackingController가 한다.
+      // 따라가기를 (다시) 켜는 순간 현위치로 옮긴다. 러닝 첫 시작이면 코스
+      // 전체를 보던 배율에서 러닝용 배율로 당기고, 껐다 켠 것이면 쓰던 배율
+      // 그대로다. 위치 갱신마다 옮기지는 않는다 — 그건 TrackingController가 한다.
       if (!_isFollowing) {
         _isFollowing = true;
-        _followZoomLevel = _runningZoomLevel;
+        if (!_hasAppliedRunningZoom) {
+          _hasAppliedRunningZoom = true;
+          _followZoomLevel = _runningZoomLevel;
+        }
         await controller.moveCamera(
           kakao.CameraUpdate.newCenterPosition(
             _toLatLng(position),
@@ -801,7 +832,7 @@ class _RunMapViewState extends State<RunMapView>
       return;
     }
 
-    // 러닝이 끝났으면 다음 러닝에서 다시 당길 수 있게 되돌린다.
+    // 따라가기가 꺼졌다(사용자가 지도를 밀었거나 러닝이 끝났다).
     _isFollowing = false;
     _stopTracking(controller);
 
