@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # 1=★, 2=★★, 3=★★★ — 클라이언트 CourseDifficulty.value와 값이 같아야 한다.
 Difficulty = Annotated[int, Field(ge=1, le=3)]
+
+# 'public'=모두, 'admin'=role='admin'인 앱 사용자만(테스트 코스).
+CourseVisibility = Literal["public", "admin"]
 VerificationStatusName = Literal[
     "pending", "inProgress", "matched", "mismatched", "failed"
 ]
@@ -190,6 +193,10 @@ class CourseListItem(BaseModel):
     completed_count: int
     is_completed_by_me: bool
 
+    # None은 미설정(시드 스크립트로 올린 코스). 일반 사용자에겐 public만 내려가므로
+    # 앱 응답에서는 admin 계정이 아니면 늘 'public'이다.
+    visibility: CourseVisibility | None
+
     # 지도에 코스 라벨을 찍을 좌표. 경로 전체는 위 이유로 빼지만, 점 하나는
     # 목록 크기에 영향이 없으면서 지도 화면이 코스마다 상세를 부르지 않아도
     # 되게 해준다. 경로가 비어 있는 코스면 None이라 지도에서 빠진다.
@@ -215,6 +222,7 @@ class CourseUpdate(BaseModel):
     name: str = Field(min_length=1)
     distance_km: int = Field(ge=1)
     difficulty: Difficulty
+    visibility: CourseVisibility
     address: str = Field(min_length=1)
     tags: str | None = None
     description: str | None = None

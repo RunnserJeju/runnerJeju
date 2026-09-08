@@ -45,6 +45,7 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "start_point": path[0] if path else None,
         "completed_count": completed_count,
         "is_completed_by_me": is_completed_by_me,
+        "visibility": course.visibility,
     }
 
 
@@ -209,6 +210,8 @@ def create_course_from_gpx_bytes(
     restrooms: list[dict] | None = None,
     description: str | None,
     estimated_time_min: int | None = None,
+    # 운영 웹은 필수로 받고, 시드 스크립트는 안 넘겨 NULL(미설정)로 올라간다.
+    visibility: str | None = None,
     created_by: str | None,
 ) -> Course:
     """GPX 바이트를 파싱해 코스를 새로 등록한다.
@@ -243,6 +246,7 @@ def create_course_from_gpx_bytes(
         restrooms=restrooms or [],
         description=description,
         estimated_time_min=estimated_time_min,
+        visibility=visibility,
         # 썸네일(thumbnail_url)은 여기서 안 넣는다 — 파일 업로드가 필요해 등록 직후
         # 전용 엔드포인트가 따로 채운다. 새 코스는 항상 썸네일 없이 만들어진다.
         # 원본 GPX 점이 아니라 균등 간격으로 리샘플한 경로를 저장한다.

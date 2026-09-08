@@ -8,11 +8,15 @@ export interface Facility {
   lng: number
 }
 
+/** 공개 범위. null은 미설정(시드 스크립트로 올린 코스) — 앱에는 안 보인다. */
+export type CourseVisibility = 'public' | 'admin'
+
 export interface Course {
   id: string
   name: string
   distance_km: number
   difficulty: 1 | 2 | 3
+  visibility: CourseVisibility | null
   tags: string | null
   address: string
   parkings: Facility[]
@@ -55,6 +59,7 @@ export interface CourseUpdatePayload {
   name: string
   distance_km: number
   difficulty: number
+  visibility: CourseVisibility
   address: string
   tags: string | null
   description: string | null
@@ -133,6 +138,7 @@ export interface CourseCreateInput {
   name: string
   distanceKm: number
   difficulty: number
+  visibility: CourseVisibility
   address: string
   tags: string
   description: string
@@ -146,6 +152,7 @@ export function createCourse(input: CourseCreateInput): Promise<Course> {
   form.set('file', input.file)
   form.set('distance_km', String(input.distanceKm))
   form.set('difficulty', String(input.difficulty))
+  form.set('visibility', input.visibility)
   form.set('address', input.address)
   if (input.name.trim()) form.set('name', input.name.trim())
   if (input.tags.trim()) form.set('tags', input.tags.trim())

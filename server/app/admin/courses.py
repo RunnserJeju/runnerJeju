@@ -21,7 +21,14 @@ from app.routers.courses import (
     create_course_from_gpx_bytes,
     resample_path_from_gpx,
 )
-from app.schemas import CourseListItem, CourseSummary, CourseUpdate, Difficulty, Facility
+from app.schemas import (
+    CourseListItem,
+    CourseSummary,
+    CourseUpdate,
+    CourseVisibility,
+    Difficulty,
+    Facility,
+)
 
 router = APIRouter(tags=["courses"])
 
@@ -80,6 +87,7 @@ def update_course(
     course.name = payload.name
     course.distance_km = payload.distance_km
     course.difficulty = payload.difficulty
+    course.visibility = payload.visibility
     course.address = payload.address
     course.tags = payload.tags
     course.description = payload.description
@@ -101,6 +109,7 @@ def create_course_from_gpx(
     file: UploadFile = File(..., description="GPX 파일"),
     distance_km: int = Form(..., ge=1, description="왕복 기준 거리(km)"),
     difficulty: Difficulty = Form(..., description="1=★, 2=★★, 3=★★★"),
+    visibility: CourseVisibility = Form(..., description="public=모두, admin=운영자만"),
     address: str = Form(..., min_length=1, description="코스 시작 지점 주소"),
     name: str | None = Form(default=None, description="생략하면 GPX의 <name>을 쓴다"),
     tags: str | None = Form(default=None, description='쉼표로 구분 — "해안도로,제주시"'),
@@ -148,6 +157,7 @@ def create_course_from_gpx(
             name=name,
             distance_km=distance_km,
             difficulty=difficulty,
+            visibility=visibility,
             address=address,
             tags=tags,
             parkings=[facility.model_dump() for facility in parsed_parkings],
