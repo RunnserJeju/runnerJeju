@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- 첫 프레임이 그려지기 전까지 보이는 화면. 로그인 화면과 같은 배경/로고로 맞춰서
+     전환이 눈에 띄지 않게 한다. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="?android:colorBackground" />
+    <item android:drawable="@color/brand_red" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <!-- 로그인 화면의 로고는 정중앙보다 56dp 위에 있다. 아래쪽을 112dp 잘라내면
+         가운데 정렬된 비트맵이 그만큼 올라가서 같은 자리에 놓인다. -->
+    <item android:bottom="112dp">
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/launch_logo" />
+    </item>
 </layer-list>

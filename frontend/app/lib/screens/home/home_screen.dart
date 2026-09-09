@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data/curated_partners.dart';
 import '../../models/notice.dart';
@@ -52,7 +53,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(title: const Text('Runners Jeju')),
+      appBar: AppBar(
+        // 텍스트 대신 RJC 로고 마크. 시안 크기(71x27) 그대로 높이만 지정하고
+        // 가로는 비율에 맡긴다.
+        title: SvgPicture.asset(
+          'assets/icons/rjc_logo.svg',
+          height: 27,
+          semanticsLabel: 'Runners Jeju',
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
@@ -402,7 +411,6 @@ class _NoticeCard extends StatelessWidget {
     );
   }
 }
-
 
 /// 공지 상세 바텀시트. 카드와 상단 배너 양쪽에서 연다.
 void showNoticeDetail(BuildContext context, Notice notice) {

@@ -96,7 +96,7 @@ gcloud builds triggers run deploy-live --branch=live
 
 | 증상 | 원인 |
 | --- | --- |
-| test 스텝에서 실패 | 진짜 테스트가 깨진 것. `.\scripts\dev.ps1 test`로 로컬 재현 |
+| test 스텝에서 실패 | 진짜 테스트가 깨진 것. `.\scripts\local_docker_start.ps1 test`로 로컬 재현 |
 | migrate 스텝에서 실패 | 마이그레이션 자체 문제. **라이브는 안 바뀌었다.** Job 실행 로그를 본다 |
 | 배포 후 `SchemaOutOfDateError`로 기동 실패 | migrate 스텝이 건너뛰어졌다. 새 마이그레이션 파일이 이미지에 들어갔는지 확인 |
 | 좌표 변환(`/admin/geo/geocode`)이 502 | `kakao-key` 시크릿 문제 |

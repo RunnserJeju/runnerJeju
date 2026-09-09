@@ -8,7 +8,7 @@
 #
 # 그래서 "바깥에서 미리 마이그레이트 → 부팅 때는 검증만"으로 나눴다.
 #   운영: cloudbuild.yaml의 migrate 스텝(Cloud Run Job)이 배포 직전에 한 번
-#   로컬: scripts/dev.ps1 up 이 컨테이너를 띄우기 전에 실행
+#   로컬: scripts/local_docker_start.ps1 up 이 컨테이너를 띄우기 전에 실행
 #
 # 빠뜨렸을 때의 안전망은 app/schema_guard.py다 — alembic_version을 읽어 비교만
 # 하고(DB를 바꾸지 않음) 어긋나면 기동을 거부한다.

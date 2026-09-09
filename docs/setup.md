@@ -10,7 +10,7 @@
 ## 실행
 
 ```powershell
-.\scripts\dev.ps1 up
+.\scripts\local_docker_start.ps1 up
 ```
 
 이것 하나로 끝난다. 내부적으로 일어나는 일:
@@ -31,17 +31,17 @@ API 문서는 http://localhost:8000/docs 에 있다.
 
 | 명령 | 하는 일 |
 |---|---|
-| `.\scripts\dev.ps1 up` | DB + API 기동 (빌드 포함) |
-| `.\scripts\dev.ps1 down` | 전부 정지 |
-| `.\scripts\dev.ps1 logs` | 로그 따라가기 |
-| `.\scripts\dev.ps1 restart` | API만 재시작 |
-| `.\scripts\dev.ps1 rebuild` | 이미지 새로 빌드 후 재생성 (의존성 변경 시) |
-| `.\scripts\dev.ps1 migrate` | 스키마를 head까지 올리기 |
-| `.\scripts\dev.ps1 revision "메시지"` | 마이그레이션 자동 생성 |
-| `.\scripts\dev.ps1 seed` | `server/courses/`의 GPX를 DB에 직접 업로드 (API 안 거침, 로그인 불필요) |
-| `.\scripts\dev.ps1 test` | pytest |
-| `.\scripts\dev.ps1 psql` | DB 셸 |
-| `.\scripts\dev.ps1 shell` | API 컨테이너 셸 |
+| `.\scripts\local_docker_start.ps1 up` | DB + API 기동 (빌드 포함) |
+| `.\scripts\local_docker_start.ps1 down` | 전부 정지 |
+| `.\scripts\local_docker_start.ps1 logs` | 로그 따라가기 |
+| `.\scripts\local_docker_start.ps1 restart` | API만 재시작 |
+| `.\scripts\local_docker_start.ps1 rebuild` | 이미지 새로 빌드 후 재생성 (의존성 변경 시) |
+| `.\scripts\local_docker_start.ps1 migrate` | 스키마를 head까지 올리기 |
+| `.\scripts\local_docker_start.ps1 revision "메시지"` | 마이그레이션 자동 생성 |
+| `.\scripts\local_docker_start.ps1 seed` | `server/courses/`의 GPX를 DB에 직접 업로드 (API 안 거침, 로그인 불필요) |
+| `.\scripts\local_docker_start.ps1 test` | pytest |
+| `.\scripts\local_docker_start.ps1 psql` | DB 셸 |
+| `.\scripts\local_docker_start.ps1 shell` | API 컨테이너 셸 |
 
 ## 스키마 변경
 
@@ -52,8 +52,8 @@ API 문서는 http://localhost:8000/docs 에 있다.
 `models.py`를 고쳤다면:
 
 ```powershell
-.\scripts\dev.ps1 revision "add course tags"
-.\scripts\dev.ps1 migrate
+.\scripts\local_docker_start.ps1 revision "add course tags"
+.\scripts\local_docker_start.ps1 migrate
 ```
 
 `--autogenerate`가 만든 파일은 **반드시 눈으로 확인한다.** 컬럼 이름 변경을
@@ -76,7 +76,7 @@ DROP + ADD로 잡는 등 의도와 다르게 나오는 경우가 있다.
 
 마이그레이션을 빠뜨린 채 서버가 뜨는 일은 두 겹으로 막아둔다.
 
-- `.\scripts\dev.ps1 up`(과 `rebuild`)이 컨테이너를 띄우기 전에 `alembic upgrade head`를
+- `.\scripts\local_docker_start.ps1 up`(과 `rebuild`)이 컨테이너를 띄우기 전에 `alembic upgrade head`를
   실행한다. 운영에서는 배포 파이프라인이 같은 일을 한다([cicd.md](cicd.md))
 - 그 경로를 우회해도(로컬에서 직접 `uvicorn` 실행 등), 앱이 기동 시 DB 리비전이
   head인지 확인하고 아니면 무엇을 해야 하는지 알려주며 기동을 거부한다
@@ -88,7 +88,7 @@ Alembic 도입 전에 만들어진 DB는 `alembic_version` 테이블이 없어�
 다시 실행하려다 "테이블이 이미 있다"로 실패한다. baseline을 건너뛰고 합류한다:
 
 ```powershell
-.\scripts\dev.ps1 shell
+.\scripts\local_docker_start.ps1 shell
 alembic stamp 0001_baseline
 alembic upgrade head
 ```
