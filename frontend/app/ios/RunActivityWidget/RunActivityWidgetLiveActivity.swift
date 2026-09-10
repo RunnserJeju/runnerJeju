@@ -3,85 +3,60 @@
 //  RunActivityWidget
 //
 //  러닝 상태를 잠금화면 + Dynamic Island에 띄우는 Live Activity.
-//  데이터는 Flutter의 live_activities 패키지가 App Group UserDefaults에
-//  `{activityId}_key` 형태로 넣어주고, 여기서 prefixedKey로 읽어 그린다.
-//  키: distanceKm(String) · time(String) · pace(String) · paused(Bool)
+//  값은 Runner(RunLiveActivityChannel)가 activity.update 로 넘기는
+//  RunActivityAttributes.ContentState 이고 context.state 로 읽는다. 공유 저장소
+//  (App Group)를 거치지 않으므로 별도 capability 가 필요 없다.
+//  RunActivityAttributes.swift 는 Runner/ 에 있고 이 타겟에도 컴파일된다.
 //
 
 import ActivityKit
 import WidgetKit
 import SwiftUI
 
-// live_activities 패키지가 요구하는 고정 attributes 파이프.
-// (이 타입 이름은 바꾸지 말 것 — 패키지 네이티브 쪽이 이 타입으로 활동을 만든다.)
-struct LiveActivitiesAppAttributes: ActivityAttributes, Identifiable {
-  public typealias LiveDeliveryData = ContentState
-
-  public struct ContentState: Codable, Hashable {}
-
-  var id = UUID()
-}
-
-// ⚠️ suiteName은 Flutter의 RunLiveWidget._appGroupId와 반드시 동일해야 한다.
-// App Group capability가 아직 없으면(무료 팀 등) 공유 컨테이너가 없어 nil이
-// 될 수 있으므로 .standard로 폴백한다 — 이 경우 값은 placeholder로만 뜬다.
-let sharedDefault = UserDefaults(suiteName: "group.com.runnersjeju.runnersJeju") ?? .standard
-
-extension LiveActivitiesAppAttributes {
-  func prefixedKey(_ key: String) -> String {
-    return "\(id)_\(key)"
-  }
-}
-
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 struct RunActivityWidgetLiveActivity: Widget {
   var body: some WidgetConfiguration {
-    ActivityConfiguration(for: LiveActivitiesAppAttributes.self) { context in
+    ActivityConfiguration(for: RunActivityAttributes.self) { context in
       // ── 잠금화면 카드 ──
-      RunLockScreenView(
-        distanceKm: sharedDefault.string(forKey: context.attributes.prefixedKey("distanceKm")) ?? "0.00",
-        time: sharedDefault.string(forKey: context.attributes.prefixedKey("time")) ?? "00:00",
-        pace: sharedDefault.string(forKey: context.attributes.prefixedKey("pace")) ?? "--'--\"",
-        paused: sharedDefault.bool(forKey: context.attributes.prefixedKey("paused"))
-      )
-      .padding(16)
-      .activityBackgroundTint(Color.black.opacity(0.85))
-      .activitySystemActionForegroundColor(Color.white)
+      RunLockScreenView(state: context.state)
+        .padding(16)
+        .activityBackgroundTint(Color.black.opacity(0.85))
+        .activitySystemActionForegroundColor(Color.white)
 
     } dynamicIsland: { context in
-      let distanceKm = sharedDefault.string(forKey: context.attributes.prefixedKey("distanceKm")) ?? "0.00"
-      let time = sharedDefault.string(forKey: context.attributes.prefixedKey("time")) ?? "00:00"
-      let pace = sharedDefault.string(forKey: context.attributes.prefixedKey("pace")) ?? "--'--\""
-      let paused = sharedDefault.bool(forKey: context.attributes.prefixedKey("paused"))
+      let state = context.state
 
       return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          Label(paused ? "일시정지" : "러닝 중", systemImage: paused ? "pause.circle.fill" : "figure.run")
-            .font(.caption)
-            .foregroundStyle(paused ? .orange : .green)
-            .padding(.leading, 4)
+          Label(
+            state.paused ? "일시정지" : "러닝 중",
+            systemImage: state.paused ? "pause.circle.fill" : "figure.run"
+          )
+          .font(.caption)
+          .foregroundStyle(state.paused ? .orange : .green)
+          .padding(.leading, 4)
         }
         DynamicIslandExpandedRegion(.trailing) {
-          Text("\(distanceKm) km")
+          Text("\(state.distanceKm) km")
             .font(.headline).monospacedDigit()
             .padding(.trailing, 4)
         }
         DynamicIslandExpandedRegion(.bottom) {
           HStack {
-            islandMetric(title: "시간", value: time)
+            islandMetric(title: "시간", value: state.time)
             Spacer()
-            islandMetric(title: "페이스", value: pace)
+            islandMetric(title: "페이스", value: state.pace)
           }
           .padding(.horizontal, 4)
         }
       } compactLeading: {
-        Image(systemName: paused ? "pause.fill" : "figure.run")
-          .foregroundStyle(paused ? .orange : .green)
+        Image(systemName: state.paused ? "pause.fill" : "figure.run")
+          .foregroundStyle(state.paused ? .orange : .green)
       } compactTrailing: {
-        Text("\(distanceKm)km").font(.caption2).monospacedDigit()
+        Text("\(state.distanceKm)km").font(.caption2).monospacedDigit()
       } minimal: {
-        Image(systemName: paused ? "pause.fill" : "figure.run")
-          .foregroundStyle(paused ? .orange : .green)
+        Image(systemName: state.paused ? "pause.fill" : "figure.run")
+          .foregroundStyle(state.paused ? .orange : .green)
       }
     }
   }
@@ -96,19 +71,16 @@ struct RunActivityWidgetLiveActivity: Widget {
 }
 
 // ── 잠금화면 카드 뷰 ──
-@available(iOS 16.1, *)
+@available(iOS 16.2, *)
 struct RunLockScreenView: View {
-  let distanceKm: String
-  let time: String
-  let pace: String
-  let paused: Bool
+  let state: RunActivityAttributes.ContentState
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(spacing: 6) {
-        Image(systemName: paused ? "pause.circle.fill" : "figure.run")
-          .foregroundStyle(paused ? .orange : .green)
-        Text(paused ? "러닝 일시정지" : "러닝 중")
+        Image(systemName: state.paused ? "pause.circle.fill" : "figure.run")
+          .foregroundStyle(state.paused ? .orange : .green)
+        Text(state.paused ? "러닝 일시정지" : "러닝 중")
           .font(.subheadline).fontWeight(.bold)
           .foregroundStyle(.white)
         Spacer()
@@ -118,14 +90,14 @@ struct RunLockScreenView: View {
         // 거리 (강조)
         VStack(alignment: .leading, spacing: 2) {
           Text("거리 (KM)").font(.caption2).foregroundStyle(.white.opacity(0.6))
-          Text(distanceKm)
+          Text(state.distanceKm)
             .font(.system(size: 34, weight: .heavy)).monospacedDigit()
             .foregroundStyle(.white)
         }
         Spacer()
-        metricColumn(title: "시간", value: time)
+        metricColumn(title: "시간", value: state.time)
         Spacer()
-        metricColumn(title: "페이스", value: pace)
+        metricColumn(title: "페이스", value: state.pace)
       }
     }
   }
