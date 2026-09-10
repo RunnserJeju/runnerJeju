@@ -14,6 +14,7 @@ import '../utils/run_path_interpolator.dart';
 import 'course_direction_arrow.dart';
 import 'course_endpoint_marker.dart';
 import 'facility_marker.dart';
+import 'my_position_marker.dart';
 import 'map_status_views.dart';
 
 /// 카카오맵을 감싸는 러닝 전용 지도.
@@ -206,12 +207,8 @@ class _RunMapViewState extends State<RunMapView>
   /// 지도 초기 확대 수준. 값이 클수록 확대된다.
   static const int _initialZoomLevel = 16;
 
-  /// 러닝 중 확대 수준. 앞으로 갈 길이 한 화면에 어느 정도 들어와야 해서
-  /// 초기값보다 조금 물린다. 사용자가 핀치로 바꾸면 그 값을 따른다.
-  static const int _runningZoomLevel = 14;
-
-  /// 현재 위치 마커의 화면 크기(dp). 지도 배율과 무관하게 일정하다.
-  static const int _currentPositionMarkerSize = 14;
+  /// 러닝 중 확대 수준. 사용자가 핀치로 바꾸면 그 값을 따른다.
+  static const int _runningZoomLevel = 16;
 
   /// 선 굵기(dp). 코스를 조금 더 굵게 둬서, 달린 경로가 위에 얹혀도 양옆으로
   /// 코스가 비어져 나온다 — 코스를 벗어났는지 달리면서 바로 보인다.
@@ -234,15 +231,14 @@ class _RunMapViewState extends State<RunMapView>
     AppColors.ink,
     _runLineWidth,
   );
-  late final kakao.PoiStyle _currentPositionStyle = kakao.PoiStyle(
-    // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
-    anchor: const kakao.KPoint(0.5, 0.5),
-    icon: kakao.KImage.fromAsset(
-      'assets/circleMarker.png',
-      _currentPositionMarkerSize,
-      _currentPositionMarkerSize,
-    ),
-  );
+  kakao.PoiStyle? _currentPositionStyle;
+
+  Future<kakao.PoiStyle> _ensureCurrentPositionStyle() async =>
+      _currentPositionStyle ??= kakao.PoiStyle(
+        // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
+        anchor: const kakao.KPoint(0.5, 0.5),
+        icon: await buildMyPositionMarker(),
+      );
 
   @override
   void didUpdateWidget(covariant RunMapView oldWidget) {
@@ -292,7 +288,8 @@ class _RunMapViewState extends State<RunMapView>
     // 중심을 모르는 채로는 지도를 만들지 않는다. KakaoMapOption.position은 최초
     // 생성 때 한 번만 읽히므로, 아무 데나 띄워 놓고 좌표가 도착한 뒤 옮기면
     // 그 이동이 그대로 카메라 점프로 보인다(예전의 제주시청 → 현위치 튐).
-    final center = widget.initialCenter ??
+    final center =
+        widget.initialCenter ??
         widget.currentPosition ??
         GeoUtils.centerOf(widget.coursePath) ??
         GeoUtils.centerOf(widget.runPath);
@@ -424,9 +421,11 @@ class _RunMapViewState extends State<RunMapView>
     }
 
     if (_currentPositionMarker == null) {
+      final style = await _ensureCurrentPositionStyle();
+      if (_disposed) return;
       _currentPositionMarker = await controller.labelLayer.addPoi(
         _toLatLng(position),
-        style: _currentPositionStyle,
+        style: style,
         text: '●',
       );
       _renderedPosition = position;
@@ -648,7 +647,10 @@ class _RunMapViewState extends State<RunMapView>
     _drawnEndpointPath = points;
   }
 
-  Future<kakao.PoiStyle?> _ensureEndpointStyle(Color color, String label) async {
+  Future<kakao.PoiStyle?> _ensureEndpointStyle(
+    Color color,
+    String label,
+  ) async {
     final cached = _endpointStyles[label];
     if (cached != null) return cached;
 
@@ -715,7 +717,10 @@ class _RunMapViewState extends State<RunMapView>
 
   Future<kakao.PoiStyle?> _ensureRestroomStyle() async {
     if (_restroomStyle != null) return _restroomStyle;
-    final icon = await buildFacilityBadge(restroomBadgeColor, restroomBadgeLabel);
+    final icon = await buildFacilityBadge(
+      restroomBadgeColor,
+      restroomBadgeLabel,
+    );
     if (_disposed) return null;
     return _restroomStyle = kakao.PoiStyle(
       anchor: const kakao.KPoint(0.5, 0.5),

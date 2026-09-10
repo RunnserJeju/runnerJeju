@@ -93,7 +93,7 @@ fi
 
 # 서버가 안 떠 있으면 앱은 결국 또 타임아웃을 볼 뿐이다. 여기서 미리 알려준다.
 if ! (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then
-  echo "경고: 127.0.0.1:$PORT 에 아무것도 안 떠 있어요. 서버를 먼저 띄우세요." >&2
+  echo "경고: 127.0.0.1:$PORT 에 아무것도 안 떠 있어요. 서버를 먼저 띄우세요 — ./scripts/local_docker_start.sh up" >&2
 fi
 
 "$ADB" -s "$DEVICE_ID" reverse "tcp:$PORT" "tcp:$PORT"

@@ -4,13 +4,10 @@ import '../models/run_stamp.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
-/// 미획득(흑백) 상태의 코스명/자물쇠 색.
-const Color _lockedInk = Color(0xFF9AA1AC);
-
 /// 완주 스탬프 도안. 획득/미획득 두 상태를 그린다.
 ///
 /// 획득이면 색상 도안 + 코스명 + (기본 도안 한정) 획득일, 미획득이면 grayscale로
-/// 흐릿하게 + 자물쇠 느낌. [stamp]가 있으면 도안/획득일 출처로 쓰고, 미획득처럼
+/// 흐릿하게. [stamp]가 있으면 도안/획득일 출처로 쓰고, 미획득처럼
 /// 스탬프가 없을 땐 [courseName]/[acquired]만으로 그린다.
 class StampBadge extends StatelessWidget {
   const StampBadge({
@@ -86,10 +83,9 @@ class StampBadge extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.accent,
-        border: Border.all(color: AppColors.ink, width: 2.5),
+        color: AppColors.paper,
       ),
       clipBehavior: Clip.antiAlias,
       child: _designUrl != null
@@ -104,37 +100,16 @@ class StampBadge extends StatelessWidget {
   }
 
   Widget _label() {
-    if (_isAcquired) {
-      return Text(
-        _name,
-        maxLines: 2,
-        textAlign: TextAlign.center,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-      );
-    }
-
-    // 미획득: 잠김 느낌으로
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.lock_outline_rounded, size: 11, color: _lockedInk),
-        const SizedBox(width: 3),
-        Flexible(
-          child: Text(
-            _name,
-            maxLines: 2,
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: _lockedInk,
-            ),
-          ),
-        ),
-      ],
+    return Text(
+      _name,
+      maxLines: 2,
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: _isAcquired ? AppColors.ink : AppColors.muted,
+      ),
     );
   }
 }
@@ -154,9 +129,9 @@ class _DefaultFace extends StatelessWidget {
           Icon(
             acquiredAt != null
                 ? Icons.directions_run_rounded
-                : Icons.lock_rounded,
+                : Icons.star_rounded,
             size: 30,
-            color: AppColors.ink,
+            color: acquiredAt != null ? AppColors.ink : AppColors.accent,
           ),
           if (acquiredAt != null) ...[
             const SizedBox(height: 2),

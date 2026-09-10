@@ -10,7 +10,13 @@
 ## 실행
 
 ```powershell
+# Windows
 .\scripts\local_docker_start.ps1 up
+```
+
+```bash
+# macOS / Linux
+./scripts/local_docker_start.sh up
 ```
 
 이것 하나로 끝난다. 내부적으로 일어나는 일:
@@ -28,6 +34,8 @@ curl http://localhost:8000/health   # {"status":"ok","db":"connected"}
 API 문서는 http://localhost:8000/docs 에 있다.
 
 ## 스크립트 명령
+
+아래는 Windows 표기다. macOS / Linux는 `./scripts/local_docker_start.sh`로 바꿔 읽으면 된다 — 명령과 인자는 같다.
 
 | 명령 | 하는 일 |
 |---|---|

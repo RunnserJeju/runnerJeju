@@ -6,10 +6,18 @@ import 'course_thumbnail.dart';
 
 /// 코스 목록/홈에서 쓰는 코스 요약 카드.
 class CourseCard extends StatelessWidget {
-  const CourseCard({super.key, required this.course, this.onTap});
+  const CourseCard({
+    super.key,
+    required this.course,
+    this.onTap,
+    this.distanceLabel,
+  });
 
   final RunningCourse course;
   final VoidCallback? onTap;
+
+  /// 현위치에서 시작점까지의 거리 표기. 예) '1.2km'. 없으면 안 그린다.
+  final String? distanceLabel;
 
   /// 썸네일 한 변. 카드 내용 높이도 이 값으로 고정된다 — 태그·설명이 몇 개든
   /// 목록의 모든 카드가 같은 높이다.
@@ -63,6 +71,17 @@ class CourseCard extends StatelessWidget {
                               size: 20,
                               color: AppColors.success,
                             ),
+                          if (distanceLabel case final label?) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              label,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.accent,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       if (description != null) ...[

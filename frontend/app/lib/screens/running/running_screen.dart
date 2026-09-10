@@ -11,17 +11,20 @@ import '../../utils/formatters.dart';
 import '../../utils/geo_utils.dart';
 import '../../utils/transient_messenger.dart';
 import '../../widgets/course_map_view.dart';
-import '../../widgets/sheet_handle.dart';
 import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
 import 'course_preview_sheet.dart';
 import 'course_search_results.dart';
 
-/// '러닝' 탭: 지도에서 코스를 고르거나, 고르지 않고 바로 자유 러닝을 시작한다.
+/// '러닝' 탭: 지도에서 코스를 골라 러닝을 시작한다.
 ///
 /// 코스를 고르는 일과 달리는 일이 원래 화면 두 개(코스 목록 → 코스 상세 →
 /// 러닝)로 나뉘어 있었다. 지도 하나에 모으면 "어디를 달릴까"와 "지금 달리자"가
-/// 같은 화면에서 끝난다. 러닝 화면([RunScreen])과 기록 로직은 그대로 두고,
+/// 같은 화면에서 끝난다. 기본 상태에서는 지도 아래에 코스 탐색 시트가 살짝만
+/// 올라와 있다 — 끌어올리거나 '코스 탐색'을 누르면 현위치에서 가까운 순으로
+/// 코스 목록이 펼쳐지고, 지도에서 코스를 고르면 그 자리에 상세 시트가 온다.
+/// 코스 없이 달리는 자유 러닝은 진입점을 뺐다([_startRun]은 아직 코스 없이도
+/// 돌아간다). 러닝 화면([RunScreen])과 기록 로직은 그대로 두고,
 /// 거기까지 가는 길만 이 화면이 대신한다.
 class RunningScreen extends StatefulWidget {
   const RunningScreen({super.key});
@@ -70,9 +73,10 @@ class _RunningScreenState extends State<RunningScreen> {
   /// 수 있어서, 마지막으로 보낸 것 말고는 버린다.
   int _detailRequestId = 0;
 
-  /// 경로 탐색 시트를 펼쳐 둔 상태인지. 코스 선택과는 배타적이다 — 목록에서
-  /// 코스를 고르면 목록이 닫히고 그 코스의 상세 시트가 그 자리에 온다.
-  bool _isExploring = false;
+  /// 코스 탐색 시트의 높이를 바깥에서 움직일 때 쓴다. 코스를 고르면 시트가
+  /// 트리에서 빠져 컨트롤러가 떨어지므로, 움직이기 전에 [isAttached]를 본다.
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
 
   /// 앱 전역의 최신 현위치. 이 화면은 조회하지 않고 읽기만 한다 — 내 위치
   /// 점, 내 위치 버튼, 시작점까지의 거리 판정이 전부 이 값을 쓴다.
@@ -103,6 +107,7 @@ class _RunningScreenState extends State<RunningScreen> {
     _searchDebounce?.cancel();
     _searchFocus.dispose();
     _searchController.dispose();
+    _sheetController.dispose();
     super.dispose();
   }
 
@@ -221,7 +226,6 @@ class _RunningScreenState extends State<RunningScreen> {
 
   Future<void> _selectCourse(RunningCourse course) async {
     setState(() {
-      _isExploring = false;
       _selected = course;
       _selectedDetail = null;
       _detailError = null;
@@ -259,30 +263,46 @@ class _RunningScreenState extends State<RunningScreen> {
     _showMessage(nowFavorite ? '찜한 코스에 담았어요.' : '찜을 해제했어요.');
   }
 
-  /// 지도 바닥을 눌렀을 때. 아래에 떠 있는 것을 모두 걷는다.
+  /// 지도 바닥을 눌렀을 때. 코스 상세는 걷고, 탐색 시트는 접는다.
   void _clearSelection() {
     _closeSearch();
-    if (_selected == null && !_isExploring) return;
+    if (_selected == null) {
+      _moveSheet(CourseListSheet.peekHeight, isPixels: true);
+      return;
+    }
 
     // 순번을 올려 두면 아직 오는 중인 상세 응답이 도착해도 무시된다.
     _detailRequestId++;
     setState(() {
-      _isExploring = false;
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
     });
   }
 
-  /// 경로 탐색 목록을 연다. 코스 상세가 떠 있었다면 그 자리를 목록이 대신한다.
+  /// '코스 탐색' 버튼. 코스 상세가 떠 있었다면 걷고 탐색 시트를 펼친다.
   void _openExplore() {
     _detailRequestId++;
     setState(() {
-      _isExploring = true;
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
     });
+    // 상세를 걷은 프레임에서 시트가 다시 트리에 붙는다. 붙은 뒤에 움직인다.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _moveSheet(CourseListSheet.halfSize),
+    );
+  }
+
+  /// 탐색 시트를 [size]로 움직인다. 비율(0~1) 또는 [isPixels]면 픽셀.
+  void _moveSheet(double size, {bool isPixels = false}) {
+    if (!mounted || !_sheetController.isAttached) return;
+    final target = isPixels ? _sheetController.pixelsToSize(size) : size;
+    _sheetController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   /// 최신 현위치가 바뀌었다. 지도의 내 위치 점만 다시 그린다.
@@ -307,9 +327,7 @@ class _RunningScreenState extends State<RunningScreen> {
     // 아직 한 점도 없다. 권한 문제면 그 안내를, 아니면 잡는 중이라고 알린다.
     final availability = await _currentLocation.ensureStarted();
     if (!mounted) return;
-    _showMessage(
-      availability.isReady ? '위치를 잡는 중이에요.' : availability.message,
-    );
+    _showMessage(availability.isReady ? '위치를 잡는 중이에요.' : availability.message);
   }
 
   /// 코스 시작점에서 이만큼 넘게 떨어져 있으면 길찾기를 권한다. 코스 초입에
@@ -325,10 +343,13 @@ class _RunningScreenState extends State<RunningScreen> {
     if (start != null) {
       // 위치가 아직 없으면 거리를 알 수 없다. 묻지 않고 그냥 시작한다 —
       // 위치 권한 안내는 러닝 화면이 따로 띄운다.
-      final distance =
-          origin == null ? null : GeoUtils.distanceBetween(origin, start);
+      final distance = origin == null
+          ? null
+          : GeoUtils.distanceBetween(origin, start);
 
-      if (origin != null && distance != null && distance > _routeGuideThreshold) {
+      if (origin != null &&
+          distance != null &&
+          distance > _routeGuideThreshold) {
         final wantsRoute = await _confirmRouteGuide(course!, distance);
         if (!mounted) return;
 
@@ -429,6 +450,10 @@ class _RunningScreenState extends State<RunningScreen> {
       // 증상). 지도가 리사이즈될 일이 없도록 막아 둔다.
       resizeToAvoidBottomInset: false,
       body: Stack(
+        // 자식 크기에 맞춰 줄어들지 않게 한다. 기본 상태에서 자유 높이인 자식이
+        // 상단 검색 UI뿐이면 Stack이 그 높이로 줄고, Positioned.fill인 지도도
+        // 함께 잘린다.
+        fit: StackFit.expand,
         children: [
           Positioned.fill(
             child: _isRunningScreenOpen
@@ -454,59 +479,74 @@ class _RunningScreenState extends State<RunningScreen> {
                     initialCenter: selected?.startPoint,
                   ),
           ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _SearchField(
-                    controller: _searchController,
-                    focusNode: _searchFocus,
-                    onChanged: _onSearchChanged,
-                    onSubmitted: _onSearchSubmitted,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _SearchField(
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      onChanged: _onSearchChanged,
+                      onSubmitted: _onSearchSubmitted,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   // 결과 목록이 열려 있는 동안은 그 자리를 목록이 쓴다.
                   if (_isSearchOpen)
-                    CourseSearchResults(
-                      results: _searchResults,
-                      isLoading: _isSearching,
-                      hasError: _searchError != null,
-                      onSelect: _selectSearchResult,
-                      onRetry: () => _runSearch(_query.trim()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: CourseSearchResults(
+                        results: _searchResults,
+                        isLoading: _isSearching,
+                        hasError: _searchError != null,
+                        onSelect: _selectSearchResult,
+                        onRetry: () => _runSearch(_query.trim()),
+                      ),
                     )
-                  else
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _statusPill()),
-                        _SideActions(
-                          onTapFavorite: () => _showComingSoon('찜'),
-                          onTapExplore: _openExplore,
-                          onTapPartner: () => _showComingSoon('협력업체'),
-                          onTapMyLocation: _moveToMyLocation,
-                        ),
-                      ],
+                  else ...[
+                    _ActionChips(
+                      onTapFavorite: () => _showComingSoon('찜'),
+                      onTapExplore: _openExplore,
+                      onTapPartner: () => _showComingSoon('협력업체'),
                     ),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _statusPill(),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-          if (_isExploring)
+          // 내 위치 버튼은 우하단, 접힌 탐색 시트 바로 위. 코스 상세 시트가 떠
+          // 있을 때는 시트가 그 자리를 덮으므로 숨긴다.
+          if (selected == null)
+            Positioned(
+              right: 16,
+              bottom: CourseListSheet.peekHeight + 12,
+              child: _RoundIconButton(
+                icon: Icons.my_location_rounded,
+                tooltip: '내 위치',
+                onTap: _moveToMyLocation,
+              ),
+            ),
+          if (selected == null)
             CourseListSheet(
+              controller: _sheetController,
               courses: _courses,
+              myPosition: _currentLocation.latest,
               isLoading: _isLoadingCourses,
               hasError: _coursesError != null,
               onSelect: _selectCourse,
-              onClose: () => setState(() => _isExploring = false),
               onRetry: _loadCourses,
-            )
-          else if (selected == null)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: _FreeRunPanel(onStart: () => _startRun()),
             )
           else
             CoursePreviewSheet(
@@ -603,56 +643,57 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-/// 지도 오른쪽에 세로로 붙는 버튼들.
-class _SideActions extends StatelessWidget {
-  const _SideActions({
+/// 검색창 아래 가로로 늘어서는 기능 칩들. 화면보다 길어지면 좌우로 스크롤한다.
+class _ActionChips extends StatelessWidget {
+  const _ActionChips({
     required this.onTapFavorite,
     required this.onTapExplore,
     required this.onTapPartner,
-    required this.onTapMyLocation,
   });
 
   final VoidCallback onTapFavorite;
   final VoidCallback onTapExplore;
   final VoidCallback onTapPartner;
-  final VoidCallback onTapMyLocation;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _SideButton(
-          icon: Icons.favorite_border_rounded,
-          label: '찜',
-          onTap: onTapFavorite,
-        ),
-        const SizedBox(height: 8),
-        _SideButton(
-          icon: Icons.route_rounded,
-          label: '경로 탐색',
-          onTap: onTapExplore,
-        ),
-        const SizedBox(height: 8),
-        _SideButton(
-          icon: Icons.storefront_rounded,
-          label: '협력업체',
-          onTap: onTapPartner,
-        ),
-        const SizedBox(height: 14),
-        _RoundIconButton(
-          icon: Icons.my_location_rounded,
-          tooltip: '내 위치',
-          onTap: onTapMyLocation,
-        ),
-      ],
+    final chips = <Widget>[
+      _ActionChip(
+        icon: Icons.favorite_border_rounded,
+        label: '찜',
+        onTap: onTapFavorite,
+      ),
+      _ActionChip(
+        icon: Icons.route_rounded,
+        label: '코스 탐색',
+        onTap: onTapExplore,
+      ),
+      _ActionChip(
+        icon: Icons.storefront_rounded,
+        label: '협력업체',
+        onTap: onTapPartner,
+      ),
+    ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      // 칩 그림자가 스크롤 영역 가장자리에서 잘리지 않게 한다.
+      clipBehavior: Clip.none,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          for (final (index, chip) in chips.indexed) ...[
+            if (index > 0) const SizedBox(width: 8),
+            chip,
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _SideButton extends StatelessWidget {
-  const _SideButton({
+class _ActionChip extends StatelessWidget {
+  const _ActionChip({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -773,54 +814,6 @@ class _StatusPill extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: AppColors.ink,
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 코스를 고르지 않았을 때 화면 아래에 붙는 기본 패널.
-class _FreeRunPanel extends StatelessWidget {
-  const _FreeRunPanel({required this.onStart});
-
-  final VoidCallback onStart;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, -2)),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SheetHandle(),
-              const SizedBox(height: 14),
-              const Text(
-                '코스를 선택하거나 자유 러닝을 시작하세요',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF5B6472),
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: onStart,
-                icon: const Icon(Icons.directions_run_rounded),
-                label: const Text('자유 러닝 시작'),
               ),
             ],
           ),

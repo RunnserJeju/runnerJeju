@@ -82,10 +82,16 @@ class CourseSearchResults extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       itemCount: results.length,
-      separatorBuilder: (_, _) =>
-          const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFEDEFF2)),
-      itemBuilder: (context, index) =>
-          _ResultTile(course: results[index], onTap: () => onSelect(results[index])),
+      separatorBuilder: (_, _) => const Divider(
+        height: 1,
+        indent: 16,
+        endIndent: 16,
+        color: Color(0xFFEDEFF2),
+      ),
+      itemBuilder: (context, index) => _ResultTile(
+        course: results[index],
+        onTap: () => onSelect(results[index]),
+      ),
     );
   }
 }
@@ -125,7 +131,10 @@ class _ResultTile extends StatelessWidget {
                     '${course.distanceKm}km · ${course.address}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF7A8593)),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF7A8593),
+                    ),
                   ),
                 ],
               ),
