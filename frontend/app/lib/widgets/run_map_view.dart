@@ -14,6 +14,7 @@ import '../utils/run_path_interpolator.dart';
 import 'course_direction_arrow.dart';
 import 'course_endpoint_marker.dart';
 import 'facility_marker.dart';
+import 'kakao_geo.dart';
 import 'my_position_marker.dart';
 import 'map_status_views.dart';
 
@@ -301,7 +302,7 @@ class _RunMapViewState extends State<RunMapView>
 
     return kakao.KakaoMap(
       option: kakao.KakaoMapOption(
-        position: _toLatLng(center),
+        position: center.toLatLng(),
         zoomLevel: _initialZoomLevel,
       ),
       onMapReady: (controller) {
@@ -400,7 +401,7 @@ class _RunMapViewState extends State<RunMapView>
     if (isResuming) await _breakLiveRoute();
 
     // 위치는 프로퍼티로 한 점씩 들어온다. 한 프레임 안에 두 점이 오면 뒤엣것만
-    // 보이지만, 위치는 아무리 빨라야 1m마다(≈300ms) 오고 프레임은 16ms라
+    // 보이지만, 위치는 아무리 빨라야 매초 오고 프레임은 [_frameInterval]이라
     // 실제로는 겹치지 않는다.
     //
     // 예외가 백그라운드다. 화면이 꺼지면 iOS가 Flutter 프레임을 멈춰 이 위젯은
@@ -424,9 +425,8 @@ class _RunMapViewState extends State<RunMapView>
       final style = await _ensureCurrentPositionStyle();
       if (_disposed) return;
       _currentPositionMarker = await controller.labelLayer.addPoi(
-        _toLatLng(position),
+        position.toLatLng(),
         style: style,
-        text: '●',
       );
       _renderedPosition = position;
     }
@@ -468,7 +468,7 @@ class _RunMapViewState extends State<RunMapView>
     await live.breakHere();
   }
 
-  /// 정상 위치 갱신은 1m마다(≈300ms) 온다. 두 샘플 시각이 이보다 한참 벌어졌으면
+  /// 정상 위치 갱신은 매초 온다. 두 샘플 시각이 이보다 한참 벌어졌으면
   /// 그 사이 화면 프레임이 멈춰 있었다는 뜻(대개 백그라운드)이라, 놓친 구간을
   /// 채워야 한다.
   static const Duration _backgroundGapThreshold = Duration(seconds: 3);
@@ -614,7 +614,7 @@ class _RunMapViewState extends State<RunMapView>
       Future<void> place(GeoPoint point, kakao.PoiStyle? style) async {
         if (style == null || _disposed) return;
         final poi = await controller.labelLayer.addPoi(
-          _toLatLng(point),
+          point.toLatLng(),
           style: style,
         );
         if (_disposed) {
@@ -676,13 +676,20 @@ class _RunMapViewState extends State<RunMapView>
     }
     _facilityMarkers.clear();
 
+    // 찍을 시설이 없으면 배지 이미지를 만들 이유도 없다.
+    if (widget.parkings.isEmpty && widget.restrooms.isEmpty) {
+      _drawnParkings = widget.parkings;
+      _drawnRestrooms = widget.restrooms;
+      return;
+    }
+
     final parkingStyle = await _ensureParkingStyle();
     final restroomStyle = await _ensureRestroomStyle();
     if (parkingStyle == null || restroomStyle == null || _disposed) return;
 
     Future<void> place(CourseFacility facility, kakao.PoiStyle style) async {
       final poi = await controller.labelLayer.addPoi(
-        _toLatLng(GeoPoint(latitude: facility.lat, longitude: facility.lng)),
+        kakao.LatLng(facility.lat, facility.lng),
         style: style,
       );
       if (_disposed) {
@@ -759,7 +766,7 @@ class _RunMapViewState extends State<RunMapView>
 
       _staticRunRoutes.add(
         await controller.routeLayer.addRoute(
-          segment.map(_toLatLng).toList(),
+          segment.map((p) => p.toLatLng()).toList(),
           _runStyle,
           zOrder: _runZOrder,
         ),
@@ -801,7 +808,7 @@ class _RunMapViewState extends State<RunMapView>
       return null;
     }
 
-    final latLngs = points.map(_toLatLng).toList();
+    final latLngs = points.map((p) => p.toLatLng()).toList();
     if (existing == null) {
       return controller.routeLayer.addRoute(latLngs, style, zOrder: zOrder);
     }
@@ -827,7 +834,7 @@ class _RunMapViewState extends State<RunMapView>
         }
         await controller.moveCamera(
           kakao.CameraUpdate.newCenterPosition(
-            _toLatLng(position),
+            position.toLatLng(),
             zoomLevel: _followZoomLevel,
           ),
         );
@@ -856,7 +863,7 @@ class _RunMapViewState extends State<RunMapView>
         _hasFittedStaticPath = true;
         await controller.moveCamera(
           kakao.CameraUpdate.fitMapPoints(
-            points.map(_toLatLng).toList(),
+            points.map((p) => p.toLatLng()).toList(),
             padding: _fitPadding,
           ),
         );
@@ -969,7 +976,7 @@ class _RunMapViewState extends State<RunMapView>
         //
         // 호출 사이마다 상태를 다시 본다. await 동안 화면이 사라지거나 러닝이
         // 초기화되면 이미 걷어낸 오버레이를 이어서 건드리게 된다.
-        await marker.move(_toLatLng(position));
+        await marker.move(position.toLatLng());
         if (!_isLiveCurrent(live, marker)) break;
         if (settled.isNotEmpty) await live.append(settled);
         if (!_isLiveCurrent(live, marker)) break;
@@ -993,9 +1000,6 @@ class _RunMapViewState extends State<RunMapView>
       b != null &&
       a.latitude == b.latitude &&
       a.longitude == b.longitude;
-
-  static kakao.LatLng _toLatLng(GeoPoint point) =>
-      kakao.LatLng(point.latitude, point.longitude);
 
   // 달린 경로가 코스 위에 오도록 쌓는 순서를 고정한다.
   static const int _courseZOrder = 10000;
@@ -1037,7 +1041,7 @@ class _GrowingRoute {
   /// 확정된 점들을 경로 뒤에 붙인다.
   Future<void> append(List<GeoPoint> points) async {
     for (final point in points) {
-      _openPoints.add(_toLatLng(point));
+      _openPoints.add(point.toLatLng());
       _lastPoint = point;
 
       if (_openPoints.length < _chunkSize) continue;
@@ -1058,8 +1062,7 @@ class _GrowingRoute {
 
     // 확정 끝점과 현위치가 같은 좌표면 그릴 선이 없다. 출발 직후와 멈춰 있는
     // 동안에 생기는데, 길이 0짜리 선을 남겨 두면 굵기만큼 점이 찍힌다.
-    if (anchor.latitude == position.latitude &&
-        anchor.longitude == position.longitude) {
+    if (_RunMapViewState._isSameCoordinate(anchor, position)) {
       if (_isTailVisible) {
         _isTailVisible = false;
         await _tail?.hide();
@@ -1067,7 +1070,7 @@ class _GrowingRoute {
       return;
     }
 
-    final points = [_toLatLng(anchor), _toLatLng(position)];
+    final points = [anchor.toLatLng(), position.toLatLng()];
     final tail = _tail;
     if (tail == null) {
       _tail = await _layer.addRoute(points, _style, zOrder: _zOrder);
@@ -1136,7 +1139,4 @@ class _GrowingRoute {
 
     await open.changePoint(List.of(_openPoints));
   }
-
-  static kakao.LatLng _toLatLng(GeoPoint point) =>
-      kakao.LatLng(point.latitude, point.longitude);
 }

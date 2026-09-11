@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/notice.dart';
@@ -48,6 +49,18 @@ class _BannerCarouselState extends State<BannerCarousel> {
     });
   }
 
+  /// 새로고침으로 배너 수가 바뀌면 타이머를 다시 맞춘다. 1장→여러 장이면
+  /// 이제야 자동 슬라이드가 켜지고, 줄어들면 현재 페이지가 범위를 벗어나지 않게 한다.
+  @override
+  void didUpdateWidget(covariant BannerCarousel old) {
+    super.didUpdateWidget(old);
+    if (old.banners.length == widget.banners.length) return;
+    _timer?.cancel();
+    _timer = null;
+    if (_page >= widget.banners.length) _page = 0;
+    _startAutoSlide();
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -72,10 +85,12 @@ class _BannerCarouselState extends State<BannerCarousel> {
               final notice = banners[index];
               return GestureDetector(
                 onTap: () => widget.onTap(notice),
-                child: Image.network(
-                  notice.imageUrl!,
+                child: CachedNetworkImage(
+                  imageUrl: notice.imageUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) =>
+                  placeholder: (_, _) =>
+                      const ColoredBox(color: AppColors.inkSoft),
+                  errorWidget: (_, _, _) =>
                       const ColoredBox(color: AppColors.inkSoft),
                 ),
               );

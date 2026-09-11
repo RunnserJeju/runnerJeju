@@ -1,5 +1,6 @@
 import '../models/run_stamp.dart';
 import '../network/api_client.dart';
+import '../network/json.dart';
 
 /// API 계층: 완주 스탬프 관련 서버 엔드포인트.
 class StampApi {
@@ -11,9 +12,7 @@ class StampApi {
   Future<List<RunStamp>> fetchMyStamps() async {
     final response = await _client.dio.get('/stamps');
 
-    return (response.data as List)
-        .map((e) => RunStamp.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return parseList(response.data, RunStamp.fromJson);
   }
 
   Future<RunStamp> fetchStamp(String stampId) async {

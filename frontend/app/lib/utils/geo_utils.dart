@@ -17,7 +17,10 @@ class GeoUtils {
 
     final h =
         math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.sin(dLng / 2) * math.sin(dLng / 2) * math.cos(lat1) * math.cos(lat2);
+        math.sin(dLng / 2) *
+            math.sin(dLng / 2) *
+            math.cos(lat1) *
+            math.cos(lat2);
 
     return 2 * _earthRadiusMeters * math.asin(math.min(1, math.sqrt(h)));
   }
@@ -32,7 +35,7 @@ class GeoUtils {
   }
 
   /// 경로를 모두 담는 사각형 범위. 비어 있으면 null.
-  static ({GeoPoint southWest, GeoPoint northEast})? boundsOf(
+  static ({GeoPoint southWest, GeoPoint northEast})? _boundsOf(
     List<GeoPoint> path,
   ) {
     if (path.isEmpty) return null;
@@ -57,24 +60,13 @@ class GeoUtils {
 
   /// 경로의 중심점. 비어 있으면 null.
   static GeoPoint? centerOf(List<GeoPoint> path) {
-    final bounds = boundsOf(path);
+    final bounds = _boundsOf(path);
     if (bounds == null) return null;
 
     return GeoPoint(
       latitude: (bounds.southWest.latitude + bounds.northEast.latitude) / 2,
       longitude: (bounds.southWest.longitude + bounds.northEast.longitude) / 2,
     );
-  }
-
-  /// [point]에서 [path] 위의 가장 가까운 지점까지의 거리(m). path가 비면 null.
-  static double? distanceToPath(GeoPoint point, List<GeoPoint> path) {
-    if (path.isEmpty) return null;
-
-    var nearest = double.infinity;
-    for (final p in path) {
-      nearest = math.min(nearest, distanceBetween(point, p));
-    }
-    return nearest;
   }
 
   static double _toRadians(double degrees) => degrees * math.pi / 180;

@@ -7,8 +7,12 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   const AppConfig._();
 
-  //default Natvie App Key
-  static const String kakaoNativeAppKey = 'b996f6761bcc8585602205c0912bc007';
+  /// 카카오 네이티브 앱 키. --dart-define=KAKAO_NATIVE_APP_KEY=... 로 바꿔 끼울 수
+  /// 있고, 비우면(빈 문자열) 지도·카카오 로그인은 안내 화면으로 대체된다.
+  static const String kakaoNativeAppKey = String.fromEnvironment(
+    'KAKAO_NATIVE_APP_KEY',
+    defaultValue: 'b996f6761bcc8585602205c0912bc007',
+  );
 
   // 구글 클라우드 콘솔의 iOS 클라이언트 ID. Android는 패키지명+SHA-1로 콘솔이
   // 자동 매칭하므로 코드에 값이 필요 없다.

@@ -24,8 +24,7 @@ class KakaoMapLauncher {
     required GeoPoint from,
     required GeoPoint to,
   }) async {
-    final query =
-        '?sp=${_coord(from)}&ep=${_coord(to)}&by=FOOT';
+    final query = '?sp=${_coord(from)}&ep=${_coord(to)}&by=FOOT';
 
     final app = Uri.parse('$_appScheme$query');
     if (await canLaunchUrl(app)) {

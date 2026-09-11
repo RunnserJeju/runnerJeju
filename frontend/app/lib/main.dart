@@ -14,8 +14,7 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-
-  // 키가 없으면 지도는 안내 화면으로 대체
+  // 키가 비어 있으면(dart-define으로 비운 경우) 지도는 안내 화면으로 대체된다.
   if (AppConfig.hasKakaoNativeAppKey) {
     KakaoSdk.init(nativeAppKey: AppConfig.kakaoNativeAppKey);
     await KakaoMapSdk.instance.initialize(AppConfig.kakaoNativeAppKey);

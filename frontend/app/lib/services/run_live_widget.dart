@@ -76,7 +76,7 @@ class RunLiveWidget {
     _lastPaused = null;
     if (Platform.isAndroid) {
       await _androidEnsureInit();
-      await _androidPush(data, force: true);
+      await _androidPush(data);
     } else if (Platform.isIOS) {
       await _iosStart(data);
     }
@@ -109,6 +109,8 @@ class RunLiveWidget {
     _lastPush = null;
     _lastPaused = null;
     if (Platform.isAndroid) {
+      // 띄운 적이 없으면(초기화 전) 걷을 것도 없다.
+      if (!_androidInitialized) return;
       await _plugin.cancel(id: _notificationId);
     } else if (Platform.isIOS) {
       await _iosStop();
@@ -136,9 +138,7 @@ class RunLiveWidget {
     _androidInitialized = true;
   }
 
-  Future<void> _androidPush(RunWidgetData data, {bool force = false}) async {
-    if (!_active && !force) return;
-
+  Future<void> _androidPush(RunWidgetData data) async {
     final title = data.paused ? '러닝 일시정지' : '러닝 중';
     final body = _body(data);
 

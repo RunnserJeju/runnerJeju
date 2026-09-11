@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -41,10 +40,10 @@ class MotionService {
           samplingPeriod: SensorInterval.uiInterval,
         ).listen(
           (event) {
-            final magnitude = math.sqrt(
-              event.x * event.x + event.y * event.y + event.z * event.z,
-            );
-            if (magnitude > _movementThreshold) {
+            // 제곱값끼리 비교해 센서 이벤트마다 sqrt를 피한다.
+            final magnitudeSq =
+                event.x * event.x + event.y * event.y + event.z * event.z;
+            if (magnitudeSq > _movementThreshold * _movementThreshold) {
               _lastMovementAt = DateTime.now();
             }
           },

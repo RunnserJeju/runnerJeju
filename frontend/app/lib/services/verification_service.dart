@@ -35,11 +35,11 @@ class VerificationService {
 
     if (requested.status.isTerminal) return requested;
 
-    return awaitResult(requested);
+    return _awaitResult(requested);
   }
 
   /// pending 상태의 검증이 끝날 때까지 폴링한다.
-  Future<RunVerification> awaitResult(RunVerification verification) async {
+  Future<RunVerification> _awaitResult(RunVerification verification) async {
     var latest = verification;
     final deadline = DateTime.now().add(_pollTimeout);
 

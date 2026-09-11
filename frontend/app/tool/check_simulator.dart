@@ -8,6 +8,7 @@
 // flutter_test가 아니라 순수 Dart로 도는 이유는 두 가지다. 검사 대상인
 // RunPathSimulator가 Flutter에 의존하지 않고, 이 환경에서 `flutter test`가
 // 로드 단계에서 죽어서 쓸 수 없다.
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:runners_jeju/models/geo_point.dart';
@@ -17,7 +18,9 @@ import 'package:runners_jeju/utils/geo_utils.dart';
 var _failures = 0;
 
 void check(String label, bool passed, [String detail = '']) {
-  print('  ${passed ? 'OK  ' : 'FAIL'}  $label${detail.isEmpty ? '' : '  ($detail)'}');
+  print(
+    '  ${passed ? 'OK  ' : 'FAIL'}  $label${detail.isEmpty ? '' : '  ($detail)'}',
+  );
   if (!passed) _failures++;
 }
 
@@ -131,15 +134,21 @@ void main() {
   check('모든 관측점이 서로 다르다', unique.length == samples.length);
 
   final meanDev = devs.reduce((a, b) => a + b) / devs.length;
-  check('코스 선에 붙어 있지 않다 (평균 이탈 > 0.5m)', meanDev > 0.5,
-      '${meanDev.toStringAsFixed(2)}m');
+  check(
+    '코스 선에 붙어 있지 않다 (평균 이탈 > 0.5m)',
+    meanDev > 0.5,
+    '${meanDev.toStringAsFixed(2)}m',
+  );
 
   print('\n[그러면서도 코스를 따라가는가]');
 
   final maxDev = devs.reduce(math.max);
   // lateralDrift(4m) + gpsNoise(2.5m)가 상한이다.
-  check('최대 이탈이 프로파일 범위 안 (< 6.5m)', maxDev < 6.5,
-      '${maxDev.toStringAsFixed(2)}m');
+  check(
+    '최대 이탈이 프로파일 범위 안 (< 6.5m)',
+    maxDev < 6.5,
+    '${maxDev.toStringAsFixed(2)}m',
+  );
 
   check(
     '출발점에서 시작한다 (< 10m)',
@@ -158,13 +167,15 @@ void main() {
   // 잡음이 상관 없이 튀면 누적 거리가 몇 배로 부푼다. 평균 회귀 랜덤워크를
   // 쓰는 이유가 이것이라, 여기서 무너지면 잡음 설계가 잘못된 것이다.
   final ratio = measured / courseLength;
-  check('코스 길이의 95~130%', ratio > 0.95 && ratio < 1.30,
-      '${(ratio * 100).toStringAsFixed(1)}%');
+  check(
+    '코스 길이의 95~130%',
+    ratio > 0.95 && ratio < 1.30,
+    '${(ratio * 100).toStringAsFixed(1)}%',
+  );
 
   print('\n[프로파일이 의도대로 갈리는가]');
   final lapse = simulate(course, RunSimulationProfile.timeLapse);
-  final normalSpacing =
-      GeoUtils.pathLength(samples) / (samples.length - 1);
+  final normalSpacing = GeoUtils.pathLength(samples) / (samples.length - 1);
   final lapseSpacing = GeoUtils.pathLength(lapse) / (lapse.length - 1);
   check(
     'timeLapse가 점 간격을 유지한다',
@@ -172,11 +183,14 @@ void main() {
     'normal ${normalSpacing.toStringAsFixed(2)}m vs '
         'timeLapse ${lapseSpacing.toStringAsFixed(2)}m',
   );
+  final normalSec = RunSimulationProfile.normal.interval.inMilliseconds / 1000;
+  final lapseSec =
+      RunSimulationProfile.timeLapse.interval.inMilliseconds / 1000;
   check(
     'timeLapse가 완주까지 걸리는 시간을 10배 이상 줄인다',
-    lapse.length * 0.05 < samples.length * 1.0 / 10,
-    '${(samples.length * 1.0).toStringAsFixed(0)}초 → '
-        '${(lapse.length * 0.05).toStringAsFixed(0)}초',
+    lapse.length * lapseSec < samples.length * normalSec / 10,
+    '${(samples.length * normalSec).toStringAsFixed(0)}초 → '
+        '${(lapse.length * lapseSec).toStringAsFixed(0)}초',
   );
   check(
     'offCourse가 normal보다 5배 이상 벗어난다',
@@ -201,4 +215,5 @@ void main() {
   );
 
   print(_failures == 0 ? '\n전부 통과\n' : '\n실패 $_failures건\n');
+  if (_failures > 0) exitCode = 1;
 }

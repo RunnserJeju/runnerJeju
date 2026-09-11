@@ -23,11 +23,16 @@ class CourseSearchResults extends StatelessWidget {
   final ValueChanged<RunningCourse> onSelect;
   final VoidCallback onRetry;
 
+  /// 목록 위에 남겨 두는 높이. 상태바(~59) + 검색바(48) + 간격(10) + 아래
+  /// 여유. 상단 레이아웃을 바꾸면 같이 맞춘다.
+  static const double _reservedTop = 180;
+
   @override
   Widget build(BuildContext context) {
     // body가 키보드에 맞춰 줄지 않으므로(지도 깨짐 방지) 목록 높이를 직접 잰다.
     final media = MediaQuery.of(context);
-    final available = media.size.height - media.viewInsets.bottom - 180;
+    final available =
+        media.size.height - media.viewInsets.bottom - _reservedTop;
     final maxHeight = available.clamp(160.0, media.size.height * 0.45);
 
     return Material(
@@ -71,7 +76,7 @@ class CourseSearchResults extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF7A8593),
+            color: AppColors.textSubtle,
           ),
         ),
       );
@@ -86,7 +91,7 @@ class CourseSearchResults extends StatelessWidget {
         height: 1,
         indent: 16,
         endIndent: 16,
-        color: Color(0xFFEDEFF2),
+        color: AppColors.lineFaint,
       ),
       itemBuilder: (context, index) => _ResultTile(
         course: results[index],
@@ -133,7 +138,7 @@ class _ResultTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF7A8593),
+                      color: AppColors.textSubtle,
                     ),
                   ),
                 ],

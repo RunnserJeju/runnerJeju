@@ -282,7 +282,7 @@ class _Empty extends StatelessWidget {
         Text(
           message,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF7A8593)),
+          style: const TextStyle(fontSize: 13, color: AppColors.textSubtle),
         ),
         if (action != null) ...[const SizedBox(height: 20), action!],
       ],

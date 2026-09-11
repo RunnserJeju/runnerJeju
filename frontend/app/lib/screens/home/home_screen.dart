@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -11,6 +12,7 @@ import '../../widgets/banner_carousel.dart';
 import '../../widgets/course_recommend_card.dart';
 import '../course/course_detail_screen.dart';
 import '../notification/notification_screen.dart';
+import '../../widgets/section_title.dart';
 
 /// 홈: 배너(이미지 있는 공지) + 추천 코스 + 러닝 코스 큐레이션.
 ///
@@ -124,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const _SectionTitle('추천 코스'),
+                            const SectionTitle('추천 코스', small: true),
                             _LinkButton(
                               label: '지도로 보기',
                               onTap: widget.onShowMap,
@@ -170,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _SectionTitle('러닝 코스 큐레이션'),
+                          SectionTitle('러닝 코스 큐레이션', small: true),
                           SizedBox(height: 2),
                           Text(
                             '코스를 달리고 근처 제휴처에서 혜택까지',
@@ -196,25 +198,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        color: AppColors.ink,
-        height: 1.5,
       ),
     );
   }
@@ -443,10 +426,10 @@ void showNoticeDetail(BuildContext context, Notice notice) {
                   borderRadius: BorderRadius.circular(14),
                   child: AspectRatio(
                     aspectRatio: 3 / 1,
-                    child: Image.network(
-                      notice.imageUrl!,
+                    child: CachedNetworkImage(
+                      imageUrl: notice.imageUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      errorWidget: (_, _, _) => const SizedBox.shrink(),
                     ),
                   ),
                 ),

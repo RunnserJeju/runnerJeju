@@ -1,5 +1,6 @@
 import '../models/run_record.dart';
 import '../network/api_client.dart';
+import '../network/json.dart';
 
 /// API 계층: 러닝 기록 관련 서버 엔드포인트.
 class RunApi {
@@ -20,8 +21,6 @@ class RunApi {
       queryParameters: {'limit': limit},
     );
 
-    return (response.data as List)
-        .map((e) => RunRecord.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return parseList(response.data, RunRecord.fromJson);
   }
 }

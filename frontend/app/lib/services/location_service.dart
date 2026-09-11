@@ -29,17 +29,17 @@ enum LocationInterruption {
   final String message;
 }
 
-
 class LocationService {
-  /// 러닝 중 위치 수집 설정. 1m 이상 움직이면 바로 새 점을 받는다.
-  /// 플랫폼별로 갈라야 백그라운드 수집이 유지된다 — 공통 [LocationSettings]만 쓰면 앱을 내리거나 화면을 끄는 순간 스트림이 멈춘다.
+  /// 러닝 중 최소 이동 거리(m). 이만큼 움직이면 새 점을 받는다.
+  static const int minMeter = 1;
+
+  /// 러닝 중 위치 수집 설정.
+  /// 플랫폼별로 갈라야 백그라운드 수집이 유지된다 — 공통 [LocationSettings]만
+  /// 쓰면 앱을 내리거나 화면을 끄는 순간 스트림이 멈춘다.
   /// - Android: [AndroidSettings.foregroundNotificationConfig]가 포그라운드
   ///   서비스를 띄워 OS가 서비스를 죽이지 않게 한다(상시 알림 동반)
   /// - iOS: [AppleSettings.allowBackgroundLocationUpdates]로 백그라운드 콜백을
   ///   유지한다("앱 사용 중" 권한 + Info.plist의 UIBackgroundModes=location 전제).
-  
-  static const int minMeter = 1;
-
   static LocationSettings get _trackingSettings {
     if (Platform.isAndroid) {
       return AndroidSettings(
@@ -65,7 +65,7 @@ class LocationService {
         activityType: ActivityType.fitness,
       );
     }
-    //else?
+    // 그 밖의 플랫폼(web·desktop)은 공통 설정.
     return const LocationSettings(
       accuracy: LocationAccuracy.best,
       distanceFilter: minMeter,
@@ -127,23 +127,10 @@ class LocationService {
       switch (permission) {
         LocationPermission.denied => LocationAvailability.denied,
         LocationPermission.deniedForever => LocationAvailability.deniedForever,
+        // 판정 불가(web 등)는 권한 있음으로 넘기면 스트림이 열렸다 에러로 끊긴다.
+        LocationPermission.unableToDetermine => LocationAvailability.denied,
         _ => LocationAvailability.ready,
       };
-
-  /// 현재 위치 1회 조회. 권한이 없으면 예외가 난다.
-  ///
-  /// [timeLimit]을 주면 그 안에 좌표를 못 잡을 때 TimeoutException을 낸다.
-  /// 사용자를 기다리게 해 놓고 조회하는 자리(러닝 시작 직전)에서 쓴다 — 실내처럼
-  /// 위성이 안 잡히는 곳에서 getCurrentPosition은 한없이 기다릴 수 있다.
-  Future<GeoPoint> currentPosition({Duration? timeLimit}) async {
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: timeLimit,
-      ),
-    );
-    return _toGeoPoint(position);
-  }
 
   /// 평상시 위치 스트림. 설정은 [_ambientSettings] 참고.
   ///
@@ -182,10 +169,10 @@ class LocationService {
   // "모른다"가 구분되지 않아 달리는 중에도 거리가 안 쌓이는 점이 생긴다.
   // 속도가 실제로 측정된 점은 speedAccuracy가 양수다.
   static GeoPoint _toGeoPoint(Position position) => GeoPoint(
-    latitude:   position.latitude,
-    longitude:  position.longitude,
+    latitude: position.latitude,
+    longitude: position.longitude,
     recordedAt: position.timestamp,
-    accuracy:   position.accuracy,
-    speed:      position.speedAccuracy > 0 ? position.speed : null,
+    accuracy: position.accuracy,
+    speed: position.speedAccuracy > 0 ? position.speed : null,
   );
 }

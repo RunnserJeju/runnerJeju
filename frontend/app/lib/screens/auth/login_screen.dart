@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -72,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
     // 시안(폭 390pt)의 로고 폭은 273pt. 좁은 기기에서도 좌우 여백이 남도록
     // 비율로 잡되, 태블릿에서 과하게 커지지 않게 상한만 둔다.
     final width = MediaQuery.sizeOf(context).width;
-    final logoWidth = width * 0.7 < 320 ? width * 0.7 : 320.0;
+    final logoWidth = math.min(width * 0.7, 320.0);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       // 배경이 진한 레드여서 상태바 아이콘은 밝은 쪽이어야 읽힌다.
@@ -97,7 +99,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: logoWidth,
                         ),
                         const SizedBox(height: 43),
-                        if (!AppConfig.hasKakaoNativeAppKey)
+                        // 개발자용 안내라 디버그 빌드에서만 보인다.
+                        if (kDebugMode && !AppConfig.hasKakaoNativeAppKey)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
                             child: Text(

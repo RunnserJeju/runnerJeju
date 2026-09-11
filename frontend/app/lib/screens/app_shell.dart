@@ -53,7 +53,7 @@ class _AppShellState extends State<AppShell> {
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFEFEFEF))),
+          border: Border(top: BorderSide(color: AppColors.lineSoft)),
         ),
         child: BottomAppBar(
           color: Colors.transparent,

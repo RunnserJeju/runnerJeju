@@ -56,17 +56,7 @@ class AsyncView<T> extends StatelessWidget {
     }
 
     final data = snapshot.data;
-    if (data == null) {
-      return _StateMessage(
-        icon: emptyIcon,
-        title: emptyTitle,
-        message: emptyMessage,
-        actionLabel: '새로고침',
-        onAction: onRetry,
-      );
-    }
-
-    if (isEmpty?.call(data) ?? false) {
+    if (data == null || (isEmpty?.call(data) ?? false)) {
       return _StateMessage(
         icon: emptyIcon,
         title: emptyTitle,
@@ -137,10 +127,7 @@ class _StateMessage extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 20),
-            OutlinedButton(
-              onPressed: onAction,
-              child: Text(actionLabel),
-            ),
+            OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
           ],
         ),
       ),

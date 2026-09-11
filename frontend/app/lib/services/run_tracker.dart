@@ -121,8 +121,13 @@ class RunTracker extends ChangeNotifier {
 
   /// 위치가 끊겨서 기록이 멈춰 있다면 그 사유. 화면이 이걸 보고 알린다.
   LocationInterruption? get interruption => _interruption;
-  List<GeoPoint> get path => List.unmodifiable(_path);
+
+  /// 읽기 전용 스냅샷. 점이 늘 때만 새로 만든다 — 화면이 매 빌드마다 읽는데
+  /// 그때마다 수천 점을 복사하면 낭비다.
+  List<GeoPoint> get path => _pathSnapshot ??= List.unmodifiable(_path);
+  List<GeoPoint>? _pathSnapshot;
   double get distanceMeters => _distanceMeters;
+
   /// 실제로 달린 시간(멈춰 있던 시간 제외).
   ///
   /// 시작 시각은 시작 버튼이 아니라 **첫 유효 위치**다([_onPosition]). 버튼
@@ -145,6 +150,7 @@ class RunTracker extends ChangeNotifier {
     // 기기 시계가 뒤로 돌아가는 경우까지 음수로 내보내지는 않는다.
     return ran.isNegative ? Duration.zero : ran;
   }
+
   DateTime? get startedAt => _startedAt;
 
   /// 가장 최근에 들어온 위치. [path]와 달리 게이트를 거치지 않은 원본이라
@@ -198,8 +204,7 @@ class RunTracker extends ChangeNotifier {
   /// 코스 커버리지 0.0~1.0(코스 점 중 실제로 지나간 비율). 자유 러닝이면 null.
   ///
   /// 서버 검증의 match_rate와 같은 개념·같은 로직이다(CourseCoverageTracker 참고).
-  double? get courseCoverage =>
-      _targetCourse == null ? null : _coverage?.ratio;
+  double? get courseCoverage => _targetCourse == null ? null : _coverage?.ratio;
 
   /// 누적 주행 거리 ÷ 코스 거리 (1.0 초과 가능). 자유 러닝이면 null.
   ///
@@ -268,15 +273,16 @@ class RunTracker extends ChangeNotifier {
   }
 
   void _subscribeToPositions(LocationService location) {
-    _positionSubscription?.cancel(); //재구독 방어 
+    _positionSubscription?.cancel(); //재구독 방어
     _positionSubscription = location.trackPosition().listen(
       (point) {
         // 일시정지 중에도(아래 _onPosition은 버린다) 최신 위치는 갱신한다.
         if (_isRealGps) _currentLocation.report(point);
         _onPosition(point);
       },
-      // 에러를 받지 않으면 스트림이 끊긴 채로 앱이 진행되기 때문에 사용자가 에러가 난 줄도 모른다.  
-      onError: (Object error) => _handlePositionLost(location.interruptionFrom(error)),
+      // 에러를 받지 않으면 스트림이 끊긴 채로 앱이 진행되기 때문에 사용자가 에러가 난 줄도 모른다.
+      onError: (Object error) =>
+          _handlePositionLost(location.interruptionFrom(error)),
       onDone: () => _handlePositionLost(LocationInterruption.lost),
     );
   }
@@ -287,15 +293,17 @@ class RunTracker extends ChangeNotifier {
   /// 다시 켜면 이어 달릴 수 있어야 한다. 화면에 나오는 상태는 사용자가 직접
   /// 일시정지를 누른 것과 같아서, 이어서·종료 버튼이 그대로 쓰인다.
   void _handlePositionLost(LocationInterruption reason) {
-    if (_status != RunStatus.running) return;
-
+    // 일시정지 중에도 스트림은 살아 있어 끊길 수 있다. 상태와 무관하게 죽은
+    // 구독을 버리고 사유를 남겨야 resume()이 다시 붙고, 화면이 사유를 알린다.
     _positionSubscription?.cancel();
     _positionSubscription = null;
-
-    _status = RunStatus.paused;
-    _beginPause();
-    _ticker?.cancel();
     _interruption = reason;
+
+    if (_status == RunStatus.running) {
+      _status = RunStatus.paused;
+      _beginPause();
+      _ticker?.cancel();
+    }
     notifyListeners();
   }
 
@@ -350,6 +358,7 @@ class RunTracker extends ChangeNotifier {
     _endPause();
 
     _status = RunStatus.finished;
+    _interruption = null;
     _endedAt = DateTime.now();
     // 위치를 한 점도 못 받고 끝냈으면 시작 시각이 없다. 기록은 남겨야 하므로
     // 종료 시각으로 채운다 — 시간 0, 거리 0인 기록이 된다.
@@ -445,6 +454,7 @@ class RunTracker extends ChangeNotifier {
   void _commit(GeoPoint point) {
     _commitAnchor = point;
     _path.add(point);
+    _pathSnapshot = null;
     _coverage?.add(point);
     _paceSamples.add((meters: _distanceMeters, elapsed: elapsed));
 
@@ -507,6 +517,7 @@ class RunTracker extends ChangeNotifier {
 
     _status = RunStatus.idle;
     _path.clear();
+    _pathSnapshot = null;
     _distanceMeters = 0;
     _startedAt = null;
     _endedAt = null;

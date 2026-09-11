@@ -13,6 +13,16 @@ class AppColors {
   /// 보조 텍스트·비선택 아이콘.
   static const Color muted = Color(0xFF9A9A9A);
 
+  /// 본문 회색 단계. 진한 순.
+  static const Color textBody = Color(0xFF3D4552);
+  static const Color iconSubtle = Color(0xFF5B6472);
+  static const Color textSubtle = Color(0xFF7A8593);
+  static const Color textFaint = Color(0xFFA3ABB6);
+
+  /// 옅은 구분선·비활성 면.
+  static const Color lineFaint = Color(0xFFEDEFF2);
+  static const Color surfaceMuted = Color(0xFFE8EBEF);
+
   /// 구분선. [line]은 섹션 사이, [lineSoft]는 리스트 항목 사이.
   static const Color line = Color(0xFFD8D8D8);
   static const Color lineSoft = Color(0xFFF0F0F0);

@@ -7,6 +7,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/course_thumbnail.dart';
 import '../../widgets/elevation_chart.dart';
 import '../../widgets/sheet_handle.dart';
+import '../../widgets/section_title.dart';
+import '../../widgets/tag_chip.dart';
 
 /// 지도에서 코스 라벨을 눌렀을 때 아래에서 올라오는 시트.
 ///
@@ -97,7 +99,7 @@ class CoursePreviewSheet extends StatelessWidget {
                 onRetry: onRetryDetail,
               ),
               const SizedBox(height: 20),
-              const Divider(height: 1, color: Color(0xFFEDEFF2)),
+              const Divider(height: 1, color: AppColors.lineFaint),
               const SizedBox(height: 20),
               ..._details(context),
             ],
@@ -112,19 +114,19 @@ class CoursePreviewSheet extends StatelessWidget {
 
     return [
       if (description != null && description.isNotEmpty) ...[
-        const _SectionTitle('코스 소개'),
+        const SectionTitle('코스 소개', small: true),
         const SizedBox(height: 8),
         Text(
           description,
           style: const TextStyle(
             fontSize: 14,
             height: 1.6,
-            color: Color(0xFF3D4552),
+            color: AppColors.textBody,
           ),
         ),
         const SizedBox(height: 20),
       ],
-      const _SectionTitle('위치'),
+      const SectionTitle('위치', small: true),
       const SizedBox(height: 8),
       _InfoRow(icon: Icons.place_outlined, label: '출발지', value: course.address),
       _InfoRow(
@@ -139,12 +141,12 @@ class CoursePreviewSheet extends StatelessWidget {
       ),
       if (course.tagList.isNotEmpty) ...[
         const SizedBox(height: 20),
-        const _SectionTitle('태그'),
+        const SectionTitle('태그', small: true),
         const SizedBox(height: 8),
         Wrap(
           spacing: 6,
           runSpacing: 6,
-          children: [for (final tag in course.tagList) _Chip(label: tag)],
+          children: [for (final tag in course.tagList) TagChip(label: tag)],
         ),
       ],
       // 고도는 경로에 딸려 오므로 목록의 course가 아니라 상세(detail)를 본다.
@@ -196,7 +198,7 @@ class _ElevationSectionState extends State<_ElevationSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SectionTitle('고도'),
+          const SectionTitle('고도', small: true),
           const SizedBox(height: 10),
           if (profile == null)
             const _ElevationUnavailable()
@@ -228,7 +230,7 @@ class _ElevationUnavailable extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: Color(0xFFA3ABB6),
+            color: AppColors.textFaint,
           ),
         ),
       ),
@@ -298,7 +300,7 @@ class _Header extends StatelessWidget {
                       size: 22,
                       color: isFavorite
                           ? AppColors.accent
-                          : const Color(0xFF7A8593),
+                          : AppColors.textSubtle,
                     ),
                     tooltip: isFavorite ? '찜 해제' : '찜하기',
                     visualDensity: VisualDensity.compact,
@@ -312,7 +314,10 @@ class _Header extends StatelessWidget {
                 course.address,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: Color(0xFF7A8593)),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSubtle,
+                ),
               ),
             ],
           ),
@@ -339,17 +344,20 @@ class _MetaChips extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: [
-        _Chip(
+        TagChip(
           icon: Icons.straighten_rounded,
           label: '왕복 ${course.distanceKm}km',
         ),
-        _Chip(icon: Icons.trending_up_rounded, label: course.difficulty.label),
+        TagChip(
+          icon: Icons.trending_up_rounded,
+          label: course.difficulty.label,
+        ),
         if (course.estimatedTimeLabel != null)
-          _Chip(
+          TagChip(
             icon: Icons.schedule_rounded,
             label: course.estimatedTimeLabel!,
           ),
-        _Chip(
+        TagChip(
           icon: Icons.emoji_events_outlined,
           label: '완주 ${course.completedCount}명',
         ),
@@ -402,24 +410,6 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w800,
-        color: AppColors.ink,
-      ),
-    );
-  }
-}
-
 class _InfoRow extends StatelessWidget {
   const _InfoRow({
     required this.icon,
@@ -440,7 +430,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 17, color: const Color(0xFF7A8593)),
+          Icon(icon, size: 17, color: AppColors.textSubtle),
           const SizedBox(width: 10),
           SizedBox(
             width: 48,
@@ -449,7 +439,7 @@ class _InfoRow extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF7A8593),
+                color: AppColors.textSubtle,
               ),
             ),
           ),
@@ -460,44 +450,9 @@ class _InfoRow extends StatelessWidget {
                 fontSize: 13,
                 height: 1.5,
                 color: value?.isNotEmpty == true
-                    ? const Color(0xFF3D4552)
-                    : const Color(0xFFA3ABB6),
+                    ? AppColors.textBody
+                    : AppColors.textFaint,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, this.icon});
-
-  final String label;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.paper,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 13, color: const Color(0xFF5B6472)),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF3D4552),
             ),
           ),
         ],

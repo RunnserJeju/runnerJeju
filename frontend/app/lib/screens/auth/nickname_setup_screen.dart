@@ -33,9 +33,9 @@ class _NicknameSetupScreenState extends State<NicknameSetupScreen> {
     try {
       await Services.instance.auth.setNickname(_nicknameController.text.trim());
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AppShell()),
-      );
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const AppShell()));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -64,7 +64,9 @@ class _NicknameSetupScreenState extends State<NicknameSetupScreen> {
                 Text(
                   '러너스제주에서 사용할 이름이에요. 나중에 바꿀 수 있어요.',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -79,8 +81,9 @@ class _NicknameSetupScreenState extends State<NicknameSetupScreen> {
                   ),
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _submit(),
-                  validator: (value) =>
-                      (value == null || value.trim().isEmpty) ? '닉네임을 입력해 주세요' : null,
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? '닉네임을 입력해 주세요'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 SizedBox(

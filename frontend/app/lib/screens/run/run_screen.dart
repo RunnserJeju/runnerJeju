@@ -134,7 +134,7 @@ class _RunScreenState extends State<RunScreen> {
       source: source,
     );
     if (availability.isReady) {
-      _isFollowing = true;
+      if (mounted) setState(() => _isFollowing = true);
       // 잠금화면 위젯을 띄운다(Android 상시 알림 / iOS Live Activity).
       unawaited(_liveWidget.start(_snapshot()));
     }
@@ -211,7 +211,7 @@ class _RunScreenState extends State<RunScreen> {
   ///
   /// 뒤로가기는 연달아 눌리기 쉬워서, 안내를 그냥 띄우면 같은 문장이 누른
   /// 횟수만큼 줄을 선다([TransientMessenger] 참고).
-  Future<void> _handlePop(bool didPop) async {
+  void _handlePop(bool didPop) {
     if (didPop) return;
 
     _messenger.show(context, '러닝 중이에요. 종료하려면 정지 버튼을 눌러주세요.');
@@ -261,7 +261,6 @@ class _RunScreenState extends State<RunScreen> {
                   const Spacer(),
                   _ControlPanel(
                     tracker: tracker,
-                    interruption: tracker.interruption,
                     coursePath: widget.course?.path ?? const [],
                     onStart: _start,
                     onStartSimulation: (source) => _start(source: source),
@@ -359,7 +358,7 @@ class _TopBar extends StatelessWidget {
                             child: LinearProgressIndicator(
                               value: progress,
                               minHeight: 6,
-                              backgroundColor: const Color(0xFFE8EBEF),
+                              backgroundColor: AppColors.surfaceMuted,
                               valueColor: const AlwaysStoppedAnimation(
                                 AppColors.ink,
                               ),
@@ -397,7 +396,6 @@ class _TopBar extends StatelessWidget {
 class _ControlPanel extends StatelessWidget {
   const _ControlPanel({
     required this.tracker,
-    required this.interruption,
     required this.coursePath,
     required this.onStart,
     required this.onStartSimulation,
@@ -407,10 +405,6 @@ class _ControlPanel extends StatelessWidget {
   });
 
   final RunTracker tracker;
-
-  /// 위치가 끊겨서 멈춘 것이라면 그 사유. 사용자가 누른 일시정지와 화면 상태가
-  /// 같아서, 이유를 적어 두지 않으면 왜 멈췄는지 알 길이 없다.
-  final LocationInterruption? interruption;
 
   final List<GeoPoint> coursePath;
   final VoidCallback onStart;
@@ -432,8 +426,10 @@ class _ControlPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (interruption != null) ...[
-            _InterruptionNotice(interruption: interruption!),
+          // 위치가 끊겨 멈춘 것은 사용자가 누른 일시정지와 화면이 같아서,
+          // 사유를 적어 두지 않으면 왜 멈췄는지 알 길이 없다.
+          if (tracker.interruption case final interruption?) ...[
+            _InterruptionNotice(interruption: interruption),
             const SizedBox(height: 16),
           ] else if (tracker.isAwaitingFix) ...[
             const _AwaitingFixNotice(),
@@ -557,12 +553,6 @@ class _Controls extends StatelessWidget {
   }
 }
 
-
-/// 위치가 끊겨 기록이 멈췄음을 컨트롤 패널 안에 남겨 두는 줄.
-///
-/// 스낵바만으로는 부족하다. 몇 초 뒤 사라지는데, 그동안 화면을 안 보고 있었다면
-/// 남는 것은 "멈춰 있는 러닝" 하나뿐이라 사용자가 직접 일시정지를 누른 것과
-/// 구분되지 않는다.
 /// 시작은 눌렀는데 아직 쓸 만한 위치가 없을 때. 이 동안 시간은 흐르지 않는다.
 class _AwaitingFixNotice extends StatelessWidget {
   const _AwaitingFixNotice();
@@ -591,6 +581,11 @@ class _AwaitingFixNotice extends StatelessWidget {
   }
 }
 
+/// 위치가 끊겨 기록이 멈췄음을 컨트롤 패널 안에 남겨 두는 줄.
+///
+/// 스낵바만으로는 부족하다. 몇 초 뒤 사라지는데, 그동안 화면을 안 보고 있었다면
+/// 남는 것은 "멈춰 있는 러닝" 하나뿐이라 사용자가 직접 일시정지를 누른 것과
+/// 구분되지 않는다.
 class _InterruptionNotice extends StatelessWidget {
   const _InterruptionNotice({required this.interruption});
 
@@ -629,7 +624,7 @@ class _InterruptionNotice extends StatelessWidget {
                 const SizedBox(height: 2),
                 const Text(
                   '위치를 다시 켜고 이어서를 누르면 계속 기록해요.',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF5B6472)),
+                  style: TextStyle(fontSize: 12, color: AppColors.iconSubtle),
                 ),
               ],
             ),

@@ -79,7 +79,11 @@ class Services {
   late final MotionService motion = MotionService();
 
   /// 진행 중인 러닝은 화면 전환과 무관하게 유지되어야 하므로 전역에 하나만 둔다.
-  late final RunTracker runTracker = RunTracker(location, motion, currentLocation);
+  late final RunTracker runTracker = RunTracker(
+    location,
+    motion,
+    currentLocation,
+  );
 
   /// 러닝 상태를 잠금화면에 미러링하는 표시 계층(Android 상시 알림 / iOS Live
   /// Activity). 데이터는 [runTracker]가 굴리고, 이건 화면 밖 표시만 맡는다.

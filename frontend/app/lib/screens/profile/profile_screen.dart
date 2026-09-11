@@ -11,6 +11,7 @@ import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
 import '../course/course_detail_screen.dart';
 import '../run/run_detail_screen.dart';
+import '../../widgets/section_title.dart';
 
 /// 프로필: 최근 한 달 러닝 요약 + 찜한 코스 + 참여한 프로그램.
 class ProfileScreen extends StatefulWidget {
@@ -177,7 +178,7 @@ class _ProfileBodyState extends State<_ProfileBody> {
           ),
         ),
         const SizedBox(height: 28),
-        const _SectionTitle('최근 한 달 러닝'),
+        const SectionTitle('최근 한 달 러닝'),
         const SizedBox(height: 12),
         if (runs.isEmpty)
           const _EmptyNote(
@@ -200,7 +201,7 @@ class _ProfileBodyState extends State<_ProfileBody> {
             ),
         ],
         const SizedBox(height: 28),
-        const _SectionTitle('찜한 코스'),
+        const SectionTitle('찜한 코스'),
         const SizedBox(height: 12),
         if (data.favorites.isEmpty)
           const _EmptyNote(
@@ -220,37 +221,16 @@ class _ProfileBodyState extends State<_ProfileBody> {
             const SizedBox(height: 12),
           ],
         const SizedBox(height: 28),
-        const _SectionTitle('참여한 프로그램'),
+        const SectionTitle('참여한 프로그램'),
         const SizedBox(height: 12),
         if (data.programs.isEmpty)
-          const _EmptyNote(
-            icon: Icons.groups_rounded,
-            message: '참여한 프로그램이 없어요',
-          )
+          const _EmptyNote(icon: Icons.groups_rounded, message: '참여한 프로그램이 없어요')
         else
           for (final program in data.programs) ...[
             _ProgramTile(program: program),
             const SizedBox(height: 10),
           ],
       ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.4,
-      ),
     );
   }
 }
@@ -264,9 +244,9 @@ class _EmptyNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = Theme.of(context).colorScheme.onSurface.withValues(
-      alpha: 0.45,
-    );
+    final muted = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.45);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Row(
@@ -274,10 +254,7 @@ class _EmptyNote extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: muted),
           const SizedBox(width: 8),
-          Text(
-            message,
-            style: TextStyle(fontSize: 14, color: muted),
-          ),
+          Text(message, style: TextStyle(fontSize: 14, color: muted)),
         ],
       ),
     );
@@ -292,7 +269,7 @@ class _ProgramTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final period = _period(program);
+    final period = program.periodLabel;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -337,17 +314,6 @@ class _ProgramTile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  /// 진행 기간. 둘 다 없으면(상시 모집) 표기하지 않는다.
-  String? _period(RunningProgram program) {
-    final start = program.startDate;
-    final end = program.endDate;
-    if (start == null && end == null) return null;
-    if (start != null && end != null) {
-      return '${Formatters.date(start)} ~ ${Formatters.date(end)}';
-    }
-    return Formatters.date((start ?? end)!);
   }
 }
 

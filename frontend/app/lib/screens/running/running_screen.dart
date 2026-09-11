@@ -95,7 +95,6 @@ class _RunningScreenState extends State<RunningScreen> {
     super.initState();
     _searchFocus.addListener(_onSearchFocusChanged);
     _loadCourses();
-    _currentLocation.addListener(_onLocationChanged);
     // 권한을 아직 안 물어봤으면 여기서 묻는다 — 지도가 떠 있는 맥락이라
     // 왜 필요한지 자명하다. 거부해도 지도는 제주 전체를 보여주면 된다.
     unawaited(_currentLocation.ensureStarted());
@@ -103,7 +102,6 @@ class _RunningScreenState extends State<RunningScreen> {
 
   @override
   void dispose() {
-    _currentLocation.removeListener(_onLocationChanged);
     _searchDebounce?.cancel();
     _searchFocus.dispose();
     _searchController.dispose();
@@ -197,8 +195,10 @@ class _RunningScreenState extends State<RunningScreen> {
     final keyword = value.trim();
     if (keyword.isEmpty) return;
 
-    if (_searchDebounce?.isActive ?? false) {
-      _searchDebounce!.cancel();
+    // 디바운스 대기 중이거나 이전 키워드 요청이 아직 도는 중이면 지금 키워드로
+    // 다시 찾는다. 그러지 않으면 옛 결과의 첫 항목으로 가 버린다.
+    if ((_searchDebounce?.isActive ?? false) || _isSearching) {
+      _searchDebounce?.cancel();
       await _runSearch(keyword);
       if (!mounted) return;
     }
@@ -235,7 +235,7 @@ class _RunningScreenState extends State<RunningScreen> {
     final start = course.startPoint;
     if (start != null) _mapController.moveTo(start);
 
-    // 찜 여부는 로컬 저장이라 금방 온다. 다른 코스로 옮겨 눌렀으면 버린다.
+    // 찜 여부는 서버 조회다(첫 조회 뒤엔 캐시). 다른 코스로 옮겨 눌렀으면 버린다.
     final requestId = ++_detailRequestId;
     Services.instance.favorite.isFavorite(course.id).then((isFavorite) {
       if (!mounted || requestId != _detailRequestId) return;
@@ -257,7 +257,10 @@ class _RunningScreenState extends State<RunningScreen> {
     final course = _selected;
     if (course == null) return;
 
-    final nowFavorite = await Services.instance.favorite.toggle(course.id);
+    final nowFavorite = await Services.instance.favorite.toggle(
+      course.id,
+      currently: _selectedIsFavorite,
+    );
     if (!mounted || _selected?.id != course.id) return;
     setState(() => _selectedIsFavorite = nowFavorite);
     _showMessage(nowFavorite ? '찜한 코스에 담았어요.' : '찜을 해제했어요.');
@@ -305,11 +308,6 @@ class _RunningScreenState extends State<RunningScreen> {
     );
   }
 
-  /// 최신 현위치가 바뀌었다. 지도의 내 위치 점만 다시 그린다.
-  void _onLocationChanged() {
-    if (mounted) setState(() {});
-  }
-
   // ---------------------------------------------------------------------------
   // 동작
   // ---------------------------------------------------------------------------
@@ -347,9 +345,7 @@ class _RunningScreenState extends State<RunningScreen> {
           ? null
           : GeoUtils.distanceBetween(origin, start);
 
-      if (origin != null &&
-          distance != null &&
-          distance > _routeGuideThreshold) {
+      if (distance != null && distance > _routeGuideThreshold) {
         final wantsRoute = await _confirmRouteGuide(course!, distance);
         if (!mounted) return;
 
@@ -358,7 +354,7 @@ class _RunningScreenState extends State<RunningScreen> {
         // 아무것도 고르지 않은 것을 '여기서 시작'으로 읽지 않는다.
         if (wantsRoute != false) {
           if (wantsRoute == true) {
-            await _openRouteToStart(from: origin, to: start);
+            await _openRouteToStart(from: origin!, to: start);
           }
           return;
         }
@@ -378,8 +374,13 @@ class _RunningScreenState extends State<RunningScreen> {
     // 있어서 그대로 살아 있고, 지도가 다시 잡아야 하는 건 카메라뿐이다.
     setState(() => _isRunningScreenOpen = false);
 
-    // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다.
+    // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다. 보고 있던
+    // 코스의 상세 시트도 같은 값을 보여주므로 다시 받는다.
     await _loadCourses();
+    final selected = _selected;
+    if (!mounted || selected == null) return;
+    final fresh = _courses.where((c) => c.id == selected.id).firstOrNull;
+    unawaited(_selectCourse(fresh ?? selected));
   }
 
   /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
@@ -456,27 +457,32 @@ class _RunningScreenState extends State<RunningScreen> {
         fit: StackFit.expand,
         children: [
           Positioned.fill(
+            // 현위치는 매초 바뀐다. 화면 전체가 아니라 위치를 쓰는 지도만
+            // 다시 그리도록 여기서만 듣는다.
             child: _isRunningScreenOpen
                 ? const ColoredBox(color: AppColors.paper)
-                : CourseMapView(
-                    controller: _mapController,
-                    courses: _courses,
-                    selectedCourseId: selected?.id,
-                    selectedPath: _selectedDetail?.path ?? const [],
-                    // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
-                    // 좌표 포함)을 쓰고, 오면 상세 값으로 바뀐다.
-                    selectedParkings: selected == null
-                        ? const []
-                        : (_selectedDetail ?? selected).parkings,
-                    selectedRestrooms: selected == null
-                        ? const []
-                        : (_selectedDetail ?? selected).restrooms,
-                    myPosition: _currentLocation.latest,
-                    onCourseTap: _selectCourse,
-                    onMapTap: _clearSelection,
-                    // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
-                    // 코스가 있으면 그 자리에서 다시 시작한다.
-                    initialCenter: selected?.startPoint,
+                : ListenableBuilder(
+                    listenable: _currentLocation,
+                    builder: (context, _) => CourseMapView(
+                      controller: _mapController,
+                      courses: _courses,
+                      selectedCourseId: selected?.id,
+                      selectedPath: _selectedDetail?.path ?? const [],
+                      // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
+                      // 좌표 포함)을 쓰고, 오면 상세 값으로 바뀐다.
+                      selectedParkings: selected == null
+                          ? const []
+                          : (_selectedDetail ?? selected).parkings,
+                      selectedRestrooms: selected == null
+                          ? const []
+                          : (_selectedDetail ?? selected).restrooms,
+                      myPosition: _currentLocation.latest,
+                      onCourseTap: _selectCourse,
+                      onMapTap: _clearSelection,
+                      // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
+                      // 코스가 있으면 그 자리에서 다시 시작한다.
+                      initialCenter: selected?.startPoint,
+                    ),
                   ),
           ),
           Positioned(
@@ -539,14 +545,17 @@ class _RunningScreenState extends State<RunningScreen> {
               ),
             ),
           if (selected == null)
-            CourseListSheet(
-              controller: _sheetController,
-              courses: _courses,
-              myPosition: _currentLocation.latest,
-              isLoading: _isLoadingCourses,
-              hasError: _coursesError != null,
-              onSelect: _selectCourse,
-              onRetry: _loadCourses,
+            ListenableBuilder(
+              listenable: _currentLocation,
+              builder: (context, _) => CourseListSheet(
+                controller: _sheetController,
+                courses: _courses,
+                myPosition: _currentLocation.latest,
+                isLoading: _isLoadingCourses,
+                hasError: _coursesError != null,
+                onSelect: _selectCourse,
+                onRetry: _loadCourses,
+              ),
             )
           else
             CoursePreviewSheet(

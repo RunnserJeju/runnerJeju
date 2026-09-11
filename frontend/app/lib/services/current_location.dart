@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../models/geo_point.dart';
 import 'location_service.dart';
+import '../utils/geo_utils.dart';
 
 /// 앱이 아는 "가장 최신 현위치" 하나.
 ///
@@ -47,7 +48,10 @@ class CurrentLocation extends ChangeNotifier with WidgetsBindingObserver {
   /// 오르고 애플 심사도 사용 시점 요청을 권한다. 아직 안 물어봤으면 지도 탭에
   /// 들어갈 때 [ensureStarted]가 묻는다.
   Future<void> start() async {
-    WidgetsBinding.instance.addObserver(this);
+    if (!_isObserving) {
+      _isObserving = true;
+      WidgetsBinding.instance.addObserver(this);
+    }
     final availability = await _locationService.checkAvailability();
     if (availability.isReady) {
       _isPermitted = true;
@@ -79,7 +83,20 @@ class CurrentLocation extends ChangeNotifier with WidgetsBindingObserver {
 
   /// 러닝 스트림이 받은 점을 최신값으로 흘린다. 러닝 중에도 러닝 화면 밖의
   /// 위치 소비자(러닝 화면의 초기 중심 등)가 같은 값을 보게 한다.
-  void report(GeoPoint point) => _update(point);
+  ///
+  /// 러닝 스트림은 1m마다 오는데 평상시 소비자는 그 해상도가 필요 없다. 값은
+  /// 늘 갱신하되 알림은 평상시 스트림 간격만큼 움직였을 때만 보낸다.
+  void report(GeoPoint point) {
+    final previous = _latest;
+    _latest = point;
+    if (previous == null ||
+        GeoUtils.distanceBetween(previous, point) >= _reportNotifyMeters) {
+      notifyListeners();
+    }
+  }
+
+  static const double _reportNotifyMeters = 10;
+  bool _isObserving = false;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

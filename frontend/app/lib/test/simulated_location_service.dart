@@ -50,22 +50,11 @@ class SimulatedLocationService implements LocationService {
   @override
   Stream<GeoPoint> ambientPositions() => trackPosition();
 
-  // 시뮬레이션은 좌표를 즉시 만들어 내므로 timeLimit을 볼 일이 없다.
-  @override
-  Future<GeoPoint> currentPosition({Duration? timeLimit}) async {
-    final start = _resolveRoute().first;
-    return GeoPoint(
-      latitude: start.latitude,
-      longitude: start.longitude,
-      recordedAt: DateTime.now(),
-    );
-  }
-
   @override
   Stream<GeoPoint> trackPosition() {
     // 시뮬레이터를 스트림마다 새로 만든다. 러닝을 다시 시작하면 자연히
     // 출발점부터 다시 걷는다.
-    final simulator = newSimulator();
+    final simulator = _newSimulator();
 
     late final StreamController<GeoPoint> controller;
     Timer? timer;
@@ -104,8 +93,7 @@ class SimulatedLocationService implements LocationService {
   Future<void> openLocationSettings() async {}
 
   /// 현재 설정으로 시뮬레이터를 하나 만든다.
-  /// 스트림 없이 전체 경로를 뽑아보고 싶을 때도 쓴다([RunPathSimulator.runToFinish]).
-  RunPathSimulator newSimulator() => RunPathSimulator(
+  RunPathSimulator _newSimulator() => RunPathSimulator(
     route: _resolveRoute(),
     profile: profile,
     random: _random,

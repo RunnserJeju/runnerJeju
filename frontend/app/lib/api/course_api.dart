@@ -1,5 +1,6 @@
 import '../models/running_course.dart';
 import '../network/api_client.dart';
+import '../network/json.dart';
 
 /// API 계층: 코스 관련 서버 엔드포인트 1개당 메서드 1개.
 class CourseApi {
@@ -8,7 +9,10 @@ class CourseApi {
   final ApiClient _client;
 
   /// 코스 목록. keyword(이름 부분 일치)와 limit은 서버 쿼리 파라미터로 그대로 넘긴다.
-  Future<List<RunningCourse>> fetchCourses({String? keyword, int? limit}) async {
+  Future<List<RunningCourse>> fetchCourses({
+    String? keyword,
+    int? limit,
+  }) async {
     final response = await _client.dio.get(
       '/courses',
       queryParameters: {
@@ -17,9 +21,7 @@ class CourseApi {
       },
     );
 
-    return (response.data as List)
-        .map((e) => RunningCourse.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return parseList(response.data, RunningCourse.fromJson);
   }
 
   /// 코스 상세 (경로 좌표 포함).
