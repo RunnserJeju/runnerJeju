@@ -48,6 +48,9 @@ class User(Base):
     google_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, index=True, default=None
     )
+    # 탈퇴 시 Apple 쪽 연결을 끊는(revoke) 데 쓰는 refresh 토큰(app/apple_auth.py).
+    # 로그인 때 authorization code를 교환해 채운다. 탈퇴 시 함께 지운다.
+    apple_refresh_token: Mapped[str | None] = mapped_column(Text, default=None)
     nickname: Mapped[str | None] = mapped_column(String(100), default=None)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
     # provider가 동의항목으로 내려줄 때만 채워진다. 로그인 식별자가 아니라

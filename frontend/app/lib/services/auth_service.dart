@@ -116,6 +116,7 @@ class AuthService {
     try {
       final tokens = await _authApi.loginWithApple(
         identityToken,
+        authorizationCode: credential.authorizationCode,
         email: credential.email,
       );
       await _tokenStorage.save(

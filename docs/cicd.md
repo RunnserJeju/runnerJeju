@@ -141,6 +141,29 @@ gcloud secrets add-iam-policy-binding kakao-key `
 
 이로써 운영 시크릿은 `db-url`, `jwt-key`, `sb-key`, `kakao-key` 4개다.
 
+## 1-1. Apple Sign in 키를 Secret Manager에 (탈퇴 시 Apple 연결 해제용)
+
+앱스토어 계정 삭제 요건 — 탈퇴할 때 Apple 쪽 앱 연결을 끊어야 한다
+(`server/app/apple_auth.py`). 없으면 Apple 로그인 계정의 탈퇴가 서버에서 revoke를
+건너뛴다(로그인 시 `APPLE_* 미설정` 경고가 남는다).
+
+1. Apple Developer → Certificates, Identifiers & Profiles → **Keys** → "+"
+2. 이름 입력, **Sign in with Apple** 체크 → Configure → Primary App ID에 앱 선택
+3. Continue → Register → **Download**(.p8, 한 번만 받을 수 있다). 화면의 **Key ID**를 적어둔다.
+4. `cloudbuild.yaml`의 `_APPLE_KEY_ID`에 그 Key ID를 넣는다(비밀값 아님).
+5. .p8 내용을 시크릿으로 올린다:
+
+```powershell
+gcloud secrets create apple-signin-key --data-file=AuthKey_XXXXXXXXXX.p8
+
+gcloud secrets add-iam-policy-binding apple-signin-key `
+  --member="serviceAccount:1090471391353-compute@developer.gserviceaccount.com" `
+  --role="roles/secretmanager.secretAccessor"
+```
+
+로컬은 `infra/.env`에 `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`를 넣는다
+(`infra/.env.example` 참고).
+
 ## 2. 빌드 계정 ✅
 
 **기본 compute 계정을 그대로 쓴다** — `1090471391353-compute@developer.gserviceaccount.com`.

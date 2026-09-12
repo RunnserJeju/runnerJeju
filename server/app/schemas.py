@@ -66,6 +66,8 @@ class AppleLoginRequest(BaseModel):
 
     identity_token: str
     email: str | None = None
+    # 탈퇴 시 Apple 연결 해제용 refresh 토큰을 얻기 위한 1회용 코드. 앱이 함께 보낸다.
+    authorization_code: str | None = None
 
 
 class GoogleLoginRequest(BaseModel):

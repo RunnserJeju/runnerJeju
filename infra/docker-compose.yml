@@ -32,6 +32,10 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_API_SECRET_KEY: ${SUPABASE_API_SECRET_KEY:-}
       SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-banners}
+      # Sign in with Apple 서버 연동(탈퇴 시 Apple 연결 해제). 비우면 비활성.
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_KEY_ID: ${APPLE_KEY_ID:-}
+      APPLE_PRIVATE_KEY: ${APPLE_PRIVATE_KEY:-}
       # 기본값을 두지 않는다. 없으면 app/config_guard.py가 기동을 거부한다.
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
       # 운영 웹 세션 쿠키. 로컬은 http라 Secure 쿠키가 저장되지 않으므로 꺼둔다
