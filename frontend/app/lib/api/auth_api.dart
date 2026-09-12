@@ -84,4 +84,9 @@ class AuthApi {
       data: {'refresh_token': refreshToken},
     );
   }
+
+  /// 회원 탈퇴. 서버가 PII를 익명화하고 모든 refresh 토큰을 폐기한다.
+  Future<void> withdraw() {
+    return _client.dio.delete('/auth/me');
+  }
 }

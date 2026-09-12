@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../exceptions/app_exception.dart';
 import '../../models/run_record.dart';
 import '../../models/running_course.dart';
 import '../../models/running_program.dart';
 import '../../services/service_locator.dart';
+import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/course_card.dart';
@@ -42,6 +44,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _logout() async {
     await Services.instance.auth.logout();
     if (!mounted) return;
+    _goToLogin();
+  }
+
+  Future<void> _withdraw() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('정말 탈퇴할까요?'),
+        content: const Text(
+          '계정 정보(이메일·닉네임·프로필)와 러닝 경로가 삭제되고, '
+          '완주 스탬프와 찜 목록은 복구할 수 없어요.\n'
+          '같은 계정으로 다시 로그인하면 새 계정으로 시작해요.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('탈퇴하기'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await Services.instance.auth.withdraw();
+    } on AppException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
+    }
+    if (!mounted) return;
+    _goToLogin();
+  }
+
+  void _goToLogin() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
@@ -69,7 +113,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           builder: (context, snapshot) => AsyncView<_ProfileData>(
             snapshot: snapshot,
             onRetry: _refresh,
-            builder: (context, data) => _ProfileBody(data: data),
+            builder: (context, data) =>
+                _ProfileBody(data: data, onWithdraw: _withdraw),
           ),
         ),
       ),
@@ -117,9 +162,10 @@ class _ProfileData {
 }
 
 class _ProfileBody extends StatefulWidget {
-  const _ProfileBody({required this.data});
+  const _ProfileBody({required this.data, required this.onWithdraw});
 
   final _ProfileData data;
+  final VoidCallback onWithdraw;
 
   @override
   State<_ProfileBody> createState() => _ProfileBodyState();
@@ -230,6 +276,21 @@ class _ProfileBodyState extends State<_ProfileBody> {
             _ProgramTile(program: program),
             const SizedBox(height: 10),
           ],
+        const SizedBox(height: 36),
+        // 스토어 정책(계정 삭제 제공)용. 눈에 띄지 않게 맨 아래 작은 텍스트로.
+        Center(
+          child: TextButton(
+            onPressed: widget.onWithdraw,
+            style: TextButton.styleFrom(foregroundColor: AppColors.muted),
+            child: const Text(
+              '회원탈퇴',
+              style: TextStyle(
+                fontSize: 13,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }

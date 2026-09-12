@@ -110,7 +110,7 @@ class _RunMapViewState extends State<RunMapView>
 
   // 오버레이는 ID가 아니라 객체 참조로 다룬다. 매번 지우고 다시 그리는 대신
   // changePoint/move로 제자리 갱신해야 러닝 중 깜빡임이 없다.
-  kakao.Route? _courseRoute;
+  kakao.BaseRoute? _courseRoute;
   // 현재 위치 마커. Label(Poi)인 이유는 [_syncLivePosition]에 적어 뒀다.
   kakao.Poi? _currentPositionMarker;
   bool _isTracking = false;
@@ -121,6 +121,9 @@ class _RunMapViewState extends State<RunMapView>
   /// 지금 그려져 있는 코스에 화살표가 얹혀 있는지. 러닝 시작/종료에 따라 바뀐다.
   bool? _drawnCourseDirection;
   kakao.RouteStyle? _plainCourseStyle;
+
+  /// 화살표 패턴 스타일. 다중 선형(세그먼트) 전용으로 등록하므로 단일 선형에
+  /// 쓰는 [_plainCourseStyle]과 섞지 않는다.
   kakao.RouteStyle? _arrowCourseStyle;
 
   /// 코스 시설(주차장/화장실) 배지. 정적이라 한 번만 그리고 그대로 둔다.
@@ -218,6 +221,15 @@ class _RunMapViewState extends State<RunMapView>
 
   /// 코스 진행방향 화살표를 찍는 간격(px). 화면 기준이라 배율과 무관하다.
   static const double _arrowSpacing = 40;
+
+  /// 코스 선을 그릴 때 걷어낼 잔 꼭짓점의 허용 오차(m). 화살표 패턴은 선분
+  /// 방향으로 눕혀 그려져서, 꼭짓점을 걸친 화살표는 선 밖으로 비어져 나온다.
+  /// GPS 흔들림으로 생긴 꼭짓점을 지우면 그런 자리가 크게 줄어든다.
+  static const double _courseDrawTolerance = 2;
+
+  /// 이보다 크게 꺾이는 꼭짓점에서 코스 선을 세그먼트로 나눈다. 패턴은 세그먼트
+  /// 단위로 다시 시작하므로 화살표가 그 꼭짓점을 걸치지 않는다.
+  static const double _courseBendThreshold = 20;
 
   /// 지도 갱신 주기(≈30Hz).
   ///
@@ -557,13 +569,42 @@ class _RunMapViewState extends State<RunMapView>
     final style = await _ensureCourseStyle(withArrows);
     if (style == null || _disposed) return;
 
-    _courseRoute = await _syncRoute(
-      controller,
-      existing: _courseRoute,
-      points: points,
-      style: style,
-      zOrder: _courseZOrder,
-    );
+    // 단일 선형과 다중 선형은 제자리 갱신이 서로 호환되지 않아 통째로 바꾼다.
+    // 코스는 러닝 시작·종료에만 다시 그리므로 비용은 무시할 만하다.
+    final existing = _courseRoute;
+    if (existing != null) {
+      await controller.routeLayer.removeRoute(existing);
+      _courseRoute = null;
+    }
+
+    final drawable = GeoUtils.simplify(points, _courseDrawTolerance);
+    if (drawable.length < 2) {
+      _drawnCoursePath = points;
+      _drawnCourseDirection = withArrows;
+      return;
+    }
+
+    if (withArrows) {
+      final option = kakao.MultipleRouteOption([style], zOrder: _courseZOrder);
+      for (final piece in GeoUtils.splitAtBends(
+        drawable,
+        _courseBendThreshold,
+      )) {
+        option.addRouteWithIndex(piece.map((p) => p.toLatLng()).toList(), 0);
+      }
+      _courseRoute = await controller.routeLayer.addMultipleRoute(option);
+    } else {
+      _courseRoute = await controller.routeLayer.addRoute(
+        drawable.map((p) => p.toLatLng()).toList(),
+        style,
+        zOrder: _courseZOrder,
+      );
+    }
+    if (_disposed) {
+      await _courseRoute?.remove();
+      _courseRoute = null;
+      return;
+    }
     _drawnCoursePath = points;
     _drawnCourseDirection = withArrows;
   }
@@ -789,35 +830,6 @@ class _RunMapViewState extends State<RunMapView>
 
     if (current.isNotEmpty) segments.add(current);
     return segments;
-  }
-
-  /// 선 하나를 현재 [points] 상태에 맞춘다. 점이 부족하면 지우고, 이미 있으면
-  /// 제자리 갱신하고, 없으면 새로 그린다. 갱신된 객체(또는 null)를 돌려준다.
-  Future<kakao.Route?> _syncRoute(
-    kakao.KakaoMapController controller, {
-    required kakao.Route? existing,
-    required List<GeoPoint> points,
-    required kakao.RouteStyle style,
-    required int zOrder,
-  }) async {
-    // 선이 되려면 점이 둘 이상 필요하다.
-    if (points.length < 2) {
-      if (existing != null) {
-        await controller.routeLayer.removeRoute(existing);
-      }
-      return null;
-    }
-
-    final latLngs = points.map((p) => p.toLatLng()).toList();
-    if (existing == null) {
-      return controller.routeLayer.addRoute(latLngs, style, zOrder: zOrder);
-    }
-
-    // changePoint는 선에 저장된 스타일을 그대로 다시 보낸다. 스타일이 바뀌었으면
-    // 따로 갈아 끼워야 한다.
-    if (!identical(existing.style, style)) await existing.changeStyle(style);
-    await existing.changePoint(latLngs);
-    return existing;
   }
 
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {

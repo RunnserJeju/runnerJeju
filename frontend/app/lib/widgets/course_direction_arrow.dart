@@ -20,8 +20,10 @@ const Color _arrowColor = Colors.white;
 const double _arrowSize = 14;
 
 /// 진행방향으로의 길이(dp). 길수록 뾰족해서 방향이 잘 읽히지만,
-/// 꺾이는 지점에서 선 밖으로 삐져나오는 양도 커진다.
-const double _arrowLength = 9;
+/// 꺾이는 지점에서 선 밖으로 삐져나오는 양도 커진다. 선 굵기(10dp)의
+/// 절반보다 짧게 두면 화살표 중심이 꼭짓점에 걸려도 웬만한 각도에서는
+/// 선 안에 머문다.
+const double _arrowLength = 7;
 
 /// 코스 선을 가로지르는 폭(dp). 선 굵기(RunMapView._courseLineWidth)보다
 /// 좁아야 한다. 이미지는 선 굵기에 맞춰 줄여주지 않고 이 크기 그대로 찍힌다.

@@ -186,4 +186,16 @@ class AuthService {
     await _tokenStorage.clear();
     _currentUser = null;
   }
+
+  /// 회원 탈퇴. 서버 익명화가 성공해야만 로컬 세션을 지운다 — 실패 시 계정이
+  /// 남아 있는데 로그아웃만 된 것처럼 보이면 안 된다.
+  Future<void> withdraw() async {
+    try {
+      await _authApi.withdraw();
+    } catch (e) {
+      throw AppException('탈퇴 처리에 실패했어요. 잠시 후 다시 시도해 주세요.', e);
+    }
+    await _tokenStorage.clear();
+    _currentUser = null;
+  }
 }
