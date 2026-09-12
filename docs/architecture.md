@@ -101,7 +101,7 @@ server/
 
 마이그레이션 누락은 두 겹으로 막는다.
 
-1. 앱을 띄우기 **전에** `alembic upgrade head`를 돌린다 — 로컬은 `scripts/dev.ps1 up`이, 운영은 배포 파이프라인의 마이그레이션 스텝(`cloudbuild.yaml`)이 담당한다. 기동 경로(엔트리포인트)에 두지 않는 이유는 마이그레이션이 실패했을 때 컨테이너가 재시작만 반복하며 정상 인스턴스가 남지 않기 때문이다([cicd.md](cicd.md))
+1. 앱을 띄우기 **전에** `alembic upgrade head`를 돌린다 — 로컬은 `scripts/local_docker_start.ps1 up`이, 운영은 배포 파이프라인의 마이그레이션 스텝(`cloudbuild.yaml`)이 담당한다. 기동 경로(엔트리포인트)에 두지 않는 이유는 마이그레이션이 실패했을 때 컨테이너가 재시작만 반복하며 정상 인스턴스가 남지 않기 때문이다([cicd.md](cicd.md))
 2. 그 경로를 우회해도, 앱이 기동 시 DB 리비전이 head인지 확인하고 아니면 기동을 거부한다 (`app/schema_guard.py`)
 
 `migrations/env.py`의 `include_object`는 **PostGIS가 만든 테이블을 autogenerate 대상에서 제외한다.** DB 이미지가 PostGIS라 `topology`, `layer`, `spatial_ref_sys` 등이 함께 들어 있는데, 걸러내지 않으면 autogenerate가 이들을 "메타데이터에 없는 테이블"로 보고 전부 DROP하는 마이그레이션을 만들어낸다.
@@ -110,6 +110,16 @@ server/
 
 - ~~**인증이 없다.**~~ 소셜 로그인(카카오/애플/구글)과 토큰 검증이 붙어 `current_user_id`가 실제 토큰에서 사용자를 꺼낸다. 코스 등록 API(`POST /courses/gpx`)도 `require_admin`으로 막았다 — 관리자 전용 엔드포인트 목록과 그 배선 검사는 `tests/test_admin_routes.py`에 있다.
 - **경로를 PostGIS가 아니라 JSONB에 저장한다.** 지금 앱이 쓰는 API에는 공간 질의가 없고, 경로는 그리기와 순서 비교에만 쓰여서 JSONB로 충분하다. "내 주변 코스 검색" 같은 질의가 실제로 필요해지면 그때 `geography(LineString, 4326)` 컬럼을 추가하는 편이 낫다.
+
+### 회원 탈퇴 (계정 삭제)
+
+`DELETE /auth/me` — **soft delete + 익명화**다. hard delete가 아니라 `users` 행을 남기되 PII(email·닉네임·프로필·kakao/apple/google_id)를 전부 null로 스크럽하고 `deleted_at`을 찍는다. 이유는 **완주·찜 통계를 역사적으로 보존**하기 위해서다 — 활동(stamps/favorites)은 익명 상태로 남는다. 단 러닝 GPS 경로(`runs.path`)는 위치정보라 비운다.
+
+- **재로그인 = 새 계정**: provider id를 null로 밀어 유니크를 풀어두므로, 같은 소셜 계정으로 다시 로그인하면 새 user가 생긴다(Postgres는 NULL을 유니크에서 다중 허용).
+- **세션**: 탈퇴 시 그 유저의 refresh 토큰을 전부 삭제한다. 잔여 access 토큰은 TTL(1h) 안에 만료되며, `deleted_at`을 요청마다 검사하지는 않는다(무상태 인증 유지). refresh 경로에서만 탈퇴 계정을 한 번 더 막는다.
+- **`last_login_at`**: 로그인(`_issue_tokens`)·리프레시에서 갱신한다. 활성 이용자 통계·휴면 판정용이며, 요청마다 갱신하지 않는다.
+- **거르는 곳**: 회원 목록(`GET /admin/users`)과 활성 이용자 통계는 `deleted_at IS NULL`로 husk를 제외한다. 완주/찜 누적 집계는 거르지 않는다(탈퇴자 포함 = 역사적 누적).
+- **아직 안 한 것**: 소셜 provider 토큰 revoke(Apple 등)는 provider 토큰을 저장하지 않아 별도 작업이다 — Apple 프로덕션 출시 전 추가(로그인에서 authorization code 수집 + refresh token 교환·저장 필요). Android 출시 시 Google Play용 웹 삭제 URL도 필요.
 
 ## 코스 데이터 파이프라인
 

@@ -1,3 +1,5 @@
+import '../utils/formatters.dart';
+
 /// 러닝 프로그램. 커뮤니티 탭에 노출되는 러닝 모임/챌린지.
 ///
 /// 아직 서버에 프로그램 API가 없어 목록은 비어 있다. 필드는 서버가 생길 때
@@ -22,6 +24,17 @@ class RunningProgram {
 
   /// 프로그램 대표 이미지. 없으면 화면에서 기본 도안을 그린다.
   final String? imageUrl;
+
+  /// 진행 기간 표기. 상시 모집(둘 다 null)이면 null이라 화면에서 감춘다.
+  String? get periodLabel {
+    final start = startDate;
+    final end = endDate;
+    if (start == null && end == null) return null;
+    if (start != null && end != null) {
+      return '${Formatters.date(start)} ~ ${Formatters.date(end)}';
+    }
+    return Formatters.date((start ?? end)!);
+  }
 
   factory RunningProgram.fromJson(Map<String, dynamic> json) => RunningProgram(
     id: json['id'].toString(),

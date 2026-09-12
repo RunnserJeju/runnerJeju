@@ -1,4 +1,4 @@
-import type { Course, CourseUpdatePayload, Facility } from '../api'
+import type { Course, CourseUpdatePayload, CourseVisibility, Facility } from '../api'
 import FacilityListEditor, { type FacilityDraft } from './FacilityListEditor'
 
 /** 등록/수정이 공유하는 메타데이터 폼 값. 입력 중에는 전부 문자열로 들고,
@@ -7,6 +7,8 @@ export interface CourseFormValues {
   name: string
   distanceKm: string
   difficulty: string
+  /** '' | 'public' | 'admin'. 기본값 없음 — 제출 시 반드시 골라야 한다. */
+  visibility: string
   address: string
   tags: string
   description: string
@@ -20,6 +22,7 @@ export function emptyValues(): CourseFormValues {
     name: '',
     distanceKm: '',
     difficulty: '1',
+    visibility: '',
     address: '',
     tags: '',
     description: '',
@@ -40,6 +43,7 @@ export function valuesFromCourse(course: Course): CourseFormValues {
     name: course.name,
     distanceKm: String(course.distance_km),
     difficulty: String(course.difficulty),
+    visibility: course.visibility ?? '',
     address: course.address,
     tags: course.tags ?? '',
     description: course.description ?? '',
@@ -53,6 +57,7 @@ export interface ValidatedCourseForm {
   name: string
   distanceKm: number
   difficulty: number
+  visibility: CourseVisibility
   address: string
   tags: string
   description: string
@@ -80,6 +85,11 @@ export function validate(
   const difficulty = Number(values.difficulty)
   if (![1, 2, 3].includes(difficulty)) {
     return { ok: false, message: '난이도를 선택해 주세요.' }
+  }
+
+  const visibility = values.visibility
+  if (visibility !== 'public' && visibility !== 'admin') {
+    return { ok: false, message: '공개 범위를 선택해 주세요.' }
   }
 
   if (!values.address.trim()) {
@@ -126,6 +136,7 @@ export function validate(
       name: values.name.trim(),
       distanceKm,
       difficulty,
+      visibility,
       address: values.address.trim(),
       tags: normalizeTags(values.tags),
       description: values.description.trim(),
@@ -150,6 +161,7 @@ export function toUpdatePayload(data: ValidatedCourseForm): CourseUpdatePayload 
     name: data.name,
     distance_km: data.distanceKm,
     difficulty: data.difficulty,
+    visibility: data.visibility,
     address: data.address,
     tags: data.tags || null,
     description: data.description || null,
@@ -207,6 +219,20 @@ export default function CourseForm({ values, onChange, nameOptional = false }: P
             <option value="1">★ (쉬움)</option>
             <option value="2">★★ (보통)</option>
             <option value="3">★★★ (어려움)</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="course-visibility">
+            공개 범위 <span className="hint">운영자만은 테스트용</span>
+          </label>
+          <select
+            id="course-visibility"
+            value={values.visibility}
+            onChange={(event) => set('visibility', event.target.value)}
+          >
+            <option value="">선택</option>
+            <option value="public">전체 공개</option>
+            <option value="admin">운영자만</option>
           </select>
         </div>
         <div className="field">

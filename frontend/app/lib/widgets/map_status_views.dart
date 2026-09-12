@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
+import '../theme/app_theme.dart';
 
 /// 지도를 못 그릴 때 대신 보여주는 화면들.
 ///
@@ -17,7 +18,7 @@ class MapLoadingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const ColoredBox(
-      color: Color(0xFFE8EBEF),
+      color: AppColors.surfaceMuted,
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -30,7 +31,7 @@ class MapLoadingView extends StatelessWidget {
             SizedBox(height: 14),
             Text(
               '현재 위치를 찾고 있어요',
-              style: TextStyle(fontSize: 13, color: Color(0xFF5B6472)),
+              style: TextStyle(fontSize: 13, color: AppColors.iconSubtle),
             ),
           ],
         ),
@@ -50,11 +51,11 @@ class MapEmptyView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const ColoredBox(
-      color: Color(0xFFE8EBEF),
+      color: AppColors.surfaceMuted,
       child: Center(
         child: Text(
           '표시할 경로가 없어요',
-          style: TextStyle(fontSize: 13, color: Color(0xFF5B6472)),
+          style: TextStyle(fontSize: 13, color: AppColors.iconSubtle),
         ),
       ),
     );
@@ -68,14 +69,18 @@ class MissingMapKeyPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFE8EBEF),
+      color: AppColors.surfaceMuted,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.map_outlined, size: 40, color: Color(0xFF7A8593)),
+              const Icon(
+                Icons.map_outlined,
+                size: 40,
+                color: AppColors.textSubtle,
+              ),
               const SizedBox(height: 12),
               Text(
                 '지도를 표시하려면 카카오 앱 키가 필요해요',
@@ -85,7 +90,7 @@ class MissingMapKeyPlaceholder extends StatelessWidget {
               const SizedBox(height: 6),
               const Text(
                 'config/app_config.dart의 kakaoNativeAppKey가 비어 있어요',
-                style: TextStyle(fontSize: 11, color: Color(0xFF5B6472)),
+                style: TextStyle(fontSize: 11, color: AppColors.iconSubtle),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -111,7 +116,7 @@ class MapErrorView extends StatelessWidget {
     final hash = keyHash;
 
     return ColoredBox(
-      color: const Color(0xFFE8EBEF),
+      color: AppColors.surfaceMuted,
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -121,7 +126,7 @@ class MapErrorView extends StatelessWidget {
               const Icon(
                 Icons.error_outline,
                 size: 40,
-                color: Color(0xFF7A8593),
+                color: AppColors.textSubtle,
               ),
               const SizedBox(height: 12),
               Text(
@@ -132,14 +137,17 @@ class MapErrorView extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 _reason,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF5B6472)),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.iconSubtle,
+                ),
                 textAlign: TextAlign.center,
               ),
               if (hash != null) ...[
                 const SizedBox(height: 16),
                 const Text(
                   '이 앱의 키 해시',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF5B6472)),
+                  style: TextStyle(fontSize: 11, color: AppColors.iconSubtle),
                 ),
                 const SizedBox(height: 4),
                 SelectableText(
@@ -173,8 +181,9 @@ class MapErrorView extends StatelessWidget {
       return switch (e.code) {
         400 => '요청에 필요한 정보가 빠졌어요.',
         401 => '앱 키가 올바르지 않아요.\nAppConfig.kakaoNativeAppKey를 확인해 주세요.',
-        403 => '이 앱에 카카오맵 사용 권한이 없어요.\n콘솔에서 카카오맵 약관 동의와 '
-            '플랫폼 등록(패키지명·키 해시)을 확인해 주세요.',
+        403 =>
+          '이 앱에 카카오맵 사용 권한이 없어요.\n콘솔에서 카카오맵 약관 동의와 '
+              '플랫폼 등록(패키지명·키 해시)을 확인해 주세요.',
         429 => '카카오맵 사용량을 초과했어요.\n잠시 후 다시 시도해 주세요.',
         499 => '네트워크에 연결하지 못했어요.',
         _ => e.message ?? '알 수 없는 인증 오류예요.',

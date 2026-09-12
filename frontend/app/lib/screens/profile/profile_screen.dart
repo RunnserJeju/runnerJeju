@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../exceptions/app_exception.dart';
 import '../../models/run_record.dart';
 import '../../models/running_course.dart';
 import '../../models/running_program.dart';
 import '../../services/service_locator.dart';
+import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/course_card.dart';
@@ -11,6 +13,7 @@ import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
 import '../course/course_detail_screen.dart';
 import '../run/run_detail_screen.dart';
+import '../../widgets/section_title.dart';
 
 /// 프로필: 최근 한 달 러닝 요약 + 찜한 코스 + 참여한 프로그램.
 class ProfileScreen extends StatefulWidget {
@@ -41,6 +44,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _logout() async {
     await Services.instance.auth.logout();
     if (!mounted) return;
+    _goToLogin();
+  }
+
+  Future<void> _withdraw() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('정말 탈퇴할까요?'),
+        content: const Text(
+          '계정 정보(이메일·닉네임·프로필)와 러닝 경로가 삭제되고, '
+          '완주 스탬프와 찜 목록은 복구할 수 없어요.\n'
+          '같은 계정으로 다시 로그인하면 새 계정으로 시작해요.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('탈퇴하기'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await Services.instance.auth.withdraw();
+    } on AppException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
+    }
+    if (!mounted) return;
+    _goToLogin();
+  }
+
+  void _goToLogin() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
@@ -68,7 +113,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           builder: (context, snapshot) => AsyncView<_ProfileData>(
             snapshot: snapshot,
             onRetry: _refresh,
-            builder: (context, data) => _ProfileBody(data: data),
+            builder: (context, data) =>
+                _ProfileBody(data: data, onWithdraw: _withdraw),
           ),
         ),
       ),
@@ -116,9 +162,10 @@ class _ProfileData {
 }
 
 class _ProfileBody extends StatefulWidget {
-  const _ProfileBody({required this.data});
+  const _ProfileBody({required this.data, required this.onWithdraw});
 
   final _ProfileData data;
+  final VoidCallback onWithdraw;
 
   @override
   State<_ProfileBody> createState() => _ProfileBodyState();
@@ -177,7 +224,7 @@ class _ProfileBodyState extends State<_ProfileBody> {
           ),
         ),
         const SizedBox(height: 28),
-        const _SectionTitle('최근 한 달 러닝'),
+        const SectionTitle('최근 한 달 러닝'),
         const SizedBox(height: 12),
         if (runs.isEmpty)
           const _EmptyNote(
@@ -200,7 +247,7 @@ class _ProfileBodyState extends State<_ProfileBody> {
             ),
         ],
         const SizedBox(height: 28),
-        const _SectionTitle('찜한 코스'),
+        const SectionTitle('찜한 코스'),
         const SizedBox(height: 12),
         if (data.favorites.isEmpty)
           const _EmptyNote(
@@ -220,37 +267,31 @@ class _ProfileBodyState extends State<_ProfileBody> {
             const SizedBox(height: 12),
           ],
         const SizedBox(height: 28),
-        const _SectionTitle('참여한 프로그램'),
+        const SectionTitle('참여한 프로그램'),
         const SizedBox(height: 12),
         if (data.programs.isEmpty)
-          const _EmptyNote(
-            icon: Icons.groups_rounded,
-            message: '참여한 프로그램이 없어요',
-          )
+          const _EmptyNote(icon: Icons.groups_rounded, message: '참여한 프로그램이 없어요')
         else
           for (final program in data.programs) ...[
             _ProgramTile(program: program),
             const SizedBox(height: 10),
           ],
+        const SizedBox(height: 36),
+        // 스토어 정책(계정 삭제 제공)용. 눈에 띄지 않게 맨 아래 작은 텍스트로.
+        Center(
+          child: TextButton(
+            onPressed: widget.onWithdraw,
+            style: TextButton.styleFrom(foregroundColor: AppColors.muted),
+            child: const Text(
+              '회원탈퇴',
+              style: TextStyle(
+                fontSize: 13,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ),
       ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.4,
-      ),
     );
   }
 }
@@ -264,9 +305,9 @@ class _EmptyNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = Theme.of(context).colorScheme.onSurface.withValues(
-      alpha: 0.45,
-    );
+    final muted = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.45);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Row(
@@ -274,10 +315,7 @@ class _EmptyNote extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: muted),
           const SizedBox(width: 8),
-          Text(
-            message,
-            style: TextStyle(fontSize: 14, color: muted),
-          ),
+          Text(message, style: TextStyle(fontSize: 14, color: muted)),
         ],
       ),
     );
@@ -292,7 +330,7 @@ class _ProgramTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final period = _period(program);
+    final period = program.periodLabel;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -337,17 +375,6 @@ class _ProgramTile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  /// 진행 기간. 둘 다 없으면(상시 모집) 표기하지 않는다.
-  String? _period(RunningProgram program) {
-    final start = program.startDate;
-    final end = program.endDate;
-    if (start == null && end == null) return null;
-    if (start != null && end != null) {
-      return '${Formatters.date(start)} ~ ${Formatters.date(end)}';
-    }
-    return Formatters.date((start ?? end)!);
   }
 }
 

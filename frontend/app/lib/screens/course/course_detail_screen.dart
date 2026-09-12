@@ -71,10 +71,7 @@ class _CourseDetailBody extends StatelessWidget {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
-              SizedBox(
-                height: 280,
-                child: RunMapView(coursePath: course.path),
-              ),
+              SizedBox(height: 280, child: RunMapView(coursePath: course.path)),
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -132,7 +129,9 @@ class _CourseDetailBody extends StatelessWidget {
                       const SizedBox(height: 24),
                       Text(
                         course.description!,
-                        style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          height: 1.6,
+                        ),
                       ),
                     ],
                     const SizedBox(height: 24),
@@ -205,9 +204,7 @@ class _InfoRow extends StatelessWidget {
               style: theme.textTheme.bodySmall?.copyWith(color: muted),
             ),
           ),
-          Expanded(
-            child: Text(value, style: theme.textTheme.bodyMedium),
-          ),
+          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
         ],
       ),
     );

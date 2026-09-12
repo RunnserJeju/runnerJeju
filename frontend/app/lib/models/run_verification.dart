@@ -65,8 +65,6 @@ class RunVerification {
   /// 검증이 matched일 때 발급된 완주 스탬프 id. 스탬프는 검증 결과로만 발급된다.
   final String? earnedStampId;
 
-  bool get isMatched => status == VerificationStatus.matched;
-
   /// 일치율을 백분율 문자열로. 아직 없으면 null.
   String? get matchRateLabel =>
       matchRate == null ? null : '${(matchRate! * 100).round()}%';

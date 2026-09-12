@@ -41,8 +41,8 @@ class _ElevationChartPainter extends CustomPainter {
   /// 늘려 그리면 평지가 산맥처럼 보인다. 최소 폭을 두어 평지는 평지로 보이게 한다.
   static const double _minSpanMeters = 40;
 
-  static const Color _gridColor = Color(0xFFEDEFF2);
-  static const Color _labelColor = Color(0xFFA3ABB6);
+  static const Color _gridColor = AppColors.lineFaint;
+  static const Color _labelColor = AppColors.textFaint;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -66,7 +66,10 @@ class _ElevationChartPainter extends CustomPainter {
     final line = Path();
     for (var i = 0; i < profile.samples.length; i++) {
       final sample = profile.samples[i];
-      final offset = Offset(xOf(sample.distanceMeters), yOf(sample.altitudeMeters));
+      final offset = Offset(
+        xOf(sample.distanceMeters),
+        yOf(sample.altitudeMeters),
+      );
       if (i == 0) {
         line.moveTo(offset.dx, offset.dy);
       } else {
@@ -109,9 +112,9 @@ class _ElevationChartPainter extends CustomPainter {
 
   /// y축이 담을 고도 범위(m). 데이터 범위를 가운데 두고 위아래로 넓힌다.
   (double, double) _verticalRange() {
-    final span = ((profile.maxAltitude - profile.minAltitude) *
-            (1 + _headroomRatio * 2))
-        .clamp(_minSpanMeters, double.infinity);
+    final span =
+        ((profile.maxAltitude - profile.minAltitude) * (1 + _headroomRatio * 2))
+            .clamp(_minSpanMeters, double.infinity);
 
     final center = (profile.minAltitude + profile.maxAltitude) / 2;
     var low = center - span / 2;
@@ -155,10 +158,7 @@ class _ElevationChartPainter extends CustomPainter {
     final peak = profile.samples.reduce(
       (a, b) => b.altitudeMeters > a.altitudeMeters ? b : a,
     );
-    final center = Offset(
-      xOf(peak.distanceMeters),
-      yOf(peak.altitudeMeters),
-    );
+    final center = Offset(xOf(peak.distanceMeters), yOf(peak.altitudeMeters));
 
     canvas.drawCircle(center, 4, Paint()..color = AppColors.accent);
     canvas.drawCircle(
@@ -215,10 +215,14 @@ class _ElevationChartPainter extends CustomPainter {
     )..layout();
 
     final offset = switch (align) {
-      _Align.rightCenter =>
-        Offset(anchor.dx - painter.width, anchor.dy - painter.height / 2),
-      _Align.bottomCenter =>
-        Offset(anchor.dx - painter.width / 2, anchor.dy - painter.height),
+      _Align.rightCenter => Offset(
+        anchor.dx - painter.width,
+        anchor.dy - painter.height / 2,
+      ),
+      _Align.bottomCenter => Offset(
+        anchor.dx - painter.width / 2,
+        anchor.dy - painter.height,
+      ),
       _Align.topLeft => anchor,
       _Align.topRight => Offset(anchor.dx - painter.width, anchor.dy),
     };

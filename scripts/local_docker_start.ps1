@@ -12,13 +12,13 @@
     컨테이너가 재시작만 반복한다.
 
 .EXAMPLE
-    .\scripts\dev.ps1 up          # DB + API 기동 (백그라운드)
-    .\scripts\dev.ps1 logs        # 로그 따라가기
-    .\scripts\dev.ps1 migrate     # 스키마를 head까지 올리기
-    .\scripts\dev.ps1 revision "add course tags"
-    .\scripts\dev.ps1 seed        # courses/ 의 GPX를 API로 업로드
-    .\scripts\dev.ps1 test
-    .\scripts\dev.ps1 down
+    .\scripts\local_docker_start.ps1 up          # DB + API 기동 (백그라운드)
+    .\scripts\local_docker_start.ps1 logs        # 로그 따라가기
+    .\scripts\local_docker_start.ps1 migrate     # 스키마를 head까지 올리기
+    .\scripts\local_docker_start.ps1 revision "add course tags"
+    .\scripts\local_docker_start.ps1 seed        # courses/ 의 GPX를 API로 업로드
+    .\scripts\local_docker_start.ps1 test
+    .\scripts\local_docker_start.ps1 down
 #>
 
 [CmdletBinding()]
@@ -56,7 +56,11 @@ function Invoke-Api {
     else {
         # api가 안 떠 있을 때(그리고 스키마가 어긋나 못 뜰 때)도 돌아야 하므로
         # 일회용 컨테이너를 쓴다.
-        Invoke-Compose (@('run', '--rm', '--entrypoint', '', 'api') + $ApiArgs)
+        #
+        # 빈 문자열 대신 '--entrypoint=' 한 토큰으로 붙여 쓴다. Windows PowerShell 5.1은
+        # 네이티브 exe에 인자를 넘길 때 빈 문자열을 버린다. ('--entrypoint', '')로 쓰면
+        # docker가 뒤따르는 'api'를 엔트리포인트로 읽고 서비스 이름을 잃는다.
+        Invoke-Compose (@('run', '--rm', '--entrypoint=', 'api') + $ApiArgs)
     }
 }
 
@@ -72,7 +76,7 @@ function Start-Stack {
     Write-Host ''
     Write-Host '  API   http://localhost:8000' -ForegroundColor Green
     Write-Host '  docs  http://localhost:8000/docs' -ForegroundColor Green
-    Write-Host '  로그  .\scripts\dev.ps1 logs' -ForegroundColor DarkGray
+    Write-Host '  로그  .\scripts\local_docker_start.ps1 logs' -ForegroundColor DarkGray
 }
 
 switch ($Command) {
@@ -86,7 +90,7 @@ switch ($Command) {
     'migrate' { Invoke-Api @('alembic', 'upgrade', 'head') }
 
     'revision' {
-        if (-not $Rest) { throw '메시지가 필요해요. 예: .\scripts\dev.ps1 revision "add course tags"' }
+        if (-not $Rest) { throw '메시지가 필요해요. 예: .\scripts\local_docker_start.ps1 revision "add course tags"' }
         Invoke-Api (@('alembic', 'revision', '--autogenerate', '-m') + $Rest)
         Write-Host '생성된 마이그레이션을 반드시 눈으로 확인하세요. autogenerate는 완벽하지 않습니다.' -ForegroundColor Yellow
     }

@@ -5,12 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import current_user_id
+from app.deps import current_user_id, current_user_is_admin
 from app.models import Course, Favorite
 from app.routers.courses import (
     _completed_counts,
     _my_completed_course_ids,
     _to_summary,
+    visible_courses,
 )
 from app.schemas import CourseListItem
 
@@ -21,6 +22,7 @@ router = APIRouter(tags=["favorites"])
 def list_favorites(
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
     """내가 찜한 코스 목록. 코스 목록(GET /courses)과 같은 형태로 내려준다 —
     클라이언트가 같은 CourseCard로 그대로 그린다."""
@@ -35,8 +37,11 @@ def list_favorites(
     if not course_ids:
         return []
 
+    # 찜한 뒤 숨겨진 코스는 목록에서 빠진다 — GET /courses와 같은 기준.
     courses = list(
-        db.execute(select(Course).where(Course.id.in_(course_ids))).scalars()
+        db.execute(
+            visible_courses(select(Course).where(Course.id.in_(course_ids)), is_admin)
+        ).scalars()
     )
     # IN 절은 순서를 보장하지 않으므로 찜 순서로 다시 세운다.
     rank = {cid: i for i, cid in enumerate(course_ids)}

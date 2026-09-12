@@ -15,12 +15,10 @@ import '../models/geo_point.dart';
 /// 선분들의 합집합은 경로 전체와 같으므로 서버가 완성된 경로로 계산한 값과
 /// 일치한다. 갱신 1회당 수십 µs 수준이라 러닝 중 부하는 무시할 수 있다.
 class CourseCoverageTracker {
-  CourseCoverageTracker(
-    List<GeoPoint> coursePath, {
-    this.toleranceMeters = 30,
-  }) : _refLat = coursePath.isEmpty ? 0 : coursePath.first.latitude,
-       _refLng = coursePath.isEmpty ? 0 : coursePath.first.longitude,
-       _covered = List.filled(coursePath.length, false) {
+  CourseCoverageTracker(List<GeoPoint> coursePath, {this.toleranceMeters = 30})
+    : _refLat = coursePath.isEmpty ? 0 : coursePath.first.latitude,
+      _refLng = coursePath.isEmpty ? 0 : coursePath.first.longitude,
+      _covered = List.filled(coursePath.length, false) {
     // 서버 _to_local_xy와 같은 공식: 위도 1도 ≈ 111,132m, 경도는 cos(위도)만큼 축소.
     _mPerDegLng = 111320.0 * math.cos(_refLat * math.pi / 180);
     _course = [for (final p in coursePath) _toXy(p)];
@@ -81,7 +79,10 @@ class CourseCoverageTracker {
     }
   }
 
-  static double _pointDistSq(({double x, double y}) c, ({double x, double y}) p) {
+  static double _pointDistSq(
+    ({double x, double y}) c,
+    ({double x, double y}) p,
+  ) {
     final dx = c.x - p.x;
     final dy = c.y - p.y;
     return dx * dx + dy * dy;

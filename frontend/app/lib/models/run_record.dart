@@ -1,3 +1,4 @@
+import '../network/json.dart';
 import 'geo_point.dart';
 
 /// 완료된 러닝 1회의 기록.
@@ -47,9 +48,7 @@ class RunRecord {
     endedAt: DateTime.parse(json['ended_at'] as String),
     distanceMeters: (json['distance_meters'] as num).toDouble(),
     duration: Duration(seconds: (json['duration_sec'] as num).toInt()),
-    path: ((json['path'] as List?) ?? const [])
-        .map((e) => GeoPoint.fromJson(e as Map<String, dynamic>))
-        .toList(),
+    path: parseList(json['path'], GeoPoint.fromJson),
   );
 
   Map<String, dynamic> toJson() => {

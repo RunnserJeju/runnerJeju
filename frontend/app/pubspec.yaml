@@ -31,22 +31,16 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
-
   dio: ^5.7.0
   kakao_map_sdk: ^1.2.6
   kakao_flutter_sdk_user: ^1.9.7
   flutter_secure_storage: ^10.3.1
   geolocator: ^14.0.3
   intl: ^0.20.3
-  file_picker: ^12.0.0-beta.1
   sign_in_with_apple: ^6.1.4
   google_sign_in: ^7.2.0
   flutter_svg: ^2.3.0
   flutter_local_notifications: ^22.3.0
-  live_activities: ^2.5.1
   url_launcher: ^6.3.1
   cached_network_image: ^3.4.1
   sensors_plus: ^7.1.0
@@ -85,7 +79,6 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/icons/
-    - assets/circleMarker.png
     - assets/images/
 
   # An image asset can refer to one or more resolution-specific "variants", see

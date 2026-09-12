@@ -80,7 +80,9 @@ List<CourseFacility> collectFacilities(
       throw FacilityInputException('$label 주소를 입력하거나 빈 칸을 지워 주세요.');
     }
     if (entry.confirmed == null) {
-      throw FacilityInputException("$label '${entry.address}'는 '확인'을 눌러 주소를 확인해 주세요.");
+      throw FacilityInputException(
+        "$label '${entry.address}'는 '확인'을 눌러 주소를 확인해 주세요.",
+      );
     }
 
     // 좌표는 확인 결과에서, 이름/주소는 현재 입력값에서 가져온다.

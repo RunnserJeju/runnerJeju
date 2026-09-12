@@ -39,11 +39,17 @@ class AuthApi {
   /// Sign in with Apple로 받은 identityToken을 서버에 보내 우리 서비스의 JWT를 받는다.
   ///
   /// email은 애플이 최초 인가 시에만 내려주므로, 받았을 때만 함께 보낸다.
-  Future<TokenPair> loginWithApple(String identityToken, {String? email}) async {
+  /// authorizationCode는 서버가 탈퇴 시 Apple 연결 해제용 토큰을 받는 데 쓴다.
+  Future<TokenPair> loginWithApple(
+    String identityToken, {
+    required String authorizationCode,
+    String? email,
+  }) async {
     final response = await _client.dio.post(
       '/auth/apple',
       data: {
         'identity_token': identityToken,
+        'authorization_code': authorizationCode,
         'email': ?email,
       },
     );
@@ -79,6 +85,14 @@ class AuthApi {
   }
 
   Future<void> logout(String refreshToken) {
-    return _client.dio.post('/auth/logout', data: {'refresh_token': refreshToken});
+    return _client.dio.post(
+      '/auth/logout',
+      data: {'refresh_token': refreshToken},
+    );
+  }
+
+  /// 회원 탈퇴. 서버가 PII를 익명화하고 모든 refresh 토큰을 폐기한다.
+  Future<void> withdraw() {
+    return _client.dio.delete('/auth/me');
   }
 }

@@ -10,10 +10,14 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // 이전 실행(크래시 등)이 잠금화면에 남긴 러닝 Live Activity를 걷는다.
+    RunLiveActivityChannel.endLeftovers()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // 러닝 잠금화면 위젯(Live Activity) 채널. Flutter의 RunLiveWidget과 짝.
+    RunLiveActivityChannel.register(with: engineBridge.applicationRegistrar.messenger())
   }
 }

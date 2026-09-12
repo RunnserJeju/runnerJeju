@@ -5,8 +5,7 @@ import '../../models/run_stamp.dart';
 import '../../models/run_verification.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/formatters.dart';
-import '../../widgets/metric_tile.dart';
+import '../../widgets/run_metrics_card.dart';
 import '../../widgets/run_map_view.dart';
 import '../../widgets/stamp_badge.dart';
 
@@ -94,9 +93,11 @@ class _RunResultScreenState extends State<RunResultScreen> {
         _verifying = false;
       });
 
-      // 스탬프는 검증이 matched일 때만 발급된다.
-      if (verification.earnedStampId != null) {
-        await _loadStamp(verification.earnedStampId!);
+      // 스탬프는 업로드 응답과 검증 응답 어느 쪽에서도 올 수 있다. 같은 id면
+      // 이미 받아 둔 것이라 다시 부르지 않는다.
+      final stampId = verification.earnedStampId;
+      if (stampId != null && stampId != _uploadResult?.earnedStampId) {
+        await _loadStamp(stampId);
       }
     } catch (e) {
       if (!mounted) return;
@@ -145,7 +146,10 @@ class _RunResultScreenState extends State<RunResultScreen> {
           title: const Text('러닝 완료'),
           automaticallyImplyLeading: false,
           actions: [
-            IconButton(onPressed: _close, icon: const Icon(Icons.close_rounded)),
+            IconButton(
+              onPressed: _close,
+              icon: const Icon(Icons.close_rounded),
+            ),
           ],
         ),
         body: ListView(
@@ -154,7 +158,9 @@ class _RunResultScreenState extends State<RunResultScreen> {
             _SaveStatusBanner(
               saving: _saving,
               error: _saveError,
-              earnedStamp: _uploadResult?.earnedStamp ?? false,
+              earnedStamp:
+                  _uploadResult?.earnedStamp == true ||
+                  _verification?.earnedStampId != null,
               onRetry: _save,
             ),
             if (record.isCourseRun && _saveError == null) ...[
@@ -179,7 +185,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            _ResultMetrics(record: record),
+            RunMetricsCard(record: record),
             const SizedBox(height: 28),
             FilledButton(onPressed: _close, child: const Text('완료')),
           ],
@@ -206,7 +212,7 @@ class _SaveStatusBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     if (saving) {
       return const _Banner(
-        color: Color(0xFFE8EBEF),
+        color: AppColors.surfaceMuted,
         icon: Icons.cloud_upload_outlined,
         title: '기록을 저장하는 중이에요',
       );
@@ -250,7 +256,7 @@ class _VerificationBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     if (verifying) {
       return const _Banner(
-        color: Color(0xFFE8EBEF),
+        color: AppColors.surfaceMuted,
         icon: Icons.fact_check_outlined,
         title: '경로를 검증하는 중이에요',
         message: '코스대로 달렸는지 확인하고 있어요',
@@ -294,7 +300,7 @@ class _VerificationBanner extends StatelessWidget {
       ),
       // 검증 서버 분리 후 오래 걸리는 경우. 결과는 나중에 프로필에서 확인한다.
       VerificationStatus.pending || VerificationStatus.inProgress => _Banner(
-        color: const Color(0xFFE8EBEF),
+        color: AppColors.surfaceMuted,
         icon: Icons.hourglass_bottom_rounded,
         title: result.status.message,
         message: '검증이 끝나면 스탬프가 발급돼요',
@@ -371,67 +377,6 @@ class _EarnedStampCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(child: StampBadge(stamp: stamp, size: 128)),
-      ),
-    );
-  }
-}
-
-class _ResultMetrics extends StatelessWidget {
-  const _ResultMetrics({required this.record});
-
-  final RunRecord record;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              Formatters.dateTime(record.startedAt),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: MetricTile(
-                label: '거리 (KM)',
-                value: Formatters.distanceKm(record.distanceMeters),
-                emphasized: true,
-                alignment: CrossAxisAlignment.center,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                MetricTile(
-                  label: '시간',
-                  value: Formatters.duration(record.duration),
-                  alignment: CrossAxisAlignment.center,
-                ),
-                MetricTile(
-                  label: '평균 페이스',
-                  value: Formatters.pace(record.paceSecondsPerKm),
-                  alignment: CrossAxisAlignment.center,
-                ),
-                MetricTile(
-                  label: '평균 속도',
-                  value: record.speedKmh?.toStringAsFixed(1) ?? '--',
-                  unit: 'km/h',
-                  alignment: CrossAxisAlignment.center,
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

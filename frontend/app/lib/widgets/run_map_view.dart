@@ -14,6 +14,8 @@ import '../utils/run_path_interpolator.dart';
 import 'course_direction_arrow.dart';
 import 'course_endpoint_marker.dart';
 import 'facility_marker.dart';
+import 'kakao_geo.dart';
+import 'my_position_marker.dart';
 import 'map_status_views.dart';
 
 /// 카카오맵을 감싸는 러닝 전용 지도.
@@ -29,7 +31,9 @@ class RunMapView extends StatefulWidget {
     this.runPath = const [],
     this.currentPosition,
     this.initialCenter,
+    this.isRunning = false,
     this.followCurrentPosition = false,
+    this.onUserMovedCamera,
     this.showCourseDirection = false,
     this.isAwaitingLocation = false,
   });
@@ -56,8 +60,19 @@ class RunMapView extends StatefulWidget {
   /// 옮기면 그 이동이 화면에서 점프로 보인다([isAwaitingLocation]).
   final GeoPoint? initialCenter;
 
-  /// true면 현재 위치를 따라 지도 중심을 이동한다.
+  /// 지금 기록 중인지(일시정지·종료가 아닌지). 렌더 루프를 돌릴지, 일시정지에서
+  /// 재개했을 때 라이브 경로를 끊을지를 이걸로 정한다.
+  final bool isRunning;
+
+  /// true면 카메라가 현위치 마커를 따라다닌다. [isRunning]과 별개다 — 달리는
+  /// 중에도 사용자가 지도를 밀면 따라가기를 멈추고, 일시정지 중에도 "내 위치로"를
+  /// 누르면 다시 따라간다.
   final bool followCurrentPosition;
+
+  /// 사용자가 손으로 카메라를 움직였다(드래그·핀치 등). 따라가는 중이었다면
+  /// 화면이 이걸 받아 [followCurrentPosition]을 내린다. 코드가 옮긴 이동
+  /// (러닝 시작 시 배율 당기기, 추적 자체)에는 불리지 않는다.
+  final VoidCallback? onUserMovedCamera;
 
   /// true면 코스 선에 진행방향 화살표를 얹는다. 달리는 중에만 필요한 안내라
   /// 시작 전에는 코스 모양만 깔끔하게 보여준다.
@@ -95,7 +110,7 @@ class _RunMapViewState extends State<RunMapView>
 
   // 오버레이는 ID가 아니라 객체 참조로 다룬다. 매번 지우고 다시 그리는 대신
   // changePoint/move로 제자리 갱신해야 러닝 중 깜빡임이 없다.
-  kakao.Route? _courseRoute;
+  kakao.BaseRoute? _courseRoute;
   // 현재 위치 마커. Label(Poi)인 이유는 [_syncLivePosition]에 적어 뒀다.
   kakao.Poi? _currentPositionMarker;
   bool _isTracking = false;
@@ -106,6 +121,9 @@ class _RunMapViewState extends State<RunMapView>
   /// 지금 그려져 있는 코스에 화살표가 얹혀 있는지. 러닝 시작/종료에 따라 바뀐다.
   bool? _drawnCourseDirection;
   kakao.RouteStyle? _plainCourseStyle;
+
+  /// 화살표 패턴 스타일. 다중 선형(세그먼트) 전용으로 등록하므로 단일 선형에
+  /// 쓰는 [_plainCourseStyle]과 섞지 않는다.
   kakao.RouteStyle? _arrowCourseStyle;
 
   /// 코스 시설(주차장/화장실) 배지. 정적이라 한 번만 그리고 그대로 둔다.
@@ -165,13 +183,18 @@ class _RunMapViewState extends State<RunMapView>
   //
   // 그래서 배율을 여기서 직접 들고 있는다. 러닝을 시작할 때 _runningZoomLevel로
   // 맞추고, 사용자가 손으로 확대/축소하면 onCameraMoveEnd로 그 값을 받아 따른다.
-  // 그래야 달리는 중에 축소해서 앞길을 봐도 다음 위치 갱신에 되돌아가지 않는다.
+  // 그래야 달리는 중에 축소해서 앞길을 봐도 다음 위치 갱신에 되돌아가지 않고,
+  // 따라가기를 껐다 켜도 쓰던 배율로 돌아온다.
   int _followZoomLevel = _runningZoomLevel;
   bool _isFollowing = false;
 
-  /// 직전 갱신에서 위치를 따라가고 있었는지. false -> true로 바뀌는 순간이
+  /// 이번 러닝에서 러닝용 배율로 당긴 적이 있는지. 처음 따라갈 때 한 번만
+  /// 당기고, 그 뒤 따라가기를 다시 켤 때는 [_followZoomLevel]을 그대로 쓴다.
+  bool _hasAppliedRunningZoom = false;
+
+  /// 직전 갱신에서 기록 중이었는지. false -> true로 바뀌는 순간이
   /// 러닝 시작 아니면 일시정지에서의 재개다([_syncLivePosition]).
-  bool _wasFollowing = false;
+  bool _wasRunning = false;
 
   // 네이티브 키 인증에 실패하면 지도는 아무것도 그리지 않은 채 빈 화면으로 남는다.
   // 그대로 두면 키 문제인지, 좌표 문제인지, 빌드 문제인지 구분할 수 없어서
@@ -188,12 +211,8 @@ class _RunMapViewState extends State<RunMapView>
   /// 지도 초기 확대 수준. 값이 클수록 확대된다.
   static const int _initialZoomLevel = 16;
 
-  /// 러닝 중 확대 수준. 코스 전체가 아니라 발밑 몇 십 미터를 보는 화면이라
-  /// 초기값보다 더 당긴다.
-  static const int _runningZoomLevel = 18;
-
-  /// 현재 위치 마커의 화면 크기(dp). 지도 배율과 무관하게 일정하다.
-  static const int _currentPositionMarkerSize = 14;
+  /// 러닝 중 확대 수준. 사용자가 핀치로 바꾸면 그 값을 따른다.
+  static const int _runningZoomLevel = 16;
 
   /// 선 굵기(dp). 코스를 조금 더 굵게 둬서, 달린 경로가 위에 얹혀도 양옆으로
   /// 코스가 비어져 나온다 — 코스를 벗어났는지 달리면서 바로 보인다.
@@ -202,6 +221,15 @@ class _RunMapViewState extends State<RunMapView>
 
   /// 코스 진행방향 화살표를 찍는 간격(px). 화면 기준이라 배율과 무관하다.
   static const double _arrowSpacing = 40;
+
+  /// 코스 선을 그릴 때 걷어낼 잔 꼭짓점의 허용 오차(m). 화살표 패턴은 선분
+  /// 방향으로 눕혀 그려져서, 꼭짓점을 걸친 화살표는 선 밖으로 비어져 나온다.
+  /// GPS 흔들림으로 생긴 꼭짓점을 지우면 그런 자리가 크게 줄어든다.
+  static const double _courseDrawTolerance = 2;
+
+  /// 이보다 크게 꺾이는 꼭짓점에서 코스 선을 세그먼트로 나눈다. 패턴은 세그먼트
+  /// 단위로 다시 시작하므로 화살표가 그 꼭짓점을 걸치지 않는다.
+  static const double _courseBendThreshold = 20;
 
   /// 지도 갱신 주기(≈30Hz).
   ///
@@ -216,15 +244,14 @@ class _RunMapViewState extends State<RunMapView>
     AppColors.ink,
     _runLineWidth,
   );
-  late final kakao.PoiStyle _currentPositionStyle = kakao.PoiStyle(
-    // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
-    anchor: const kakao.KPoint(0.5, 0.5),
-    icon: kakao.KImage.fromAsset(
-      'assets/circleMarker.png',
-      _currentPositionMarkerSize,
-      _currentPositionMarkerSize,
-    ),
-  );
+  kakao.PoiStyle? _currentPositionStyle;
+
+  Future<kakao.PoiStyle> _ensureCurrentPositionStyle() async =>
+      _currentPositionStyle ??= kakao.PoiStyle(
+        // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
+        anchor: const kakao.KPoint(0.5, 0.5),
+        icon: await buildMyPositionMarker(),
+      );
 
   @override
   void didUpdateWidget(covariant RunMapView oldWidget) {
@@ -236,6 +263,7 @@ class _RunMapViewState extends State<RunMapView>
   }
 
   bool _hasMapInputChanged(RunMapView old) =>
+      old.isRunning != widget.isRunning ||
       old.followCurrentPosition != widget.followCurrentPosition ||
       old.showCourseDirection != widget.showCourseDirection ||
       !identical(_lastSample, widget.currentPosition) ||
@@ -273,7 +301,8 @@ class _RunMapViewState extends State<RunMapView>
     // 중심을 모르는 채로는 지도를 만들지 않는다. KakaoMapOption.position은 최초
     // 생성 때 한 번만 읽히므로, 아무 데나 띄워 놓고 좌표가 도착한 뒤 옮기면
     // 그 이동이 그대로 카메라 점프로 보인다(예전의 제주시청 → 현위치 튐).
-    final center = widget.initialCenter ??
+    final center =
+        widget.initialCenter ??
         widget.currentPosition ??
         GeoUtils.centerOf(widget.coursePath) ??
         GeoUtils.centerOf(widget.runPath);
@@ -285,12 +314,19 @@ class _RunMapViewState extends State<RunMapView>
 
     return kakao.KakaoMap(
       option: kakao.KakaoMapOption(
-        position: _toLatLng(center),
+        position: center.toLatLng(),
         zoomLevel: _initialZoomLevel,
       ),
       onMapReady: (controller) {
         _controller = controller;
         _redraw();
+      },
+      // 손가락 제스처만 사용자 이동으로 본다. moveCamera나 추적이 옮긴 경우는
+      // SDK가 unknown을 준다.
+      onCameraMoveStart: (gestureType) {
+        if (gestureType != kakao.GestureType.unknown) {
+          widget.onUserMovedCamera?.call();
+        }
       },
       // 사용자가 손으로 바꾼 배율을 러닝 중 카메라 추적에 이어서 쓴다.
       // 우리가 옮긴 경우에도 불리지만, 방금 지정한 값이 그대로 돌아올 뿐이다.
@@ -368,16 +404,16 @@ class _RunMapViewState extends State<RunMapView>
       return;
     }
 
-    // 일시정지 동안에는 followCurrentPosition이 false다. 다시 true가 되었다면
-    // 재개한 것이고, 멈춰 있는 동안의 이동은 달린 것이 아니므로 선을 이으면
-    // 안 된다. 지금까지 그린 선은 그 자리에 그대로 두고 여기서 끊는다.
+    // 일시정지 동안에는 isRunning이 false다. 다시 true가 되었다면 재개한
+    // 것이고, 멈춰 있는 동안의 이동은 달린 것이 아니므로 선을 이으면 안 된다.
+    // 지금까지 그린 선은 그 자리에 그대로 두고 여기서 끊는다.
     // (러닝을 막 시작한 경우에도 지나가지만 끊을 선이 없어 아무 일도 없다.)
-    final isResuming = widget.followCurrentPosition && !_wasFollowing;
-    _wasFollowing = widget.followCurrentPosition;
+    final isResuming = widget.isRunning && !_wasRunning;
+    _wasRunning = widget.isRunning;
     if (isResuming) await _breakLiveRoute();
 
     // 위치는 프로퍼티로 한 점씩 들어온다. 한 프레임 안에 두 점이 오면 뒤엣것만
-    // 보이지만, 위치는 아무리 빨라야 1m마다(≈300ms) 오고 프레임은 16ms라
+    // 보이지만, 위치는 아무리 빨라야 매초 오고 프레임은 [_frameInterval]이라
     // 실제로는 겹치지 않는다.
     //
     // 예외가 백그라운드다. 화면이 꺼지면 iOS가 Flutter 프레임을 멈춰 이 위젯은
@@ -398,17 +434,18 @@ class _RunMapViewState extends State<RunMapView>
     }
 
     if (_currentPositionMarker == null) {
+      final style = await _ensureCurrentPositionStyle();
+      if (_disposed) return;
       _currentPositionMarker = await controller.labelLayer.addPoi(
-        _toLatLng(position),
-        style: _currentPositionStyle,
-        text: '●',
+        position.toLatLng(),
+        style: style,
       );
       _renderedPosition = position;
     }
 
     _liveRoute ??= _GrowingRoute(controller.routeLayer, _runStyle, _runZOrder);
 
-    if (widget.followCurrentPosition) {
+    if (widget.isRunning) {
       _startRenderLoop();
       return;
     }
@@ -422,6 +459,10 @@ class _RunMapViewState extends State<RunMapView>
   ///
   /// 보간기까지 비우는 이유는, 남겨 두면 끊기기 전 마지막 점과 재개 후 첫 점
   /// 사이를 "이동 중"으로 보고 그 사이를 채워 그리기 때문이다.
+  ///
+  /// [_lastSample]은 비우지 않는다. 재개 직후 위젯이 들고 있는 currentPosition은
+  /// 아직 멈추기 전 마지막 점이라, 비우면 그 점이 새 구간의 첫 점으로 다시 들어가
+  /// 멈춘 자리와 재개한 자리가 선으로 이어진다. 남겨 두면 같은 점이라 걸러진다.
   Future<void> _breakLiveRoute() async {
     final live = _liveRoute;
     if (live == null) return;
@@ -434,13 +475,12 @@ class _RunMapViewState extends State<RunMapView>
     _interpolator.clear();
     _pendingSettled.clear();
     _pendingPosition = null;
-    _lastSample = null;
     _renderedPosition = null;
 
     await live.breakHere();
   }
 
-  /// 정상 위치 갱신은 1m마다(≈300ms) 온다. 두 샘플 시각이 이보다 한참 벌어졌으면
+  /// 정상 위치 갱신은 매초 온다. 두 샘플 시각이 이보다 한참 벌어졌으면
   /// 그 사이 화면 프레임이 멈춰 있었다는 뜻(대개 백그라운드)이라, 놓친 구간을
   /// 채워야 한다.
   static const Duration _backgroundGapThreshold = Duration(seconds: 3);
@@ -501,7 +541,8 @@ class _RunMapViewState extends State<RunMapView>
     _pendingPosition = null;
     _lastSample = null;
     _renderedPosition = null;
-    _wasFollowing = false;
+    _wasRunning = false;
+    _hasAppliedRunningZoom = false;
 
     final marker = _currentPositionMarker;
     if (marker != null) {
@@ -528,13 +569,42 @@ class _RunMapViewState extends State<RunMapView>
     final style = await _ensureCourseStyle(withArrows);
     if (style == null || _disposed) return;
 
-    _courseRoute = await _syncRoute(
-      controller,
-      existing: _courseRoute,
-      points: points,
-      style: style,
-      zOrder: _courseZOrder,
-    );
+    // 단일 선형과 다중 선형은 제자리 갱신이 서로 호환되지 않아 통째로 바꾼다.
+    // 코스는 러닝 시작·종료에만 다시 그리므로 비용은 무시할 만하다.
+    final existing = _courseRoute;
+    if (existing != null) {
+      await controller.routeLayer.removeRoute(existing);
+      _courseRoute = null;
+    }
+
+    final drawable = GeoUtils.simplify(points, _courseDrawTolerance);
+    if (drawable.length < 2) {
+      _drawnCoursePath = points;
+      _drawnCourseDirection = withArrows;
+      return;
+    }
+
+    if (withArrows) {
+      final option = kakao.MultipleRouteOption([style], zOrder: _courseZOrder);
+      for (final piece in GeoUtils.splitAtBends(
+        drawable,
+        _courseBendThreshold,
+      )) {
+        option.addRouteWithIndex(piece.map((p) => p.toLatLng()).toList(), 0);
+      }
+      _courseRoute = await controller.routeLayer.addMultipleRoute(option);
+    } else {
+      _courseRoute = await controller.routeLayer.addRoute(
+        drawable.map((p) => p.toLatLng()).toList(),
+        style,
+        zOrder: _courseZOrder,
+      );
+    }
+    if (_disposed) {
+      await _courseRoute?.remove();
+      _courseRoute = null;
+      return;
+    }
     _drawnCoursePath = points;
     _drawnCourseDirection = withArrows;
   }
@@ -585,7 +655,7 @@ class _RunMapViewState extends State<RunMapView>
       Future<void> place(GeoPoint point, kakao.PoiStyle? style) async {
         if (style == null || _disposed) return;
         final poi = await controller.labelLayer.addPoi(
-          _toLatLng(point),
+          point.toLatLng(),
           style: style,
         );
         if (_disposed) {
@@ -618,7 +688,10 @@ class _RunMapViewState extends State<RunMapView>
     _drawnEndpointPath = points;
   }
 
-  Future<kakao.PoiStyle?> _ensureEndpointStyle(Color color, String label) async {
+  Future<kakao.PoiStyle?> _ensureEndpointStyle(
+    Color color,
+    String label,
+  ) async {
     final cached = _endpointStyles[label];
     if (cached != null) return cached;
 
@@ -644,13 +717,20 @@ class _RunMapViewState extends State<RunMapView>
     }
     _facilityMarkers.clear();
 
+    // 찍을 시설이 없으면 배지 이미지를 만들 이유도 없다.
+    if (widget.parkings.isEmpty && widget.restrooms.isEmpty) {
+      _drawnParkings = widget.parkings;
+      _drawnRestrooms = widget.restrooms;
+      return;
+    }
+
     final parkingStyle = await _ensureParkingStyle();
     final restroomStyle = await _ensureRestroomStyle();
     if (parkingStyle == null || restroomStyle == null || _disposed) return;
 
     Future<void> place(CourseFacility facility, kakao.PoiStyle style) async {
       final poi = await controller.labelLayer.addPoi(
-        _toLatLng(GeoPoint(latitude: facility.lat, longitude: facility.lng)),
+        kakao.LatLng(facility.lat, facility.lng),
         style: style,
       );
       if (_disposed) {
@@ -685,7 +765,10 @@ class _RunMapViewState extends State<RunMapView>
 
   Future<kakao.PoiStyle?> _ensureRestroomStyle() async {
     if (_restroomStyle != null) return _restroomStyle;
-    final icon = await buildFacilityBadge(restroomBadgeColor, restroomBadgeLabel);
+    final icon = await buildFacilityBadge(
+      restroomBadgeColor,
+      restroomBadgeLabel,
+    );
     if (_disposed) return null;
     return _restroomStyle = kakao.PoiStyle(
       anchor: const kakao.KPoint(0.5, 0.5),
@@ -724,7 +807,7 @@ class _RunMapViewState extends State<RunMapView>
 
       _staticRunRoutes.add(
         await controller.routeLayer.addRoute(
-          segment.map(_toLatLng).toList(),
+          segment.map((p) => p.toLatLng()).toList(),
           _runStyle,
           zOrder: _runZOrder,
         ),
@@ -749,46 +832,21 @@ class _RunMapViewState extends State<RunMapView>
     return segments;
   }
 
-  /// 선 하나를 현재 [points] 상태에 맞춘다. 점이 부족하면 지우고, 이미 있으면
-  /// 제자리 갱신하고, 없으면 새로 그린다. 갱신된 객체(또는 null)를 돌려준다.
-  Future<kakao.Route?> _syncRoute(
-    kakao.KakaoMapController controller, {
-    required kakao.Route? existing,
-    required List<GeoPoint> points,
-    required kakao.RouteStyle style,
-    required int zOrder,
-  }) async {
-    // 선이 되려면 점이 둘 이상 필요하다.
-    if (points.length < 2) {
-      if (existing != null) {
-        await controller.routeLayer.removeRoute(existing);
-      }
-      return null;
-    }
-
-    final latLngs = points.map(_toLatLng).toList();
-    if (existing == null) {
-      return controller.routeLayer.addRoute(latLngs, style, zOrder: zOrder);
-    }
-
-    // changePoint는 선에 저장된 스타일을 그대로 다시 보낸다. 스타일이 바뀌었으면
-    // 따로 갈아 끼워야 한다.
-    if (!identical(existing.style, style)) await existing.changeStyle(style);
-    await existing.changePoint(latLngs);
-    return existing;
-  }
-
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {
     final position = widget.currentPosition;
     if (widget.followCurrentPosition && position != null) {
-      // 러닝이 막 시작됐으면 코스 전체를 보던 배율에서 러닝용 배율로 당긴다.
-      // 위치 갱신마다 카메라를 옮기지는 않는다 — 그건 TrackingController가 한다.
+      // 따라가기를 (다시) 켜는 순간 현위치로 옮긴다. 러닝 첫 시작이면 코스
+      // 전체를 보던 배율에서 러닝용 배율로 당기고, 껐다 켠 것이면 쓰던 배율
+      // 그대로다. 위치 갱신마다 옮기지는 않는다 — 그건 TrackingController가 한다.
       if (!_isFollowing) {
         _isFollowing = true;
-        _followZoomLevel = _runningZoomLevel;
+        if (!_hasAppliedRunningZoom) {
+          _hasAppliedRunningZoom = true;
+          _followZoomLevel = _runningZoomLevel;
+        }
         await controller.moveCamera(
           kakao.CameraUpdate.newCenterPosition(
-            _toLatLng(position),
+            position.toLatLng(),
             zoomLevel: _followZoomLevel,
           ),
         );
@@ -798,7 +856,7 @@ class _RunMapViewState extends State<RunMapView>
       return;
     }
 
-    // 러닝이 끝났으면 다음 러닝에서 다시 당길 수 있게 되돌린다.
+    // 따라가기가 꺼졌다(사용자가 지도를 밀었거나 러닝이 끝났다).
     _isFollowing = false;
     _stopTracking(controller);
 
@@ -817,7 +875,7 @@ class _RunMapViewState extends State<RunMapView>
         _hasFittedStaticPath = true;
         await controller.moveCamera(
           kakao.CameraUpdate.fitMapPoints(
-            points.map(_toLatLng).toList(),
+            points.map((p) => p.toLatLng()).toList(),
             padding: _fitPadding,
           ),
         );
@@ -930,7 +988,7 @@ class _RunMapViewState extends State<RunMapView>
         //
         // 호출 사이마다 상태를 다시 본다. await 동안 화면이 사라지거나 러닝이
         // 초기화되면 이미 걷어낸 오버레이를 이어서 건드리게 된다.
-        await marker.move(_toLatLng(position));
+        await marker.move(position.toLatLng());
         if (!_isLiveCurrent(live, marker)) break;
         if (settled.isNotEmpty) await live.append(settled);
         if (!_isLiveCurrent(live, marker)) break;
@@ -954,9 +1012,6 @@ class _RunMapViewState extends State<RunMapView>
       b != null &&
       a.latitude == b.latitude &&
       a.longitude == b.longitude;
-
-  static kakao.LatLng _toLatLng(GeoPoint point) =>
-      kakao.LatLng(point.latitude, point.longitude);
 
   // 달린 경로가 코스 위에 오도록 쌓는 순서를 고정한다.
   static const int _courseZOrder = 10000;
@@ -998,7 +1053,7 @@ class _GrowingRoute {
   /// 확정된 점들을 경로 뒤에 붙인다.
   Future<void> append(List<GeoPoint> points) async {
     for (final point in points) {
-      _openPoints.add(_toLatLng(point));
+      _openPoints.add(point.toLatLng());
       _lastPoint = point;
 
       if (_openPoints.length < _chunkSize) continue;
@@ -1019,8 +1074,7 @@ class _GrowingRoute {
 
     // 확정 끝점과 현위치가 같은 좌표면 그릴 선이 없다. 출발 직후와 멈춰 있는
     // 동안에 생기는데, 길이 0짜리 선을 남겨 두면 굵기만큼 점이 찍힌다.
-    if (anchor.latitude == position.latitude &&
-        anchor.longitude == position.longitude) {
+    if (_RunMapViewState._isSameCoordinate(anchor, position)) {
       if (_isTailVisible) {
         _isTailVisible = false;
         await _tail?.hide();
@@ -1028,7 +1082,7 @@ class _GrowingRoute {
       return;
     }
 
-    final points = [_toLatLng(anchor), _toLatLng(position)];
+    final points = [anchor.toLatLng(), position.toLatLng()];
     final tail = _tail;
     if (tail == null) {
       _tail = await _layer.addRoute(points, _style, zOrder: _zOrder);
@@ -1097,7 +1151,4 @@ class _GrowingRoute {
 
     await open.changePoint(List.of(_openPoints));
   }
-
-  static kakao.LatLng _toLatLng(GeoPoint point) =>
-      kakao.LatLng(point.latitude, point.longitude);
 }

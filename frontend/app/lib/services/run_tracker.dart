@@ -8,6 +8,7 @@ import '../models/run_record.dart';
 import '../models/running_course.dart';
 import '../utils/course_coverage.dart';
 import '../utils/geo_utils.dart';
+import 'current_location.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
 
@@ -18,14 +19,20 @@ enum RunStatus { idle, running, paused, finished }
 /// 위치 스트림을 구독해 경로/거리/시간을 누적하고, 화면은 여기만 바라본다.
 /// 서버 전송은 [RunTracker]의 책임이 아니라 [buildRecord] 결과를 받아 처리한다.
 class RunTracker extends ChangeNotifier {
-  RunTracker(this._locationService, this._motionService);
+  RunTracker(this._locationService, this._motionService, this._currentLocation);
 
   final LocationService _locationService;
   final MotionService _motionService;
 
-  /// 이번 러닝에 모션 게이트를 쓰는지. 시뮬레이션 러닝은 폰을 가만히 둔 채
-  /// 돌리므로 켜면 거리가 영원히 안 쌓인다 — 실제 GPS일 때만 켠다.
-  bool _useMotionGate = false;
+  /// 앱 전역의 최신 현위치. 실제 GPS 러닝은 위치 스트림을 여기서 가져갔다
+  /// 돌려주고, 받은 점을 흘려 넣는다([CurrentLocation] 참고). 시뮬레이션은
+  /// geolocator를 안 쓰므로 건드리지 않는다.
+  final CurrentLocation _currentLocation;
+
+  /// 이번 러닝이 실제 GPS인지(시뮬레이션이 아닌지). 모션 게이트와 전역 현위치
+  /// 교대는 실제 GPS일 때만 한다 — 시뮬레이션은 폰을 가만히 둔 채 돌리므로
+  /// 모션 게이트를 켜면 거리가 영원히 안 쌓이고, geolocator도 안 쓴다.
+  bool _isRealGps = false;
 
   StreamSubscription<GeoPoint>? _positionSubscription;
   Timer? _ticker;
@@ -100,9 +107,9 @@ class RunTracker extends ChangeNotifier {
   /// 최근 페이스의 창(m). 러닝 앱들이 흔히 쓰는 "최근 1km".
   static const double _recentPaceWindowMeters = 1000;
 
-  /// 이 거리 전에는 최근 페이스를 내지 않는다. 몇십 m 위의 페이스는 GPS
-  /// 오차가 그대로 숫자가 된다.
-  static const double _minPaceMeters = 100;
+  /// 이 거리 전에는 페이스를 내지 않는다(평균·최근 둘 다). 확정 게이트가 5m라
+  /// 30m면 확정점 여섯 개 남짓인데, 그 전에는 점 하나의 오차가 그대로 숫자가 된다.
+  static const double _minPaceMeters = 30;
 
   /// [_maxPlausibleSpeed]에 연속으로 걸린 횟수.
   int _jumpRejections = 0;
@@ -114,8 +121,13 @@ class RunTracker extends ChangeNotifier {
 
   /// 위치가 끊겨서 기록이 멈춰 있다면 그 사유. 화면이 이걸 보고 알린다.
   LocationInterruption? get interruption => _interruption;
-  List<GeoPoint> get path => List.unmodifiable(_path);
+
+  /// 읽기 전용 스냅샷. 점이 늘 때만 새로 만든다 — 화면이 매 빌드마다 읽는데
+  /// 그때마다 수천 점을 복사하면 낭비다.
+  List<GeoPoint> get path => _pathSnapshot ??= List.unmodifiable(_path);
+  List<GeoPoint>? _pathSnapshot;
   double get distanceMeters => _distanceMeters;
+
   /// 실제로 달린 시간(멈춰 있던 시간 제외).
   ///
   /// 시작 시각은 시작 버튼이 아니라 **첫 유효 위치**다([_onPosition]). 버튼
@@ -138,6 +150,7 @@ class RunTracker extends ChangeNotifier {
     // 기기 시계가 뒤로 돌아가는 경우까지 음수로 내보내지는 않는다.
     return ran.isNegative ? Duration.zero : ran;
   }
+
   DateTime? get startedAt => _startedAt;
 
   /// 가장 최근에 들어온 위치. [path]와 달리 게이트를 거치지 않은 원본이라
@@ -154,9 +167,13 @@ class RunTracker extends ChangeNotifier {
   /// 흐르지 않는다([elapsed]). 화면이 이걸 보고 "GPS 잡는 중"을 띄운다.
   bool get isAwaitingFix => _status == RunStatus.running && _startedAt == null;
 
-  /// 러닝 전체의 평균 페이스(km당 초). 아직 움직이지 않았으면 null.
+  /// 러닝 전체의 평균 페이스(km당 초). [_minPaceMeters] 전에는 null.
+  ///
+  /// 최근 페이스와 같은 문턱을 쓴다. 화면의 주 지표는 최근 페이스이고 평균은
+  /// 그 아래 보조로 붙는데, 문턱이 다르면 주 지표는 "--"인데 보조만 먼저 숫자가
+  /// 뜨고, 그 숫자가 바로 문턱으로 가리려던 초반 오차다.
   double? get paceSecondsPerKm {
-    if (_distanceMeters <= 0) return null;
+    if (_distanceMeters < _minPaceMeters) return null;
     return elapsed.inMilliseconds / 1000 / (_distanceMeters / 1000);
   }
 
@@ -187,8 +204,7 @@ class RunTracker extends ChangeNotifier {
   /// 코스 커버리지 0.0~1.0(코스 점 중 실제로 지나간 비율). 자유 러닝이면 null.
   ///
   /// 서버 검증의 match_rate와 같은 개념·같은 로직이다(CourseCoverageTracker 참고).
-  double? get courseCoverage =>
-      _targetCourse == null ? null : _coverage?.ratio;
+  double? get courseCoverage => _targetCourse == null ? null : _coverage?.ratio;
 
   /// 누적 주행 거리 ÷ 코스 거리 (1.0 초과 가능). 자유 러닝이면 null.
   ///
@@ -242,8 +258,12 @@ class RunTracker extends ChangeNotifier {
     _status = RunStatus.running;
     _activeLocation = location;
 
-    _useMotionGate = source == null;
-    if (_useMotionGate) _motionService.start();
+    _isRealGps = source == null;
+    if (_isRealGps) {
+      _motionService.start();
+      // 평상시 스트림을 먼저 닫아야 아래 구독이 러닝 설정으로 열린다.
+      _currentLocation.yieldToRun();
+    }
 
     _subscribeToPositions(location);
     _startTicker();
@@ -253,11 +273,16 @@ class RunTracker extends ChangeNotifier {
   }
 
   void _subscribeToPositions(LocationService location) {
-    _positionSubscription?.cancel(); //재구독 방어 
+    _positionSubscription?.cancel(); //재구독 방어
     _positionSubscription = location.trackPosition().listen(
-      _onPosition,
-      // 에러를 받지 않으면 스트림이 끊긴 채로 앱이 진행되기 때문에 사용자가 에러가 난 줄도 모른다.  
-      onError: (Object error) => _handlePositionLost(location.interruptionFrom(error)),
+      (point) {
+        // 일시정지 중에도(아래 _onPosition은 버린다) 최신 위치는 갱신한다.
+        if (_isRealGps) _currentLocation.report(point);
+        _onPosition(point);
+      },
+      // 에러를 받지 않으면 스트림이 끊긴 채로 앱이 진행되기 때문에 사용자가 에러가 난 줄도 모른다.
+      onError: (Object error) =>
+          _handlePositionLost(location.interruptionFrom(error)),
       onDone: () => _handlePositionLost(LocationInterruption.lost),
     );
   }
@@ -268,15 +293,17 @@ class RunTracker extends ChangeNotifier {
   /// 다시 켜면 이어 달릴 수 있어야 한다. 화면에 나오는 상태는 사용자가 직접
   /// 일시정지를 누른 것과 같아서, 이어서·종료 버튼이 그대로 쓰인다.
   void _handlePositionLost(LocationInterruption reason) {
-    if (_status != RunStatus.running) return;
-
+    // 일시정지 중에도 스트림은 살아 있어 끊길 수 있다. 상태와 무관하게 죽은
+    // 구독을 버리고 사유를 남겨야 resume()이 다시 붙고, 화면이 사유를 알린다.
     _positionSubscription?.cancel();
     _positionSubscription = null;
-
-    _status = RunStatus.paused;
-    _beginPause();
-    _ticker?.cancel();
     _interruption = reason;
+
+    if (_status == RunStatus.running) {
+      _status = RunStatus.paused;
+      _beginPause();
+      _ticker?.cancel();
+    }
     notifyListeners();
   }
 
@@ -331,6 +358,7 @@ class RunTracker extends ChangeNotifier {
     _endPause();
 
     _status = RunStatus.finished;
+    _interruption = null;
     _endedAt = DateTime.now();
     // 위치를 한 점도 못 받고 끝냈으면 시작 시각이 없다. 기록은 남겨야 하므로
     // 종료 시각으로 채운다 — 시간 0, 거리 0인 기록이 된다.
@@ -339,6 +367,9 @@ class RunTracker extends ChangeNotifier {
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _motionService.stop();
+    // 러닝 구독이 끊긴 뒤에 돌려준다. 순서가 바뀌면 평상시 스트림이 러닝
+    // 설정을 물려받는다.
+    if (_isRealGps) _currentLocation.reclaimFromRun();
     notifyListeners();
   }
 
@@ -392,7 +423,7 @@ class RunTracker extends ChangeNotifier {
     // 갱신하지 않는다 — 서 있는 동안 마커가 돌아다니고 경로가 자라는 것을 막는다.
     // 첫 유효 위치(위의 anchor == null)는 게이트보다 먼저 처리한다: 출발선에
     // 가만히 서서 GPS를 기다리는 동안에도 마커와 시작 시각은 잡혀야 한다.
-    if (_useMotionGate && _motionService.isStill) return;
+    if (_isRealGps && _motionService.isStill) return;
 
     final moved = GeoUtils.distanceBetween(anchor, point);
 
@@ -423,6 +454,7 @@ class RunTracker extends ChangeNotifier {
   void _commit(GeoPoint point) {
     _commitAnchor = point;
     _path.add(point);
+    _pathSnapshot = null;
     _coverage?.add(point);
     _paceSamples.add((meters: _distanceMeters, elapsed: elapsed));
 
@@ -481,10 +513,11 @@ class RunTracker extends ChangeNotifier {
     _positionSubscription?.cancel();
     _positionSubscription = null;
     _motionService.stop();
-    _useMotionGate = false;
+    _isRealGps = false;
 
     _status = RunStatus.idle;
     _path.clear();
+    _pathSnapshot = null;
     _distanceMeters = 0;
     _startedAt = null;
     _endedAt = null;

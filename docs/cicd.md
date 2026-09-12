@@ -96,7 +96,7 @@ gcloud builds triggers run deploy-live --branch=live
 
 | 증상 | 원인 |
 | --- | --- |
-| test 스텝에서 실패 | 진짜 테스트가 깨진 것. `.\scripts\dev.ps1 test`로 로컬 재현 |
+| test 스텝에서 실패 | 진짜 테스트가 깨진 것. `.\scripts\local_docker_start.ps1 test`로 로컬 재현 |
 | migrate 스텝에서 실패 | 마이그레이션 자체 문제. **라이브는 안 바뀌었다.** Job 실행 로그를 본다 |
 | 배포 후 `SchemaOutOfDateError`로 기동 실패 | migrate 스텝이 건너뛰어졌다. 새 마이그레이션 파일이 이미지에 들어갔는지 확인 |
 | 좌표 변환(`/admin/geo/geocode`)이 502 | `kakao-key` 시크릿 문제 |
@@ -140,6 +140,29 @@ gcloud secrets add-iam-policy-binding kakao-key `
 > (`cloudbuild.yaml`이 `:latest`를 참조하므로 다음 배포부터 적용된다.)
 
 이로써 운영 시크릿은 `db-url`, `jwt-key`, `sb-key`, `kakao-key` 4개다.
+
+## 1-1. Apple Sign in 키를 Secret Manager에 (탈퇴 시 Apple 연결 해제용)
+
+앱스토어 계정 삭제 요건 — 탈퇴할 때 Apple 쪽 앱 연결을 끊어야 한다
+(`server/app/apple_auth.py`). 없으면 Apple 로그인 계정의 탈퇴가 서버에서 revoke를
+건너뛴다(로그인 시 `APPLE_* 미설정` 경고가 남는다).
+
+1. Apple Developer → Certificates, Identifiers & Profiles → **Keys** → "+"
+2. 이름 입력, **Sign in with Apple** 체크 → Configure → Primary App ID에 앱 선택
+3. Continue → Register → **Download**(.p8, 한 번만 받을 수 있다). 화면의 **Key ID**를 적어둔다.
+4. `cloudbuild.yaml`의 `_APPLE_KEY_ID`에 그 Key ID를 넣는다(비밀값 아님).
+5. .p8 내용을 시크릿으로 올린다:
+
+```powershell
+gcloud secrets create apple-signin-key --data-file=AuthKey_XXXXXXXXXX.p8
+
+gcloud secrets add-iam-policy-binding apple-signin-key `
+  --member="serviceAccount:1090471391353-compute@developer.gserviceaccount.com" `
+  --role="roles/secretmanager.secretAccessor"
+```
+
+로컬은 `infra/.env`에 `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`를 넣는다
+(`infra/.env.example` 참고).
 
 ## 2. 빌드 계정 ✅
 

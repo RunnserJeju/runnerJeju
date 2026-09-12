@@ -1,15 +1,19 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/notice.dart';
 import '../theme/app_theme.dart';
 
-/// 홈 화면 상단 이미지 배너. 스와이프로 넘기고, 4초마다 자동으로도 넘어간다.
+/// 배너 가로:세로 비율. 시안(402×172)을 따른다.
+const _kBannerAspectRatio = 402 / 172;
+
+/// 홈 상단 풀블리드 이미지 배너. 스와이프로 넘기고, 4초마다 자동으로도 넘어간다.
 ///
 /// 배너는 이미지가 있는 공지다 — 누르면 [onTap]으로 그 공지를 연다.
-/// 배너 사진 품질이 들쭉날쭉해서 이미지 위에 하단 그라디언트(scrim)를 덮어 톤을
-/// 잡아준다. 자동 슬라이드 타이머는 [dispose]에서 반드시 취소한다.
+/// 배너 이미지는 글자까지 넣어 만든 완성본이라 그 위에 아무것도 얹지 않는다.
+/// 자동 슬라이드 타이머는 [dispose]에서 반드시 취소한다.
 class BannerCarousel extends StatefulWidget {
   const BannerCarousel({super.key, required this.banners, required this.onTap});
 
@@ -45,6 +49,18 @@ class _BannerCarouselState extends State<BannerCarousel> {
     });
   }
 
+  /// 새로고침으로 배너 수가 바뀌면 타이머를 다시 맞춘다. 1장→여러 장이면
+  /// 이제야 자동 슬라이드가 켜지고, 줄어들면 현재 페이지가 범위를 벗어나지 않게 한다.
+  @override
+  void didUpdateWidget(covariant BannerCarousel old) {
+    super.didUpdateWidget(old);
+    if (old.banners.length == widget.banners.length) return;
+    _timer?.cancel();
+    _timer = null;
+    if (_page >= widget.banners.length) _page = 0;
+    _startAutoSlide();
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -56,101 +72,53 @@ class _BannerCarouselState extends State<BannerCarousel> {
   Widget build(BuildContext context) {
     final banners = widget.banners;
 
-    return Column(
-      children: [
-        AspectRatio(
-          // 가로로 길고 세로로 짧은 스트립 배너. 사진은 이 비율에 맞춰 넣는다.
-          aspectRatio: 3 / 1,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.ink.withValues(alpha: 0.08),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
+    return AspectRatio(
+      aspectRatio: _kBannerAspectRatio,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: banners.length,
+            onPageChanged: (page) => setState(() => _page = page),
+            itemBuilder: (context, index) {
+              final notice = banners[index];
+              return GestureDetector(
+                onTap: () => widget.onTap(notice),
+                child: CachedNetworkImage(
+                  imageUrl: notice.imageUrl!,
+                  fit: BoxFit.cover,
+                  placeholder: (_, _) =>
+                      const ColoredBox(color: AppColors.inkSoft),
+                  errorWidget: (_, _, _) =>
+                      const ColoredBox(color: AppColors.inkSoft),
                 ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Stack(
-                fit: StackFit.expand,
+              );
+            },
+          ),
+          if (banners.length > 1)
+            Positioned(
+              right: 16,
+              bottom: 12,
+              child: Row(
                 children: [
-                  PageView.builder(
-                    controller: _controller,
-                    itemCount: banners.length,
-                    onPageChanged: (page) => setState(() => _page = page),
-                    itemBuilder: (context, index) => GestureDetector(
-                      onTap: () => widget.onTap(banners[index]),
-                      child: Image.network(
-                        banners[index].imageUrl!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (_, _, _) => const _BannerFallback(),
-                      ),
-                    ),
-                  ),
-                  // 사진 위에 얹는 하단 그라디언트 — 저품질 사진도 톤이 잡히고,
-                  // 인디케이터가 밝은 사진 위에서도 보이게 한다.
-                  IgnorePointer(
-                    child: DecoratedBox(
+                  for (var i = 0; i < banners.length; i++)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(left: 5),
+                      width: i == _page ? 18 : 6,
+                      height: 6,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            AppColors.ink.withValues(alpha: 0.35),
-                          ],
-                          stops: const [0.55, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (banners.length > 1)
-                    Positioned(
-                      right: 14,
-                      bottom: 12,
-                      child: Row(
-                        children: [
-                          for (var i = 0; i < banners.length; i++)
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              width: i == _page ? 18 : 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: i == _page
-                                    ? AppColors.accent
-                                    : Colors.white.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                            ),
-                        ],
+                        color: i == _page
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                     ),
                 ],
               ),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BannerFallback extends StatelessWidget {
-  const _BannerFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.ink.withValues(alpha: 0.06),
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.image_not_supported_outlined,
-        color: AppColors.ink.withValues(alpha: 0.3),
+        ],
       ),
     );
   }
@@ -159,85 +127,98 @@ class _BannerFallback extends StatelessWidget {
 /// 등록된 배너가 하나도 없을 때 상단에 대신 보여주는 브랜드 히어로.
 ///
 /// 배너를 접어버리면 홈 첫 화면이 허전해서, 사진 대신 앱 캐치프레이즈를 얹은
-/// 라이트 미니멀 카드를 항상 한 장은 띄운다. 배너와 같은 가로 스트립 비율.
+/// 어두운 카드를 항상 한 장은 띄운다. 배너와 같은 비율.
 class BrandHeroBanner extends StatelessWidget {
   const BrandHeroBanner({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 3 / 1,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFECEEF2)),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.ink.withValues(alpha: 0.05),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -8,
-              bottom: -12,
-              child: Icon(
-                Icons.directions_run_rounded,
-                size: 120,
-                color: AppColors.ink.withValues(alpha: 0.04),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: AppColors.accent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'RUNNERS JEJU',
-                        style: TextStyle(
-                          color: Color(0xFF9AA0AC),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '제주를 달리는 가장 좋은 방법',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppColors.ink,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.6,
-                      height: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return const AspectRatio(
+      aspectRatio: _kBannerAspectRatio,
+      child: _BannerSlide(
+        image: ColoredBox(color: AppColors.ink),
+        eyebrow: 'RUNNERS JEJU',
+        title: '제주를 달리는 가장 좋은 방법',
+        subtitle: '코스를 고르고, 달리고, 스탬프를 모아보세요',
       ),
+    );
+  }
+}
+
+/// 브랜드 히어로 한 장: 배경 + 어두운 그라디언트 + 좌하단 텍스트.
+class _BannerSlide extends StatelessWidget {
+  const _BannerSlide({
+    required this.image,
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final Widget image;
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        image,
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0x66000000), Color(0x80000000), Color(0x99000000)],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                eyebrow.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.accent,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.9,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.66,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 13,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

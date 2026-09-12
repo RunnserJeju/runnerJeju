@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -5,12 +6,13 @@ from datetime import datetime, timezone
 import httpx
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from app import apple_auth
 from app.db import get_db
 from app.deps import current_user_id
-from app.models import RefreshToken, User
+from app.models import RefreshToken, Run, User
 from app.schemas import (
     AccessTokenOut,
     AppleLoginRequest,
@@ -27,6 +29,8 @@ from app.security import (
     create_refresh_token,
     decode_token,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -56,6 +60,8 @@ _google_jwk_client = jwt.PyJWKClient(GOOGLE_KEYS_URL)
 
 
 def _issue_tokens(db: Session, user: User) -> TokenPair:
+    # 로그인·재발급 시 최근 접속 시각을 남긴다(활성 이용자 통계·휴면 판정용).
+    user.last_login_at = datetime.now(timezone.utc)
     token_id = uuid.uuid4()
     db.add(
         RefreshToken(
@@ -145,6 +151,20 @@ def login_with_apple(payload: AppleLoginRequest, db: Session = Depends(get_db)):
     email = claims.get("email") or payload.email
     if email:
         user.email = email
+
+    # 탈퇴 시 Apple 연결 해제(revoke)에 쓸 refresh 토큰. code는 1회용·5분 유효라
+    # 지금 바로 교환한다. 교환 실패로 로그인까지 막지는 않는다 — 대신 로그를 남겨
+    # 설정(APPLE_* env)이 빠졌는지 알 수 있게 한다.
+    if payload.authorization_code and apple_auth.is_configured():
+        try:
+            user.apple_refresh_token = apple_auth.exchange_code(
+                APPLE_BUNDLE_ID, payload.authorization_code
+            )
+        except apple_auth.AppleAuthError as e:
+            logger.warning("Apple refresh 토큰 저장 실패(탈퇴 시 revoke 불가): %s", e)
+    elif payload.authorization_code:
+        logger.warning("APPLE_TEAM_ID/APPLE_KEY_ID/APPLE_PRIVATE_KEY 미설정 — Apple revoke 불가")
+
     db.commit()
     db.refresh(user)
 
@@ -240,6 +260,16 @@ def refresh_access_token(payload: RefreshRequest, db: Session = Depends(get_db))
     ):
         raise HTTPException(status_code=401, detail="다시 로그인해 주세요.")
 
+    # 탈퇴(익명화)된 계정이면 재발급을 막는다. 탈퇴 시 refresh 토큰을 지우므로 보통
+    # 위에서 stored=None으로 걸리지만, 혹시 남아 있어도 여기서 한 번 더 차단한다.
+    user = db.get(User, stored.user_id)
+    if user is None or user.deleted_at is not None:
+        raise HTTPException(status_code=401, detail="다시 로그인해 주세요.")
+
+    # 최근 접속 시각 갱신(활성 이용자 통계용).
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
+
     return AccessTokenOut(access_token=create_access_token(stored.user_id))
 
 
@@ -259,3 +289,55 @@ def logout(payload: RefreshRequest, db: Session = Depends(get_db)):
     if stored is not None and stored.revoked_at is None:
         stored.revoked_at = datetime.now(timezone.utc)
         db.commit()
+
+
+@router.delete("/me", status_code=204)
+def withdraw(
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """회원 탈퇴. 신원/PII를 익명화(스크럽)하고 세션을 폐기한다.
+
+    hard delete가 아니라 soft delete + 익명화다 — users 행은 남기되 개인식별 정보를
+    전부 지우고 deleted_at을 찍는다. 활동(완주·찜)은 익명 상태로 보존해 코스 통계의
+    역사적 누적을 유지한다(단 러닝 GPS 경로는 위치정보라 제거한다).
+
+    provider id를 null로 밀어 재로그인 시 새 계정이 생기게 한다. 멱등하다 — 이미
+    탈퇴했거나 없는 계정이면 조용히 204.
+
+    Apple 로그인 계정은 스크럽 전에 Apple 쪽 연결을 끊는다(앱스토어 계정 삭제
+    요건). 이 호출이 실패하면 502로 돌려 계정을 그대로 두고 재시도하게 한다 —
+    조용히 건너뛰면 Apple 설정에 앱이 연결된 채 남는다.
+    """
+    user = db.get(User, uuid.UUID(user_id))
+    if user is None or user.deleted_at is not None:
+        return  # 이미 없거나 탈퇴한 계정 — 멱등
+
+    # ⓪ Apple 연결 해제. 토큰이 없는 계정(카카오·구글, 또는 미설정 시기 가입)은 건너뛴다.
+    if user.apple_refresh_token:
+        try:
+            apple_auth.revoke_refresh_token(APPLE_BUNDLE_ID, user.apple_refresh_token)
+        except apple_auth.AppleAuthError as e:
+            logger.error("Apple 토큰 폐기 실패: %s", e)
+            raise HTTPException(
+                status_code=502, detail="Apple 연결 해제에 실패했어요. 잠시 후 다시 시도해 주세요."
+            )
+
+    # ① PII 스크럽 + 탈퇴 마커. provider id를 지워 재로그인=새 계정이 되게 한다.
+    user.email = None
+    user.nickname = None
+    user.profile_image_url = None
+    user.kakao_id = None
+    user.apple_id = None
+    user.google_id = None
+    user.apple_refresh_token = None
+    user.deleted_at = datetime.now(timezone.utc)
+
+    # ② 세션 폐기 — refresh 토큰 전부 삭제(모든 기기 로그아웃 + users FK 해소).
+    db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+
+    # ③ 러닝 GPS 경로 제거(위치정보=개인정보). 거리·시간·course_id 메타는 익명
+    #    활동으로 남겨 통계에 쓴다. 완주(stamps)·찜(favorites)은 그대로 둔다.
+    db.execute(update(Run).where(Run.user_id == str(user.id)).values(path=[]))
+
+    db.commit()

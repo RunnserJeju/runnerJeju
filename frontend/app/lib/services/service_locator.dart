@@ -9,6 +9,7 @@ import '../config/app_config.dart';
 import '../network/api_client.dart';
 import 'auth_service.dart';
 import 'course_service.dart';
+import 'current_location.dart';
 import 'favorite_service.dart';
 import 'kakao_map_launcher.dart';
 import 'location_service.dart';
@@ -67,6 +68,10 @@ class Services {
   /// 위치원을 따로 넘긴다 — 그래야 앱 전역이 아니라 그 한 번의 러닝만 가짜가 된다.
   late final LocationService location = LocationService();
 
+  /// 앱이 아는 최신 현위치. 앱 시작 시 스트림을 열고([CurrentLocation.start],
+  /// main.dart), 러닝 중에는 [runTracker]가 스트림을 가져갔다 돌려준다.
+  late final CurrentLocation currentLocation = CurrentLocation(location);
+
   /// 코스 시작점까지의 길안내. 카카오맵 앱/웹을 띄우기만 하는 얇은 계층이다.
   late final KakaoMapLauncher kakaoMapLauncher = const KakaoMapLauncher();
 
@@ -74,7 +79,11 @@ class Services {
   late final MotionService motion = MotionService();
 
   /// 진행 중인 러닝은 화면 전환과 무관하게 유지되어야 하므로 전역에 하나만 둔다.
-  late final RunTracker runTracker = RunTracker(location, motion);
+  late final RunTracker runTracker = RunTracker(
+    location,
+    motion,
+    currentLocation,
+  );
 
   /// 러닝 상태를 잠금화면에 미러링하는 표시 계층(Android 상시 알림 / iOS Live
   /// Activity). 데이터는 [runTracker]가 굴리고, 이건 화면 밖 표시만 맡는다.

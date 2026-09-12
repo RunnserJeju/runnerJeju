@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # 1=★, 2=★★, 3=★★★ — 클라이언트 CourseDifficulty.value와 값이 같아야 한다.
 Difficulty = Annotated[int, Field(ge=1, le=3)]
+
+# 'public'=모두, 'admin'=role='admin'인 앱 사용자만(테스트 코스).
+CourseVisibility = Literal["public", "admin"]
 VerificationStatusName = Literal[
     "pending", "inProgress", "matched", "mismatched", "failed"
 ]
@@ -63,6 +66,8 @@ class AppleLoginRequest(BaseModel):
 
     identity_token: str
     email: str | None = None
+    # 탈퇴 시 Apple 연결 해제용 refresh 토큰을 얻기 위한 1회용 코드. 앱이 함께 보낸다.
+    authorization_code: str | None = None
 
 
 class GoogleLoginRequest(BaseModel):
@@ -190,6 +195,10 @@ class CourseListItem(BaseModel):
     completed_count: int
     is_completed_by_me: bool
 
+    # None은 미설정(시드 스크립트로 올린 코스). 일반 사용자에겐 public만 내려가므로
+    # 앱 응답에서는 admin 계정이 아니면 늘 'public'이다.
+    visibility: CourseVisibility | None
+
     # 지도에 코스 라벨을 찍을 좌표. 경로 전체는 위 이유로 빼지만, 점 하나는
     # 목록 크기에 영향이 없으면서 지도 화면이 코스마다 상세를 부르지 않아도
     # 되게 해준다. 경로가 비어 있는 코스면 None이라 지도에서 빠진다.
@@ -215,6 +224,7 @@ class CourseUpdate(BaseModel):
     name: str = Field(min_length=1)
     distance_km: int = Field(ge=1)
     difficulty: Difficulty
+    visibility: CourseVisibility
     address: str = Field(min_length=1)
     tags: str | None = None
     description: str | None = None
@@ -388,3 +398,155 @@ class MissionOut(BaseModel):
     is_active: bool
     sort_order: int
     created_at: datetime
+
+
+# --- 회원 (운영자 조회) ---------------------------------------------------
+# 운영 웹이 가입 회원을 조회한다. 조회 전용 — 상태/제재/러닝은 범위 밖.
+# "완주 코스 = 획득 스탬프"다(스탬프는 코스 완주로만, 유저·코스당 1개 발급).
+
+
+class CompletedCourseOut(BaseModel):
+    """상세에서 보여줄 완주 코스 하나(=획득 스탬프 하나)."""
+
+    course_id: uuid.UUID
+    name: str
+    acquired_at: datetime
+
+
+class UserSummaryOut(BaseModel):
+    """회원 목록의 한 행. 내부 식별자(kakao_id 등) 원본은 담지 않고 가입 provider
+    종류만 파생해 준다."""
+
+    id: uuid.UUID
+    nickname: str | None
+    # 가입에 쓰인 소셜 provider. 보통 하나: ["kakao"] / ["apple"] / ["google"].
+    providers: list[str]
+    email: str | None
+    created_at: datetime
+    # 완주 코스 수 = 획득 스탬프 수.
+    completed_count: int
+
+
+class UserDetailOut(BaseModel):
+    """회원 상세 — 기본정보 + 완주(스탬프) 코스 목록."""
+
+    id: uuid.UUID
+    nickname: str | None
+    providers: list[str]
+    email: str | None
+    profile_image_url: str | None
+    created_at: datetime
+    completed_count: int
+    completed_courses: list[CompletedCourseOut]
+
+
+class UserListOut(BaseModel):
+    """회원 목록 응답. total은 필터 적용된 전체 개수(offset 페이지네이션 UI용)."""
+
+    total: int
+    items: list[UserSummaryOut]
+
+
+# --- 이용 통계 (운영자) ---------------------------------------------------
+# 완주·찜·이용자·회원·조회수를 집계한다. registered/active는 탈퇴자 제외(현재),
+# 누적 활동·코스 지표는 탈퇴자 포함(역사적 누적).
+
+
+class StatsOverviewOut(BaseModel):
+    """사이트 전체 요약."""
+
+    # 탈퇴자 제외(현재 기준).
+    registered_users: int
+    # 러닝 1회 이상 한 고유 사용자(탈퇴자 제외).
+    active_users: int
+    # 누적 총계(탈퇴자 포함).
+    total_runs: int
+    total_completions: int
+    total_favorites: int
+    total_views: int
+
+
+class CourseStatsOut(BaseModel):
+    """코스별 이용 지표 한 행. completed_count = 완주자 수 = 획득 스탬프 수."""
+
+    id: uuid.UUID
+    name: str
+    address: str
+    completed_count: int
+    favorite_count: int
+    # 그 코스를 달린 고유 사용자(완주자의 상위 집합).
+    runner_count: int
+    # 코스별 조회수(하루 1회 중복제거한 고유 조회).
+    view_count: int
+
+
+# --- 쿠폰 (운영자 + 앱) ----------------------------------------------------
+# 템플릿(coupons) + 발급 인스턴스(user_coupons). 혜택은 자유텍스트, 발급분은 템플릿을
+# 라이브 참조(수정 즉시 반영). 상태는 used_at으로, '만료'는 valid_until로 계산한다.
+
+CouponStatus = Literal["available", "used", "expired"]
+
+
+class CouponCreate(BaseModel):
+    """쿠폰 제작. 혜택은 자유 텍스트, 유효기간은 생략 가능(무기한)."""
+
+    name: str = Field(min_length=1, max_length=200)
+    benefit: str = Field(min_length=1, max_length=500)
+    description: str | None = None
+    valid_until: datetime | None = None
+
+
+class CouponUpdate(CouponCreate):
+    """쿠폰 수정(PATCH). 작성과 같은 필드로 전체 교체한다."""
+
+
+class CouponOut(BaseModel):
+    """운영자 쿠폰 목록/상세. 발급/사용 수를 함께 준다."""
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    benefit: str
+    valid_until: datetime | None
+    created_at: datetime
+    issued_count: int
+    used_count: int
+
+
+class IssueRequest(BaseModel):
+    """대량 지급. 존재하는(비탈퇴) 회원에게만 발급된다."""
+
+    user_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+class IssueResult(BaseModel):
+    issued: int
+
+
+class IssuedCouponOut(BaseModel):
+    """발급 현황 한 행 — 누구에게 발급됐고 사용했는지."""
+
+    id: uuid.UUID  # user_coupon id
+    user_id: uuid.UUID
+    nickname: str | None  # 탈퇴/미설정이면 null
+    issued_at: datetime
+    used_at: datetime | None
+    status: CouponStatus
+
+
+class IssuedListOut(BaseModel):
+    total: int
+    items: list[IssuedCouponOut]
+
+
+class MyCouponOut(BaseModel):
+    """앱: 내 쿠폰 한 장. 혜택·유효기간은 템플릿을 라이브 참조."""
+
+    id: uuid.UUID  # user_coupon id
+    name: str
+    description: str | None
+    benefit: str
+    issued_at: datetime
+    used_at: datetime | None
+    valid_until: datetime | None
+    status: CouponStatus

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:live_activities/live_activities.dart';
 
 import '../utils/formatters.dart';
 
@@ -36,7 +36,7 @@ class RunWidgetData {
 ///
 /// - Android: 갱신되는 상시(ongoing) 알림. 잠금화면에 거리·시간·페이스를 띄운다.
 /// - iOS: Live Activity(ActivityKit). 잠금화면 + Dynamic Island에 같은 값을 띄운다
-///   (iOS 16.1+ 에서만 동작하고, 미만이면 조용히 no-op).
+///   (iOS 16.2+ 에서만 동작하고, 미만이면 조용히 no-op).
 class RunLiveWidget {
   RunLiveWidget();
 
@@ -59,16 +59,15 @@ class RunLiveWidget {
   bool _androidInitialized = false;
 
   // ── iOS: Live Activity(ActivityKit) ──────────────────────────────
-  final LiveActivities _liveActivities = LiveActivities();
+  /// ios/Runner/RunLiveActivityChannel.swift 와 짝. 값은 ActivityKit의
+  /// ContentState 로 넘어가고 시스템이 위젯 프로세스에 전달한다 — App Group 같은
+  /// 공유 저장소나 별도 capability 가 필요 없다.
+  static const MethodChannel _iosChannel = MethodChannel(
+    'com.runnersjeju.runnersJeju/run_live_activity',
+  );
 
-  /// Runner ↔ Widget Extension 이 공유하는 App Group. Xcode에서 두 타겟 모두에
-  /// 같은 값으로 등록해야 데이터가 위젯까지 넘어간다(ios/RunLiveActivity/README 참고).
-  static const String _appGroupId = 'group.com.runnersjeju.runnersJeju';
-  bool _iosInitialized = false;
-  bool _iosSupported = false;
-
-  /// 진행 중인 Live Activity id. update/end에 쓴다.
-  String? _activityId;
+  /// Live Activity 가 떠 있는지. start 가 성공하면 켜지고 stop 에서 꺼진다.
+  bool _iosStarted = false;
 
   /// 러닝 시작 시 1회. 채널·권한 준비 후 위젯을 띄운다.
   Future<void> start(RunWidgetData data) async {
@@ -77,7 +76,7 @@ class RunLiveWidget {
     _lastPaused = null;
     if (Platform.isAndroid) {
       await _androidEnsureInit();
-      await _androidPush(data, force: true);
+      await _androidPush(data);
     } else if (Platform.isIOS) {
       await _iosStart(data);
     }
@@ -110,6 +109,8 @@ class RunLiveWidget {
     _lastPush = null;
     _lastPaused = null;
     if (Platform.isAndroid) {
+      // 띄운 적이 없으면(초기화 전) 걷을 것도 없다.
+      if (!_androidInitialized) return;
       await _plugin.cancel(id: _notificationId);
     } else if (Platform.isIOS) {
       await _iosStop();
@@ -137,9 +138,7 @@ class RunLiveWidget {
     _androidInitialized = true;
   }
 
-  Future<void> _androidPush(RunWidgetData data, {bool force = false}) async {
-    if (!_active && !force) return;
-
+  Future<void> _androidPush(RunWidgetData data) async {
     final title = data.paused ? '러닝 일시정지' : '러닝 중';
     final body = _body(data);
 
@@ -178,66 +177,40 @@ class RunLiveWidget {
   // ── iOS 구현 ─────────────────────────────────────────────────────
 
   Future<void> _iosStart(RunWidgetData data) async {
-    if (!await _iosEnsureInit()) return;
-
-    // 이전 러닝의 활동이 남아 있으면 걷어내고 새로 만든다.
+    _iosStarted = false;
     try {
-      await _liveActivities.endAllActivities();
-    } catch (_) {}
-
-    try {
-      _activityId = await _liveActivities.createActivity(
-        DateTime.now().millisecondsSinceEpoch.toString(),
-        _iosData(data),
-        // 앱이 죽으면 시스템이 활동도 걷게 한다 — 유령 위젯 방지.
-        removeWhenAppIsKilled: true,
-        // 푸시로 원격 갱신하지 않는다 — 앱에서 직접 update한다. true(기본)면
-        // Push Notifications capability가 필요하고, 없으면 Activity.request가
-        // ActivityKit.ActivityInput error 0으로 실패한다.
-        iOSEnableRemoteUpdates: false,
-      );
+      // 지원 여부(iOS 16.2+ · 사용자가 설정에서 끄지 않음)는 매번 다시 본다 —
+      // 앱을 켜 둔 채 설정에서 바꿀 수 있어서 캐시하면 어긋난다.
+      final supported =
+          await _iosChannel.invokeMethod<bool>('isSupported') ?? false;
+      if (!supported) return;
+      // 네이티브가 이전 러닝의 활동을 걷고 새로 만든다. 앱이 죽으면 네이티브가
+      // willTerminate 에서 활동도 걷는다 — 유령 위젯 방지.
+      _iosStarted =
+          await _iosChannel.invokeMethod<bool>('start', _iosData(data)) ??
+          false;
     } catch (_) {
-      _activityId = null;
+      _iosStarted = false;
     }
   }
 
   Future<void> _iosUpdate(RunWidgetData data) async {
-    final id = _activityId;
-    if (id == null) return;
+    if (!_iosStarted) return;
     try {
-      await _liveActivities.updateActivity(id, _iosData(data));
+      await _iosChannel.invokeMethod<void>('update', _iosData(data));
     } catch (_) {}
   }
 
   Future<void> _iosStop() async {
-    final id = _activityId;
-    _activityId = null;
+    _iosStarted = false;
     try {
-      // id가 있으면 그것만, 없더라도 혹시 남은 활동까지 확실히 걷는다.
-      if (id != null) {
-        await _liveActivities.endActivity(id);
-      } else {
-        await _liveActivities.endAllActivities();
-      }
+      // 시작에 실패했더라도 혹시 남은 활동까지 확실히 걷는다.
+      await _iosChannel.invokeMethod<void>('stop');
     } catch (_) {}
   }
 
-  /// App Group을 붙이고 Live Activity 지원 여부를 확인한다.
-  /// 지원 안 함(iOS<16.1 · 사용자가 끔)이면 false — 이후 호출은 전부 no-op.
-  Future<bool> _iosEnsureInit() async {
-    if (_iosInitialized) return _iosSupported;
-    try {
-      await _liveActivities.init(appGroupId: _appGroupId);
-      _iosSupported = await _liveActivities.areActivitiesEnabled();
-    } catch (_) {
-      _iosSupported = false;
-    }
-    _iosInitialized = true;
-    return _iosSupported;
-  }
-
-  /// Widget Extension이 읽을 키/값. UserDefaults(App Group)로 넘어가므로
-  /// 문자열 위주로 담는다(SwiftUI가 prefixedKey로 읽음 — ios/RunLiveActivity 참고).
+  /// ContentState 필드. 키 이름은 ios/Runner/RunActivityAttributes.swift 와
+  /// 같아야 한다.
   Map<String, dynamic> _iosData(RunWidgetData data) => {
     'distanceKm': Formatters.distanceKm(data.distanceMeters),
     'time': Formatters.duration(data.elapsed),

@@ -1,11 +1,13 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -28,6 +30,10 @@ from app.db import Base
 
 class User(Base):
     __tablename__ = "users"
+    # 운영 웹 회원 목록이 가입일 최신순 + id 2차키로 페이지네이션한다. 복합 인덱스로
+    # 정렬을 인덱스 순서대로 읽어 전체 정렬을 피한다(PostgreSQL은 이 오름차순 인덱스를
+    # 역방향으로 읽어 DESC 정렬도 처리한다). 나중에 keyset로 바꿔도 그대로 재사용한다.
+    __table_args__ = (Index("ix_users_created_at_id", "created_at", "id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -42,6 +48,9 @@ class User(Base):
     google_id: Mapped[str | None] = mapped_column(
         String(100), unique=True, index=True, default=None
     )
+    # 탈퇴 시 Apple 쪽 연결을 끊는(revoke) 데 쓰는 refresh 토큰(app/apple_auth.py).
+    # 로그인 때 authorization code를 교환해 채운다. 탈퇴 시 함께 지운다.
+    apple_refresh_token: Mapped[str | None] = mapped_column(Text, default=None)
     nickname: Mapped[str | None] = mapped_column(String(100), default=None)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
     # provider가 동의항목으로 내려줄 때만 채워진다. 로그인 식별자가 아니라
@@ -54,6 +63,18 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    # 최근 로그인/토큰 리프레시 시각. 로그인(_issue_tokens)과 refresh에서 갱신한다.
+    # 활성 이용자 통계·휴면 판정의 근거. 요청마다 갱신하지 않는다(무상태 인증 유지).
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # 채워지면 탈퇴(익명화)된 계정. PII가 스크럽된 husk이고 provider id도 null이라
+    # 재로그인 시 새 계정이 생긴다. 회원 목록·활성 통계에서 이 값으로 거른다. 활동
+    # (완주·찜)은 익명으로 남겨 역사적 집계에 유지한다.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
     )
 
 
@@ -91,6 +112,10 @@ class Course(Base):
     )
 
     name: Mapped[str] = mapped_column(String(200))
+
+    # 'public' | 'admin'. admin이면 role='admin'인 앱 사용자에게만 내려간다(테스트
+    # 코스). 기본값 없음 — NULL은 공개가 아니라서 일반 사용자에게 보이지 않는다.
+    visibility: Mapped[str | None] = mapped_column(String(20), default=None)
 
     # 왕복 기준 km. GPX에서 계산한 실측 거리가 아니라 명단에 적힌 안내값이라
     # 정수로 충분하다. 러닝 진행률처럼 정확도가 필요한 계산은 이 값이 아니라
@@ -385,4 +410,95 @@ class AdminSession(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class CourseView(Base):
+    """코스 상세 조회 기록. '코스별 조회수'의 원천 데이터다.
+
+    하루 1회 중복제거: (course_id, user_id, view_date)가 유일하다 — 같은 사람이 하루에
+    같은 코스를 여러 번 열어도 행은 하나다. 그래서 조회수는 raw 클릭 수가 아니라
+    '고유 조회(사람·일 단위)'다. GET /courses/{id}가 ON CONFLICT DO NOTHING으로 남긴다.
+
+    user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
+    """
+
+    __tablename__ = "course_views"
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id", "user_id", "view_date", name="uq_course_view_user_day"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # 유니크 제약(course_id, user_id, view_date)의 인덱스가 course_id 조회를 이미
+    # 커버하므로 course_id엔 따로 index를 걸지 않는다.
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("courses.id")
+    )
+    # user_id로 거르는 쿼리가 아직 없어 단독 인덱스는 두지 않는다(핫한 조회 insert의
+    # 쓰기 비용만 늘 뿐). '내가 본 코스' 같은 기능이 생기면 그때 추가한다.
+    user_id: Mapped[str] = mapped_column(String(100))
+    # 조회한 날짜(중복제거 단위). KST 기준 날짜(routers/courses._record_view).
+    view_date: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Coupon(Base):
+    """쿠폰 템플릿(종류). 운영자가 제작하고 유저에게 발급(user_coupons)한다.
+
+    혜택(benefit)은 자유 텍스트다 — 커머스가 없어 서버가 자동 적용하지 않고, 유저가
+    오프라인/이벤트에서 쓰는 증표다. 발급된 쿠폰은 이 템플릿을 라이브 참조하므로
+    (혜택/이름을 복사하지 않음) 운영자가 나중에 고치면 발급분에도 즉시 반영된다.
+    """
+
+    __tablename__ = "coupons"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(String(2000), default=None)
+    # 예) "아메리카노 1잔", "굿즈 교환권". 서버가 해석하지 않는다.
+    benefit: Mapped[str] = mapped_column(String(500))
+    # 유효기간. null이면 무기한. now > valid_until이면 발급분이 '만료'(사용 불가)로 계산된다.
+    valid_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class UserCoupon(Base):
+    """유저에게 발급된 쿠폰 한 장. 템플릿(coupons)을 라이브 참조한다.
+
+    상태는 used_at 하나로 표현한다 — null이면 미사용(사용가능/만료), 값이 있으면
+    사용완료. '만료'는 저장하지 않고 coupons.valid_until로 계산한다. 템플릿을 삭제하면
+    FK ON DELETE CASCADE로 발급분·사용기록도 함께 사라진다(운영 웹이 확인 후 삭제).
+
+    user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
+    """
+
+    __tablename__ = "user_coupons"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    coupon_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
     )

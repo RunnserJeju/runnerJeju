@@ -12,6 +12,9 @@ import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
 import 'course_endpoint_marker.dart';
 import 'facility_marker.dart';
+import 'kakao_geo.dart';
+import 'marker_canvas.dart';
+import 'my_position_marker.dart';
 import 'map_status_views.dart';
 
 /// '러닝' 탭이 쓰는 지도. 코스마다 라벨을 찍고, 라벨을 누르면 알려준다.
@@ -88,9 +91,6 @@ class CourseMapController {
   /// [point]가 화면 중앙에 오도록 옮긴다.
   Future<void> moveTo(GeoPoint point, {int? zoomLevel}) async =>
       _state?.moveTo(point, zoomLevel: zoomLevel);
-
-  /// 지금 찍혀 있는 코스가 모두 보이도록 맞춘다.
-  Future<void> fitCourses() async => _state?.fitCourses();
 }
 
 class _CourseMapViewState extends State<CourseMapView> {
@@ -121,15 +121,7 @@ class _CourseMapViewState extends State<CourseMapView> {
   kakao.PoiStyle? _selectedCourseStyle;
   kakao.PoiStyle? _parkingStyle;
   kakao.PoiStyle? _restroomStyle;
-  late final kakao.PoiStyle _myPositionStyle = kakao.PoiStyle(
-    // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 점을 좌표 중심에 놓으려면 옮긴다.
-    anchor: const kakao.KPoint(0.5, 0.5),
-    icon: kakao.KImage.fromAsset(
-      'assets/circleMarker.png',
-      _myPositionSize,
-      _myPositionSize,
-    ),
-  );
+  kakao.PoiStyle? _myPositionStyle;
   late final kakao.RouteStyle _routeStyle = kakao.RouteStyle(
     AppColors.accent,
     6,
@@ -149,11 +141,12 @@ class _CourseMapViewState extends State<CourseMapView> {
   Object? _mapError;
   String? _keyHash;
 
-  /// 코스가 아직 없을 때의 배율. 제주도 전체가 한눈에 들어온다.
-  static const int _islandZoomLevel = 10;
+  /// 코스가 아직 없을 때의 배율. 제주 중앙을 두고 섬의 절반쯤이 보인다.
+  static const int _islandZoomLevel = 12;
 
-  /// 내 위치 점의 화면 크기(dp).
-  static const int _myPositionSize = 14;
+  /// 처음 코스를 받아 전체를 맞춘 뒤 이만큼 더 당긴다. 섬 전체가 한 화면에
+  /// 들어오는 배율은 너무 멀어서 코스 라벨이 뭉쳐 보인다.
+  static const int _firstFitZoomIn = 2;
 
   /// 코스 전체를 화면에 맞출 때 가장자리에 두는 여백(px).
   static const int _fitPadding = 72;
@@ -171,7 +164,9 @@ class _CourseMapViewState extends State<CourseMapView> {
     super.didUpdateWidget(oldWidget);
 
     if (!identical(oldWidget.controller, widget.controller)) {
-      if (oldWidget.controller?._state == this) oldWidget.controller?._state = null;
+      if (oldWidget.controller?._state == this) {
+        oldWidget.controller?._state = null;
+      }
       widget.controller?._state = this;
     }
 
@@ -215,7 +210,7 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     return kakao.KakaoMap(
       option: kakao.KakaoMapOption(
-        position: _toLatLng(widget.initialCenter ?? CourseMapView.jejuCenter),
+        position: (widget.initialCenter ?? CourseMapView.jejuCenter).toLatLng(),
         zoomLevel: widget.initialCenter == null
             ? _islandZoomLevel
             : _focusZoomLevel,
@@ -257,7 +252,7 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     await controller.moveCamera(
       kakao.CameraUpdate.newCenterPosition(
-        _toLatLng(point),
+        point.toLatLng(),
         // 배율을 비우면 SDK가 -1을 보내고 iOS 네이티브가 그걸 그대로 배율로 써서
         // 지도가 최소 배율로 빠진다. 항상 명시적인 값을 넘긴다.
         zoomLevel: zoomLevel ?? _focusZoomLevel,
@@ -266,7 +261,7 @@ class _CourseMapViewState extends State<CourseMapView> {
     );
   }
 
-  Future<void> fitCourses() async {
+  Future<void> fitCourses({bool animate = true}) async {
     final controller = _controller;
     if (controller == null || _disposed) return;
 
@@ -281,10 +276,10 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     await controller.moveCamera(
       kakao.CameraUpdate.fitMapPoints(
-        points.map(_toLatLng).toList(),
+        points.map((p) => p.toLatLng()).toList(),
         padding: _fitPadding,
       ),
-      animation: const kakao.CameraAnimation(350),
+      animation: animate ? const kakao.CameraAnimation(350) : null,
     );
   }
 
@@ -351,7 +346,7 @@ class _CourseMapViewState extends State<CourseMapView> {
       if (_markers.containsKey(course.id)) continue;
 
       final marker = await controller.labelLayer.addPoi(
-        _toLatLng(course.startPoint!),
+        course.startPoint!.toLatLng(),
         style: style,
         text: course.name,
         onClick: () => widget.onCourseTap?.call(course),
@@ -387,8 +382,7 @@ class _CourseMapViewState extends State<CourseMapView> {
 
   Future<void> _syncSelectedRoute(kakao.KakaoMapController controller) async {
     final points = widget.selectedPath;
-    if (_drawnSelectedPath != null &&
-        identical(_drawnSelectedPath, points)) {
+    if (identical(_drawnSelectedPath, points)) {
       return;
     }
 
@@ -404,7 +398,7 @@ class _CourseMapViewState extends State<CourseMapView> {
       return;
     }
 
-    final latLngs = points.map(_toLatLng).toList();
+    final latLngs = points.map((p) => p.toLatLng()).toList();
     if (existing == null) {
       _selectedRoute = await controller.routeLayer.addRoute(
         latLngs,
@@ -437,7 +431,7 @@ class _CourseMapViewState extends State<CourseMapView> {
       Future<void> place(GeoPoint point, kakao.PoiStyle? style) async {
         if (style == null || _disposed) return;
         final poi = await controller.labelLayer.addPoi(
-          _toLatLng(point),
+          point.toLatLng(),
           style: style,
         );
         if (_disposed) {
@@ -470,7 +464,10 @@ class _CourseMapViewState extends State<CourseMapView> {
     _drawnEndpointPath = points;
   }
 
-  Future<kakao.PoiStyle?> _ensureEndpointStyle(Color color, String label) async {
+  Future<kakao.PoiStyle?> _ensureEndpointStyle(
+    Color color,
+    String label,
+  ) async {
     final cached = _endpointStyles[label];
     if (cached != null) return cached;
 
@@ -539,9 +536,11 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     final marker = _myPositionMarker;
     if (marker == null) {
+      final style = await _ensureMyPositionStyle();
+      if (_disposed) return;
       final created = await controller.labelLayer.addPoi(
-        _toLatLng(position),
-        style: _myPositionStyle,
+        position.toLatLng(),
+        style: style,
       );
       if (_disposed) {
         await created.remove();
@@ -551,7 +550,7 @@ class _CourseMapViewState extends State<CourseMapView> {
       return;
     }
 
-    await marker.move(_toLatLng(position));
+    await marker.move(position.toLatLng());
   }
 
   Future<void> _fitOnFirstLoad() async {
@@ -561,12 +560,26 @@ class _CourseMapViewState extends State<CourseMapView> {
     // 처음 볼 자리를 밖에서 정해 줬으면 그 자리를 그대로 둔다.
     if (widget.initialCenter != null) return;
 
-    await fitCourses();
+    // 첫 화면이라 애니메이션 없이 바로 맞춘다. 맞춘 뒤 몇 단계 더 당기는데,
+    // 애니메이션을 켜 두면 맞추는 중에 당겨져 결과가 들쭉날쭉하다.
+    await fitCourses(animate: false);
+    final controller = _controller;
+    if (controller == null || _disposed) return;
+    for (var i = 0; i < _firstFitZoomIn; i++) {
+      await controller.moveCamera(kakao.CameraUpdate.zoomIn());
+    }
   }
 
   // ---------------------------------------------------------------------------
   // 라벨 모양
   // ---------------------------------------------------------------------------
+
+  Future<kakao.PoiStyle> _ensureMyPositionStyle() async =>
+      _myPositionStyle ??= kakao.PoiStyle(
+        // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 점을 좌표 중심에 놓으려면 옮긴다.
+        anchor: const kakao.KPoint(0.5, 0.5),
+        icon: await buildMyPositionMarker(),
+      );
 
   Future<kakao.PoiStyle?> _ensureCourseStyle() async {
     if (_courseStyle != null) return _courseStyle;
@@ -630,7 +643,10 @@ class _CourseMapViewState extends State<CourseMapView> {
   Future<kakao.PoiStyle?> _ensureRestroomStyle() async {
     if (_restroomStyle != null) return _restroomStyle;
 
-    final icon = await buildFacilityBadge(restroomBadgeColor, restroomBadgeLabel);
+    final icon = await buildFacilityBadge(
+      restroomBadgeColor,
+      restroomBadgeLabel,
+    );
     if (_disposed) return null;
 
     return _restroomStyle = kakao.PoiStyle(
@@ -649,64 +665,44 @@ class _CourseMapViewState extends State<CourseMapView> {
   /// 에셋 PNG 대신 그리는 이유는 색이 둘(기본/선택)이고 크기도 둘이라, 파일로
   /// 두면 같은 모양을 네 벌 관리하게 되기 때문이다. 앱 색을 바꾸면 여기만 따라온다.
   ///
-  /// [width]·[height]는 화면 크기(dp)이고, 비트맵은 그보다 [_pinPixelRatio]배
-  /// 크게 그린다. 그래야 고밀도 화면에서 가장자리가 뭉개지지 않는다.
+  /// [width]·[height]는 화면 크기(dp)다.
   static Future<kakao.KImage> _buildPinImage(
     Color color,
     int width,
     int height,
-  ) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.scale(_pinPixelRatio);
-
+  ) {
     final w = width.toDouble();
     final h = height.toDouble();
     final radius = w / 2 - _pinBorder;
     final center = Offset(w / 2, radius + _pinBorder);
 
-    // 머리(원)와 꼬리(삼각형)를 합쳐 하나의 외곽선으로 만든다. 따로 그리면
-    // 겹치는 자리에 흰 테두리가 가로질러 그어진다.
-    final head = Path()
-      ..addOval(Rect.fromCircle(center: center, radius: radius));
-    final tail = Path()
-      ..moveTo(center.dx - radius * 0.62, center.dy + radius * 0.55)
-      ..lineTo(center.dx, h - _pinBorder / 2)
-      ..lineTo(center.dx + radius * 0.62, center.dy + radius * 0.55)
-      ..close();
-    final pin = Path.combine(ui.PathOperation.union, head, tail);
+    return rasterizeMarker(
+      width: w,
+      height: h,
+      draw: (canvas) {
+        // 머리(원)와 꼬리(삼각형)를 합쳐 하나의 외곽선으로 만든다. 따로 그리면
+        // 겹치는 자리에 흰 테두리가 가로질러 그어진다.
+        final head = Path()
+          ..addOval(Rect.fromCircle(center: center, radius: radius));
+        final tail = Path()
+          ..moveTo(center.dx - radius * 0.62, center.dy + radius * 0.55)
+          ..lineTo(center.dx, h - _pinBorder / 2)
+          ..lineTo(center.dx + radius * 0.62, center.dy + radius * 0.55)
+          ..close();
+        final pin = Path.combine(ui.PathOperation.union, head, tail);
 
-    canvas.drawPath(pin, Paint()..color = color);
-    canvas.drawPath(
-      pin,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = _pinBorder,
-    );
-    canvas.drawCircle(
-      center,
-      radius * 0.34,
-      Paint()..color = Colors.white,
-    );
-
-    final image = await recorder.endRecording().toImage(
-      (w * _pinPixelRatio).round(),
-      (h * _pinPixelRatio).round(),
-    );
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    image.dispose();
-
-    return kakao.KImage.fromData(
-      data!.buffer.asUint8List(),
-      width,
-      height,
+        canvas.drawPath(pin, Paint()..color = color);
+        canvas.drawPath(
+          pin,
+          Paint()
+            ..color = Colors.white
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = _pinBorder,
+        );
+        canvas.drawCircle(center, radius * 0.34, Paint()..color = Colors.white);
+      },
     );
   }
 
   static const double _pinBorder = 2;
-  static const double _pinPixelRatio = 3;
-
-  static kakao.LatLng _toLatLng(GeoPoint point) =>
-      kakao.LatLng(point.latitude, point.longitude);
 }

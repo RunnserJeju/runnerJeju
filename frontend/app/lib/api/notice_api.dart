@@ -1,5 +1,6 @@
 import '../models/notice.dart';
 import '../network/api_client.dart';
+import '../network/json.dart';
 
 /// API 계층: 공지사항 관련 서버 엔드포인트.
 class NoticeApi {
@@ -10,8 +11,6 @@ class NoticeApi {
   Future<List<Notice>> fetchNotices() async {
     final response = await _client.dio.get('/notices');
 
-    return (response.data as List)
-        .map((e) => Notice.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return parseList(response.data, Notice.fromJson);
   }
 }

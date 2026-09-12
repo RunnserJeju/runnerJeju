@@ -21,6 +21,7 @@ import 'package:flutter/services.dart';
 /// ```
 class AppException implements Exception {
   AppException(this.message, [this.cause]) {
+    if (!kDebugMode) return;
     final detail = describeCause(cause);
     if (detail != null) {
       // 하위 클래스면 그 이름으로 찍힌다.
@@ -31,10 +32,11 @@ class AppException implements Exception {
   final String message;
   final Object? cause;
 
-  /// 화면에는 이 값을 보여준다 — 원인까지 포함해서 디버깅 중엔 바로 확인할 수 있다.
+  /// 화면에는 이 값을 보여준다. 디버그 빌드에서만 원인까지 붙여 바로 확인할 수
+  /// 있게 하고, 릴리스에서는 서버 응답 본문이 사용자에게 보이지 않게 한다.
   @override
   String toString() {
-    final detail = describeCause(cause);
+    final detail = kDebugMode ? describeCause(cause) : null;
     return detail == null ? message : '$message\n($detail)';
   }
 }

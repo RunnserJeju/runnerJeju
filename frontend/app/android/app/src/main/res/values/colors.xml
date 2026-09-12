@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 러너스제주 브랜드 레드. 런치스크린 배경과 adaptive icon 배경에 함께 쓴다. -->
+    <color name="brand_red">#D33216</color>
+    <!-- adaptive icon이 참조하는 이름은 관례상 그대로 둔다. -->
+    <color name="ic_launcher_background">#D33216</color>
+</resources>

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../models/running_program.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
+import '../../widgets/section_title.dart';
 
 /// 커뮤니티 탭. 지금은 러닝 프로그램 섹션만 있고 목록은 비어 있다.
 class CommunityScreen extends StatefulWidget {
@@ -67,7 +67,7 @@ class _ProgramList extends StatelessWidget {
       slivers: [
         const SliverPadding(
           padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
-          sliver: SliverToBoxAdapter(child: _SectionTitle('러닝 프로그램')),
+          sliver: SliverToBoxAdapter(child: SectionTitle('러닝 프로그램')),
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
@@ -83,44 +83,14 @@ class _ProgramList extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.5,
-        color: AppColors.ink,
-      ),
-    );
-  }
-}
-
 class _ProgramCard extends StatelessWidget {
   const _ProgramCard({required this.program});
 
   final RunningProgram program;
 
-  /// 상시 모집이면 null이라 기간 줄을 아예 감춘다.
-  String? get _period {
-    final start = program.startDate;
-    final end = program.endDate;
-    if (start == null && end == null) return null;
-    if (start != null && end != null) {
-      return '${Formatters.date(start)} ~ ${Formatters.date(end)}';
-    }
-    return Formatters.date((start ?? end)!);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final period = _period;
+    final period = program.periodLabel;
 
     return Container(
       width: double.infinity,

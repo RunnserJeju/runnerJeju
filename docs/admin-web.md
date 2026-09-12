@@ -39,6 +39,17 @@
 | `POST /admin/missions` | 미션 등록 |
 | `PATCH /admin/missions/{id}` | 미션 수정 (전체 교체) |
 | `DELETE /admin/missions/{id}` | 미션 삭제 |
+| `GET /admin/users` | 회원 목록 (검색·페이지네이션, 완주 수 포함) |
+| `GET /admin/users/{id}` | 회원 상세 (기본정보 + 완주 코스 목록) |
+| `GET /admin/stats/overview` | 이용 통계 — 사이트 전체 요약 |
+| `GET /admin/stats/courses` | 이용 통계 — 코스별 지표(완주·찜·이용자, 정렬) |
+| `POST /admin/coupons` | 쿠폰 제작 |
+| `GET /admin/coupons` | 쿠폰 목록 (+발급/사용 수) |
+| `GET /admin/coupons/{id}` | 쿠폰 상세 |
+| `PATCH /admin/coupons/{id}` | 쿠폰 수정 |
+| `DELETE /admin/coupons/{id}` | 쿠폰 삭제 (발급분 cascade) |
+| `POST /admin/coupons/{id}/issue` | 지급 (user_ids 대량) |
+| `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·사용여부, 닉네임) |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /notices`.
@@ -85,7 +96,7 @@
 - **라이브 참조**: 발급된 스탬프(`GET /stamps`)의 `image_url`은 저장값이 아니라 `courses.stamp_image_url`에서 조회 시 가져온다 → 운영자가 나중에 도안을 넣거나 바꿔도 **이미 완주한 사람까지 반영**. (그래서 죽은 컬럼 `stamps.image_url`은 0012에서 제거)
 - 앱: 스탬프 탭 앨범이 획득 칸은 도안, 미획득 칸은 회색 목표 도안으로 그린다.
 - **도안 규격(운영 웹, 2026-09-05)**: 앱이 원 안에 꽉 채워 그리므로 **정사각형(1:1), 한 변 512~2048px**, jpg/png/webp ≤8MB. 배경 투명 png 권장. 서버는 타입·용량만 보고 픽셀은 안 본다(이미지 디코딩 라이브러리 없음) — 운영 웹 `components/imageSpec.ts`가 올리기 전에 검사해 규격 밖 파일은 선택을 막는다.
-- 배포 전 Supabase에 `course-stamps` Public 버킷 생성 필요(썸네일 `course-thumbnails`와 같은 방식).
+- `course-stamps` Public 버킷 **생성 완료 (개발 2026-09-02, 운영 2026-09-05)**. 썸네일 버킷과 같은 설정(public, 8MB, jpg/png/webp). 운영은 업로드→public 조회→삭제까지 확인.
 
 ## 공지사항 관리 (백엔드, 2026-09-02)
 
@@ -152,6 +163,43 @@
 
 > `cloudbuild.yaml`은 `SUPABASE_COURSE_BUCKET`을 넘기지 않는다 — 기본값이 곧
 > 버킷 이름이라 그대로 동작한다. 버킷 이름을 바꾸려면 그때 환경변수를 추가한다.
+
+## 회원 관리 (조회, 백엔드, 2026-09-05)
+
+운영자가 가입 회원의 기본정보와 완주 현황을 조회한다. **조회 전용** — 이용 제한(제재)·상태 표시·감사 로그·러닝 기록은 이번 범위 밖(제재와 함께 추후). `User` 스키마 변경 없음. 라우터 `app/admin/users.py`, 마이그레이션 `0018`(목록 정렬용 인덱스만).
+
+- **`GET /admin/users`** — 목록. 쿼리 `keyword`(닉네임·이메일 부분일치), `limit`(기본 20, 1~100), `offset`(기본 0). 응답 `{ total, items[] }`. `items[]` = `id, nickname, providers[], email, created_at, completed_count`. 정렬은 가입일 최신순(+id 2차키). 완주 수는 이 페이지 유저만 배치 집계(`IN(...) GROUP BY`)해서 N+1이 없다. `total`은 같은 필터의 전체 개수(페이지 UI용).
+- **`GET /admin/users/{id}`** — 상세. 응답 `id, nickname, providers[], email, profile_image_url, created_at, completed_count, completed_courses[{course_id, name, acquired_at}]`. 완주 목록은 스탬프↔코스 단일 조인(코스명). 없으면 404.
+- **완주 = 스탬프**: 스탬프는 코스 완주로만, 유저·코스당 1개 발급(`uq_stamp_user_course`). "완주 코스 = 획득 스탬프"라 목록 `completed_count`·상세 `completed_courses`가 곧 획득 스탬프다.
+- **`providers`**: 가입에 쓰인 소셜 종류만 파생(`kakao`/`apple`/`google`). 내부 식별자(`kakao_id` 등) 원본은 응답에 없다.
+- **조인 주의**: `Stamp.user_id`는 `users.id` FK가 아니라 토큰 sub(UUID 문자열) 복사본(String)이라 유저↔완주 매칭은 `str(users.id)`로 한다. `Stamp.course_id`는 진짜 UUID FK라 코스명은 조인.
+- 페이지네이션 offset 방식(정렬 인덱스 `ix_users_created_at_id`는 keyset 전환 시 재사용).
+- **검색 성능(보류, 2026-09-05)**: `keyword`는 `%..%` ILIKE라 앞 와일드카드 때문에 인덱스를 못 타고 seq scan(O(n))이다. 회원 규모가 작고 검색이 저QPS(운영자 소수)라 지금은 그대로 둔다. 회원이 커지면(대략 5만+ 또는 검색 체감 저하) `pg_trgm` GIN 인덱스(`nickname`/`email`에 `gin_trgm_ops`)로 전환 — 같은 `ILIKE`가 인덱스를 타게 되어 검색 코드는 안 바뀐다.
+- 미구현(제재와 함께): 상태 컬럼·이용 제한/해제·상태 필터·러닝 기록·완주수 등 정렬 옵션.
+
+## 이용 통계 (백엔드, 2026-09-06)
+
+운영자가 코스 이용 현황을 본다. 완주·찜·이용자·회원은 이미 있는 데이터로 집계하고, **조회수는 새 이벤트 테이블 `course_views`로 추가**(마이그레이션 `0020`). 라우터 `app/admin/stats.py`. 기간별 추이·인기 지역은 이후.
+
+- **`GET /admin/stats/overview`** — 사이트 전체 요약. 응답 `registered_users, active_users, total_runs, total_completions, total_favorites, total_views`.
+  - `registered_users`(가입 회원)·`active_users`(러닝 1회+ 한 고유 사용자)는 **탈퇴자 제외**(`deleted_at IS NULL`, 현재 기준). 누적 활동(runs/completions/favorites/views)은 **탈퇴자 포함** 역사적 총계. 쿼리 count 6방.
+- **`GET /admin/stats/courses?sort=completions|runners|favorites|views`** — 코스별 지표 표. 응답 `id, name, address, completed_count, favorite_count, runner_count, view_count`. 정렬 내림차순(기본 완주순), 동점은 이름→id.
+  - `completed_count`=완주자(=획득 스탬프), `favorite_count`=찜, `runner_count`=그 코스를 달린 고유 사용자(완주자의 상위 집합), `view_count`=조회수(아래). **탈퇴자 포함**(역사적 누적).
+  - 코스가 수십 개라 배치 집계(코스 1 + 완주·찜·이용자·조회수 각 group_by 1 = 5쿼리, N+1 없음) 후 Python 정렬.
+- **조회수 (하루 1회 중복제거)**: `course_views(course_id, user_id, view_date)` + `(course_id, user_id, view_date)` 유니크. 공개 `GET /courses/{id}`(앱)가 서버측에서 `ON CONFLICT DO NOTHING`으로 기록 → **앱 변경 없음**. 같은 사람이 하루에 여러 번 열어도 1 → **raw 클릭 수가 아니라 '고유 조회(사람·일)'**. 시간축은 `view_date`(일 단위)뿐이라 **기간별(period) 추이는 이후**.
+- **인기 '지역' 보류**: 코스에 구조화된 지역 필드가 없어(주소·태그는 자유 텍스트) 지역 집계는 안 한다. 코스 정렬이 곧 인기 코스. region 필드가 생기면 그때.
+
+## 쿠폰 관리 (백엔드, 2026-09-06)
+
+운영자가 쿠폰을 제작·지급하고, 유저가 앱에서 사용(이용완료)한다. 마이그레이션 `0021`(`coupons` 템플릿 + `user_coupons` 발급). 커머스가 없어 혜택은 자유 텍스트이고 서버가 자동 적용하지 않는다(오프라인/이벤트 증표).
+
+- **2계층**: `coupons`(종류·템플릿) + `user_coupons`(개인 발급 인스턴스). 발급분은 템플릿을 **라이브 참조**(혜택·유효기간 복사 안 함) → 운영자 수정이 발급분에 즉시 반영.
+- **상태**: `user_coupons.used_at` 하나로 — null=미사용, 값=사용완료. **만료는 저장 안 하고** `coupons.valid_until < now`로 계산. 유효상태 = 사용완료 / 만료 / 사용가능.
+- **삭제**: 템플릿 삭제 시 발급분·사용기록이 FK `ON DELETE CASCADE`로 함께 삭제. "이미 발급된 쿠폰인데 진짜?" 확인은 운영 웹 다이얼로그가 맡고 백엔드는 그냥 삭제한다.
+- **운영자 API** (`/admin/coupons`): `POST`(제작)·`GET`(목록+발급/사용 수)·`GET/{id}`·`PATCH/{id}`·`DELETE/{id}` + `POST /{id}/issue`(user_ids 대량, **실존 비탈퇴 회원만** 발급) + `GET /{id}/issued`(발급 현황 — 누구에게·사용여부, **회원 닉네임 조인**, offset 페이지네이션).
+- **앱 API** (`/me/coupons`, 공개): `GET`(내 쿠폰 — 라이브 혜택·유효상태) + `POST /{user_coupon_id}/use`(사용). 사용은 `used_at IS NULL`일 때만 채우는 **조건부 UPDATE**로 중복 사용 방지(동시성), 소유·만료 확인.
+- **닉네임 조인**: `user_coupons.user_id`는 `str(users.id)`(FK 아님)이라, 발급 현황은 페이지 user_id들을 UUID로 되돌려 `users` 배치 조회(N+1 없음). 탈퇴/미설정이면 닉네임 null.
+- **안 한 것**: 회수(revoke)·개별 발급 수정/삭제·구조화 혜택·per-issuance 만료·미션 자동지급 연결·Flutter/운영웹 화면(API만).
 
 ## 목표 서버 구조
 

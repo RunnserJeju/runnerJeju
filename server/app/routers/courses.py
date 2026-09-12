@@ -1,16 +1,23 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import gpx
 from app.db import get_db
-from app.deps import current_user_id
-from app.models import Course, Stamp
+from app.deps import current_user_id, current_user_is_admin
+from app.models import Course, CourseView, Stamp
 from app.schemas import CourseListItem, CourseSummary
 
 router = APIRouter(tags=["courses"])
+
+# 조회수 '하루' 경계는 한국 시간(KST) 기준. 한국은 DST가 없어 고정 오프셋(UTC+9)이면
+# 정확하고, tzdata 의존도 없다.
+KST = timezone(timedelta(hours=9))
 
 
 def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) -> dict:
@@ -38,6 +45,7 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "start_point": path[0] if path else None,
         "completed_count": completed_count,
         "is_completed_by_me": is_completed_by_me,
+        "visibility": course.visibility,
     }
 
 
@@ -70,16 +78,57 @@ def _my_completed_course_ids(
     return set(rows)
 
 
+def _record_view(db: Session, course_id: uuid.UUID, user_id: str) -> None:
+    """코스 상세 조회를 하루 1회로 기록한다(중복제거). GET /courses/{id}의 부수효과.
+
+    같은 (코스, 사용자, 날짜)면 ON CONFLICT DO NOTHING으로 조용히 넘어가, 하루에 같은
+    코스를 여러 번 열어도 조회수는 1만 는다 — 조회수는 코스별 '고유 조회(사람·일)'다.
+    '하루'는 KST 기준(view_date). 분석용 쓰기라 **best-effort** — 실패하면 롤백만 하고
+    상세 조회(핵심 읽기)는 성공시킨다.
+    """
+    stmt = (
+        pg_insert(CourseView)
+        .values(
+            course_id=course_id,
+            user_id=user_id,
+            view_date=datetime.now(KST).date(),
+        )
+        .on_conflict_do_nothing(index_elements=["course_id", "user_id", "view_date"])
+    )
+    try:
+        db.execute(stmt)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+
+
+def visible_courses(stmt, is_admin: bool):
+    """일반 사용자에게는 visibility='public'인 코스만. NULL(미설정)도 숨긴다."""
+    if is_admin:
+        return stmt
+    return stmt.where(Course.visibility == "public")
+
+
+def _escape_like(keyword: str) -> str:
+    """사용자 입력의 LIKE 와일드카드(%, _)를 글자 그대로 찾게 한다."""
+    return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/courses", response_model=list[CourseListItem])
 def list_courses(
     keyword: str | None = Query(default=None),
+    limit: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
-    stmt = select(Course).order_by(Course.created_at.desc())
+    stmt = visible_courses(select(Course), is_admin).order_by(Course.created_at.desc())
 
+    keyword = (keyword or "").strip()
     if keyword:
-        stmt = stmt.where(Course.name.ilike(f"%{keyword}%"))
+        stmt = stmt.where(Course.name.ilike(f"%{_escape_like(keyword)}%", escape="\\"))
+    if limit is not None:
+        stmt = stmt.limit(limit)
 
     courses = list(db.execute(stmt).scalars())
     course_ids = [course.id for course in courses]
@@ -98,15 +147,25 @@ def get_course(
     course_id: uuid.UUID,
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
-    course = db.get(Course, course_id)
+    # 숨긴 코스는 없는 것과 같이 404 — 있다는 사실도 알리지 않는다.
+    course = db.scalar(
+        visible_courses(select(Course).where(Course.id == course_id), is_admin)
+    )
     if course is None:
         raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
 
     counts = _completed_counts(db, [course.id])
     mine = _my_completed_course_ids(db, user_id, [course.id])
+    summary = _to_summary(course, counts.get(course.id, 0), course.id in mine)
 
-    return _to_summary(course, counts.get(course.id, 0), course.id in mine)
+    # 응답을 다 만든 뒤 조회를 기록한다 — 여기 commit이 세션을 expire시켜도 이미 dict로
+    # 뽑아둔 summary엔 영향이 없고(course 재로딩 없음), best-effort라 기록 실패가 상세
+    # 조회를 깨지 않는다. 존재하는 코스만 센다.
+    _record_view(db, course.id, user_id)
+
+    return summary
 
 
 class CourseUploadError(Exception):
@@ -151,6 +210,8 @@ def create_course_from_gpx_bytes(
     restrooms: list[dict] | None = None,
     description: str | None,
     estimated_time_min: int | None = None,
+    # 운영 웹은 필수로 받고, 시드 스크립트는 안 넘겨 NULL(미설정)로 올라간다.
+    visibility: str | None = None,
     created_by: str | None,
 ) -> Course:
     """GPX 바이트를 파싱해 코스를 새로 등록한다.
@@ -185,6 +246,7 @@ def create_course_from_gpx_bytes(
         restrooms=restrooms or [],
         description=description,
         estimated_time_min=estimated_time_min,
+        visibility=visibility,
         # 썸네일(thumbnail_url)은 여기서 안 넣는다 — 파일 업로드가 필요해 등록 직후
         # 전용 엔드포인트가 따로 채운다. 새 코스는 항상 썸네일 없이 만들어진다.
         # 원본 GPX 점이 아니라 균등 간격으로 리샘플한 경로를 저장한다.

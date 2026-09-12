@@ -1,5 +1,6 @@
 import '../models/running_course.dart';
 import '../network/api_client.dart';
+import '../network/json.dart';
 
 /// API 계층: 코스 찜 관련 서버 엔드포인트.
 class FavoriteApi {
@@ -11,9 +12,7 @@ class FavoriteApi {
   Future<List<RunningCourse>> fetchFavorites() async {
     final response = await _client.dio.get('/favorites');
 
-    return (response.data as List)
-        .map((e) => RunningCourse.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return parseList(response.data, RunningCourse.fromJson);
   }
 
   /// 코스를 찜한다. 서버가 멱등이라 이미 찜한 코스여도 성공한다.

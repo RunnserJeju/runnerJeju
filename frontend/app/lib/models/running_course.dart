@@ -1,19 +1,28 @@
+import '../network/json.dart';
 import 'course_facility.dart';
 import 'geo_point.dart';
 
 /// 코스 난이도. [value]는 서버 `courses.difficulty`(SMALLINT)와 같은 값이어야 한다.
 enum CourseDifficulty {
-  easy(1, '★'),
-  normal(2, '★★'),
-  hard(3, '★★★');
+  easy(1, '★', '초급'),
+  normal(2, '★★', '중급'),
+  hard(3, '★★★', '고급');
 
-  const CourseDifficulty(this.value, this.label);
+  const CourseDifficulty(this.value, this.label, this.title);
 
   final int value;
+
+  /// 별 표기. 상세/칩처럼 좁은 자리에 쓴다.
   final String label;
 
-  static CourseDifficulty fromValue(int? value) => CourseDifficulty.values
-      .firstWhere((e) => e.value == value, orElse: () => CourseDifficulty.normal);
+  /// 글자 표기. 홈 추천 카드 뱃지에 쓴다.
+  final String title;
+
+  static CourseDifficulty fromValue(int? value) =>
+      CourseDifficulty.values.firstWhere(
+        (e) => e.value == value,
+        orElse: () => CourseDifficulty.normal,
+      );
 }
 
 /// 서버에서 내려받아 따라 달리는 러닝 코스.
@@ -94,8 +103,6 @@ class RunningCourse {
   /// 목록에서 바로 받아야 한다. 경로가 없는 코스면 null이다.
   final GeoPoint? startPoint;
 
-  GeoPoint? get endPoint => path.isEmpty ? null : path.last;
-
   /// 예상 소요시간을 사람이 읽는 문자열로. 없으면 null이라 화면에서 숨긴다.
   /// 예) 45 → "45분", 90 → "1시간 30분", 120 → "2시간".
   String? get estimatedTimeLabel {
@@ -108,12 +115,11 @@ class RunningCourse {
   }
 
   /// 칩으로 보여줄 태그 목록. 빈 항목과 앞뒤 공백은 걸러낸다.
-  List<String> get tagList =>
-      (tags ?? '')
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+  List<String> get tagList => (tags ?? '')
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
 
   factory RunningCourse.fromJson(Map<String, dynamic> json) => RunningCourse(
     id: json['id'].toString(),
@@ -126,15 +132,13 @@ class RunningCourse {
     address: json['address'] as String,
     parkingAddress: json['parking_address'] as String?,
     restroomAddress: json['restroom_address'] as String?,
-    parkings: _facilities(json['parkings']),
-    restrooms: _facilities(json['restrooms']),
+    parkings: parseList(json['parkings'], CourseFacility.fromJson),
+    restrooms: parseList(json['restrooms'], CourseFacility.fromJson),
     description: json['description'] as String?,
     estimatedTimeMin: (json['estimated_time_min'] as num?)?.toInt(),
     thumbnailUrl: json['thumbnail_url'] as String?,
     stampImageUrl: json['stamp_image_url'] as String?,
-    path: ((json['path'] as List?) ?? const [])
-        .map((e) => GeoPoint.fromJson(e as Map<String, dynamic>))
-        .toList(),
+    path: parseList(json['path'], GeoPoint.fromJson),
     completedCount: (json['completed_count'] as num?)?.toInt() ?? 0,
     isCompletedByMe: json['is_completed_by_me'] as bool? ?? false,
     startPoint: json['start_point'] == null
@@ -142,8 +146,3 @@ class RunningCourse {
         : GeoPoint.fromJson(json['start_point'] as Map<String, dynamic>),
   );
 }
-
-/// 목록/상세 응답의 parkings·restrooms(둘 다 없을 수 있음)를 파싱한다.
-List<CourseFacility> _facilities(dynamic raw) => ((raw as List?) ?? const [])
-    .map((e) => CourseFacility.fromJson(e as Map<String, dynamic>))
-    .toList();

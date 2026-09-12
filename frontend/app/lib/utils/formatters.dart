@@ -36,6 +36,10 @@ class Formatters {
   static String date(DateTime value) =>
       DateFormat('yyyy.MM.dd').format(value.toLocal());
 
+  /// "7.28" — 스탬프 카드처럼 좁은 자리용.
+  static String monthDay(DateTime value) =>
+      DateFormat('M.d').format(value.toLocal());
+
   static String dateTime(DateTime value) =>
       DateFormat('yyyy.MM.dd HH:mm').format(value.toLocal());
 }

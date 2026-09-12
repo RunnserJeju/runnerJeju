@@ -1,4 +1,5 @@
 /// 위경도 한 점. 지도 SDK 타입에 의존하지 않는 순수 도메인 모델이다.
+/// (순수 Dart 도구가 이 파일을 쓰므로 Flutter·지도 SDK를 import하지 않는다.)
 class GeoPoint {
   const GeoPoint({
     required this.latitude,
@@ -34,7 +35,7 @@ class GeoPoint {
   /// 러닝 경로에서만 의미가 있다. 코스 경로는 끊기는 자리가 없다.
   final bool startsNewSegment;
 
-  // 오차범위 
+  // 오차범위
   final double? accuracy;
 
   // 이동 속도(m/s). GPS가 직접 내주는 값이라 좌표 차이로 계산한 것보다 안정적이다.
@@ -71,7 +72,8 @@ class GeoPoint {
   Map<String, dynamic> toJson() => {
     'lat': latitude,
     'lng': longitude,
-    if (recordedAt != null) 'recorded_at': recordedAt!.toUtc().toIso8601String(),
+    if (recordedAt != null)
+      'recorded_at': recordedAt!.toUtc().toIso8601String(),
     if (startsNewSegment) 'segment_break': true,
   };
 
