@@ -18,7 +18,7 @@ substitutions:
   # Sign in with Apple 서버 연동(탈퇴 시 Apple 연결 해제). 둘 다 비밀값이 아니다 —
   # 비밀은 apple-signin-key(Secret Manager)의 .p8 키다. docs/cicd.md 참고.
   _APPLE_TEAM_ID: G92RR9396W
-  _APPLE_KEY_ID: ""
+  _APPLE_KEY_ID: S2Z6S246PY
 
 steps:
   # 1. 테스트 — 여기서 깨지면 이미지도 안 만든다.
