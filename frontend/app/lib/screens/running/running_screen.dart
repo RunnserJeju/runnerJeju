@@ -383,6 +383,12 @@ class _RunningScreenState extends State<RunningScreen> {
     unawaited(_selectCourse(fresh ?? selected));
   }
 
+  static const _dialogButtonText = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w700,
+  );
+  static const _dialogButtonPadding = EdgeInsets.symmetric(horizontal: 8);
+
   /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
   /// 러닝도 길찾기도 시작하지 않는다.
   Future<bool?> _confirmRouteGuide(RunningCourse course, double meters) {
@@ -402,14 +408,24 @@ class _RunningScreenState extends State<RunningScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('여기서 시작'),
+                  // 다이얼로그 폭에선 기본 16px+좌우 24px 패딩이 '여기서 시작'을
+                  // 두 줄로 꺾는다. 글자와 패딩을 줄여 한 줄로.
+                  style: OutlinedButton.styleFrom(
+                    textStyle: _dialogButtonText,
+                    padding: _dialogButtonPadding,
+                  ),
+                  child: const Text('여기서 시작', maxLines: 1),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton(
                   onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('길찾기'),
+                  style: FilledButton.styleFrom(
+                    textStyle: _dialogButtonText,
+                    padding: _dialogButtonPadding,
+                  ),
+                  child: const Text('길찾기', maxLines: 1),
                 ),
               ),
             ],
