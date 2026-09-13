@@ -251,6 +251,7 @@ class TestUpdateCourse:
             name="새 이름",
             distance_km=9,
             difficulty=3,
+            visibility="public",
             address="새 주소",
             tags="새,태그",
             description="새 설명",
@@ -332,27 +333,32 @@ class TestUpdateCourse:
 class TestCourseUpdateSchema:
     def test_rejects_zero_distance(self):
         with pytest.raises(ValidationError):
-            CourseUpdate(name="x", distance_km=0, difficulty=2, address="제주")
+            CourseUpdate(name="x", distance_km=0, difficulty=2, visibility="public", address="제주")
 
     def test_rejects_out_of_range_difficulty(self):
         with pytest.raises(ValidationError):
-            CourseUpdate(name="x", distance_km=5, difficulty=4, address="제주")
+            CourseUpdate(name="x", distance_km=5, difficulty=4, visibility="public", address="제주")
 
     def test_facilities_default_to_empty(self):
-        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, address="제주")
+        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, visibility="public", address="제주")
 
         assert payload.parkings == []
         assert payload.restrooms == []
 
     def test_estimated_time_defaults_to_none(self):
-        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, address="제주")
+        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, visibility="public", address="제주")
 
         assert payload.estimated_time_min is None
 
     def test_rejects_non_positive_estimated_time(self):
         with pytest.raises(ValidationError):
             CourseUpdate(
-                name="x", distance_km=5, difficulty=2, address="제주", estimated_time_min=0
+                name="x",
+                distance_km=5,
+                difficulty=2,
+                visibility="public",
+                address="제주",
+                estimated_time_min=0,
             )
 
 
@@ -757,17 +763,16 @@ class TestStampToOut:
 
 
 class _GetCourseFake:
-    """get_course가 부르는 것만: get(Course), execute(insert/select), commit."""
+    """get_course가 부르는 것만: scalar(select Course), execute(insert/select), commit."""
 
     def __init__(self, course):
         self._course = course
         self.executed = []
         self.committed = False
 
-    def get(self, _model, cid):
-        if self._course is not None and self._course.id == cid:
-            return self._course
-        return None
+    def scalar(self, _stmt):
+        # visible_courses 필터는 흉내내지 않는다 — 공개 여부는 별도 테스트 대상.
+        return self._course
 
     def execute(self, stmt):
         self.executed.append(stmt)
@@ -786,7 +791,7 @@ class TestGetCourseRecordsView:
         course = _course()
         db = _GetCourseFake(course)
 
-        result = courses_router.get_course(course.id, db=db, user_id="u1")
+        result = courses_router.get_course(course.id, db=db, user_id="u1", is_admin=False)
 
         assert result["id"] == course.id
         assert db.insert_count == 1  # 상세 조회 1건 기록(하루 1회 중복제거)
@@ -796,7 +801,7 @@ class TestGetCourseRecordsView:
         db = _GetCourseFake(None)
 
         with pytest.raises(HTTPException) as exc:
-            courses_router.get_course(uuid.uuid4(), db=db, user_id="u1")
+            courses_router.get_course(uuid.uuid4(), db=db, user_id="u1", is_admin=False)
 
         assert exc.value.status_code == 404
         assert db.insert_count == 0
