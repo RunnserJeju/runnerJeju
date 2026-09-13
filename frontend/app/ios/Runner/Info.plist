@@ -47,6 +47,9 @@
 		     깔려 있어도 canLaunchUrl이 false를 돌려줘 늘 웹으로 빠진다. -->
 		<string>kakaomap</string>
 	</array>
+	<!-- HTTPS 외 자체 암호화가 없어 수출 규정 면제. 업로드마다 묻는 걸 막는다. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
