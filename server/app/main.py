@@ -67,6 +67,12 @@ _ADMIN_UI_DIR = Path(__file__).resolve().parent.parent / "static" / "admin"
 if _ADMIN_UI_DIR.is_dir():
     app.mount("/admin-ui", StaticFiles(directory=_ADMIN_UI_DIR, html=True), name="admin-ui")
 
+# 스토어 심사용 공개 문서(개인정보처리방침·이용약관·계정 삭제 안내·문의). 인증 없이
+# 누구나 열 수 있어야 하므로 정적 파일로 서빙한다. static/은 빌드 산출물이라 git에서
+# 제외돼 있어 별도 폴더(server/legal)에 둔다. 주소는 /legal/privacy/ 처럼 폴더 단위.
+_LEGAL_DIR = Path(__file__).resolve().parent.parent / "legal"
+app.mount("/legal", StaticFiles(directory=_LEGAL_DIR, html=True), name="legal")
+
 
 @app.get("/ping")
 def ping():

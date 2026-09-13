@@ -2,9 +2,11 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/app_config.dart';
 import '../../services/service_locator.dart';
@@ -30,6 +32,29 @@ const Color _brandRed = Color(0xFFD33216);
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
+
+  // 약관/방침 링크. 스토어 심사 요건 — 앱 안에서 개인정보처리방침이 열려야 한다.
+  late final TapGestureRecognizer _termsTap = TapGestureRecognizer()
+    ..onTap = () => _openDoc(AppConfig.termsUrl);
+  late final TapGestureRecognizer _privacyTap = TapGestureRecognizer()
+    ..onTap = () => _openDoc(AppConfig.privacyPolicyUrl);
+
+  @override
+  void dispose() {
+    _termsTap.dispose();
+    _privacyTap.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openDoc(String url) {
+    return launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
+  }
+
+  static const _linkStyle = TextStyle(
+    color: Colors.white,
+    decoration: TextDecoration.underline,
+    decorationColor: Colors.white,
+  );
 
   Future<void> _login(Future<bool> Function() action) async {
     setState(() => _loading = true);
@@ -172,14 +197,30 @@ class _LoginScreenState extends State<LoginScreen> {
                     alignment: Alignment.bottomCenter,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(32, 0, 32, 16),
-                      child: Text(
-                        '계속 진행 시 서비스 이용약관 및\n개인정보처리방침에 동의합니다',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xFFE0E0E0),
-                          fontSize: 12,
-                          height: 1.25,
+                      child: Text.rich(
+                        TextSpan(
+                          style: const TextStyle(
+                            color: Color(0xFFE0E0E0),
+                            fontSize: 12,
+                            height: 1.25,
+                          ),
+                          children: [
+                            const TextSpan(text: '계속 진행 시 '),
+                            TextSpan(
+                              text: '서비스 이용약관',
+                              style: _linkStyle,
+                              recognizer: _termsTap,
+                            ),
+                            const TextSpan(text: ' 및\n'),
+                            TextSpan(
+                              text: '개인정보처리방침',
+                              style: _linkStyle,
+                              recognizer: _privacyTap,
+                            ),
+                            const TextSpan(text: '에 동의합니다'),
+                          ],
                         ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
