@@ -58,4 +58,12 @@ class AppConfig {
   }
 
   static bool get hasKakaoNativeAppKey => kakaoNativeAppKey.isNotEmpty;
+
+  /// 스토어 심사용 공개 문서(server/legal). 디버그에서도 운영 주소를 본다 —
+  /// 로컬 서버에는 없을 수 있고, 문서는 어느 빌드에서나 같은 내용이어야 한다.
+  static const String privacyPolicyUrl = '$prodApiBaseUrl/legal/privacy/';
+  static const String termsUrl = '$prodApiBaseUrl/legal/terms/';
+  static const String accountDeletionUrl =
+      '$prodApiBaseUrl/legal/account-deletion/';
+  static const String supportUrl = '$prodApiBaseUrl/legal/support/';
 }
