@@ -223,7 +223,7 @@ export default function CourseForm({ values, onChange, nameOptional = false }: P
         </div>
         <div className="field">
           <label htmlFor="course-visibility">
-            공개 범위 <span className="hint">운영자만은 테스트용</span>
+            공개 범위
           </label>
           <select
             id="course-visibility"
@@ -232,7 +232,7 @@ export default function CourseForm({ values, onChange, nameOptional = false }: P
           >
             <option value="">선택</option>
             <option value="public">전체 공개</option>
-            <option value="admin">운영자만</option>
+            <option value="admin">운영자</option>
           </select>
         </div>
         <div className="field">
