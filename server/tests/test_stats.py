@@ -68,8 +68,9 @@ class OverviewFakeSession:
 
 class TestOverview:
     def test_maps_fields_in_order(self):
-        # 순서: registered, active, runs, completions, favorites, views
-        db = OverviewFakeSession([11, 4, 30, 8, 15, 42])
+        # 순서: registered, active, runs, completions, favorites, views,
+        #       course_runs, matched_runs, coupons_issued, coupons_used
+        db = OverviewFakeSession([11, 4, 30, 8, 15, 42, 20, 12, 9, 3])
 
         result = stats_router.stats_overview(db=db)
 
@@ -80,6 +81,10 @@ class TestOverview:
             "total_completions": 8,
             "total_favorites": 15,
             "total_views": 42,
+            "course_runs": 20,
+            "incomplete_runs": 8,
+            "coupons_issued": 9,
+            "coupons_used": 3,
         }
 
 
@@ -98,11 +103,16 @@ def _course(name: str) -> Course:
 
 
 class TestStatsCourses:
-    def _patch_counts(self, monkeypatch, *, completions=None, favorites=None, runners=None, views=None):
+    def _patch_counts(
+        self, monkeypatch, *, completions=None, favorites=None, runners=None, views=None,
+        runs=None, matched=None,
+    ):
         monkeypatch.setattr(stats_router, "_completed_counts", lambda db, ids: completions or {})
         monkeypatch.setattr(stats_router, "_favorite_counts", lambda db, ids: favorites or {})
         monkeypatch.setattr(stats_router, "_runner_counts", lambda db, ids: runners or {})
         monkeypatch.setattr(stats_router, "_view_counts", lambda db, ids: views or {})
+        monkeypatch.setattr(stats_router, "_run_counts", lambda db, ids: runs or {})
+        monkeypatch.setattr(stats_router, "_matched_counts", lambda db, ids: matched or {})
 
     def test_sorts_by_completions_desc(self, monkeypatch):
         a, b, c = _course("A"), _course("B"), _course("C")
@@ -163,3 +173,15 @@ class TestStatsCourses:
         result = stats_router.stats_courses(sort="completions", db=db)
 
         assert [r["name"] for r in result] == ["A", "B"]
+
+    def test_incomplete_is_runs_minus_matched(self, monkeypatch):
+        a, b = _course("A"), _course("B")
+        self._patch_counts(monkeypatch, runs={a.id: 5, b.id: 2}, matched={a.id: 1, b.id: 4})
+        db = CoursesFakeSession([a, b])
+
+        result = stats_router.stats_courses(sort="incomplete", db=db)
+
+        assert [r["name"] for r in result] == ["A", "B"]
+        assert result[0]["incomplete_run_count"] == 4
+        # matched가 runs보다 많아도(데이터 꼬임) 음수는 안 나온다.
+        assert result[1]["incomplete_run_count"] == 0

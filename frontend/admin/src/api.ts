@@ -248,3 +248,78 @@ export function deleteNoticeImage(id: string): Promise<Notice> {
 export function geocode(address: string): Promise<{ results: GeocodeResult[] }> {
   return request(`/admin/geo/geocode?address=${encodeURIComponent(address)}`)
 }
+
+// --- 지표 ---------------------------------------------------------------
+
+/** 전체 요약(GET /admin/stats/overview). 서버 StatsOverviewOut과 1:1. */
+export interface StatsOverview {
+  registered_users: number
+  active_users: number
+  total_runs: number
+  total_completions: number
+  total_favorites: number
+  total_views: number
+  course_runs: number
+  incomplete_runs: number
+  coupons_issued: number
+  coupons_used: number
+}
+
+export interface CourseStats {
+  id: string
+  name: string
+  address: string
+  completed_count: number
+  favorite_count: number
+  runner_count: number
+  view_count: number
+  run_count: number
+  incomplete_run_count: number
+}
+
+/** 하루치 활동(KST 날짜, YYYY-MM-DD). 활동 없는 날도 0으로 온다. */
+export interface DailyStats {
+  date: string
+  signups: number
+  views: number
+  runs: number
+  completions: number
+  favorites: number
+  coupons_issued: number
+}
+
+export interface StampDistribution {
+  stamps: number
+  users: number
+}
+
+export interface CouponSummary {
+  id: string
+  name: string
+  benefit: string
+  valid_until: string | null
+  created_at: string
+  issued_count: number
+  used_count: number
+}
+
+export function getStatsOverview(): Promise<StatsOverview> {
+  return request('/admin/stats/overview')
+}
+
+/** 코스별 지표. 정렬은 클라이언트에서 다시 하므로 기본 정렬로 받는다. */
+export function getCourseStats(): Promise<CourseStats[]> {
+  return request('/admin/stats/courses')
+}
+
+export function getDailyStats(days: number): Promise<DailyStats[]> {
+  return request(`/admin/stats/daily?days=${days}`)
+}
+
+export function getStampDistribution(): Promise<StampDistribution[]> {
+  return request('/admin/stats/stamps')
+}
+
+export function listCoupons(): Promise<CouponSummary[]> {
+  return request('/admin/coupons')
+}
