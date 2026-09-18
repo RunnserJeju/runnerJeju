@@ -173,7 +173,7 @@ function GpxSection({
     <div className="card">
       <h3 style={{ marginTop: 0 }}>경로(GPX) 교체</h3>
       <p className="muted">
-        경로만 새 GPX로 갈아끼운다. 메타데이터·썸네일은 그대로 둔다.
+        경로를 새 GPX로 교체합니다. 
       </p>
       <div className="field">
         <input

@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 
 import { ApiError, getMe, logout, type AdminIdentity } from './api'
 import AuthPage from './pages/AuthPage'
 import CourseListPage from './pages/CourseListPage'
 import NoticeListPage from './pages/NoticeListPage'
+
+// 차트 라이브러리(recharts)가 커서 지표 탭을 열 때만 내려받는다.
+const StatsPage = lazy(() => import('./pages/StatsPage'))
 
 type Auth =
   | { status: 'checking' }
@@ -11,18 +14,25 @@ type Auth =
   | { status: 'error' }
   | { status: 'authed'; who: AdminIdentity }
 
-type Tab = 'courses' | 'notices'
+type Tab = 'edit' | 'stats'
+type EditSection = 'courses' | 'notices'
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: 'edit', label: '데이터 편집' },
+  { key: 'stats', label: '지표' },
+]
+
+const EDIT_SECTIONS: { key: EditSection; label: string }[] = [
   { key: 'courses', label: '코스' },
   { key: 'notices', label: '공지사항' },
 ]
 
-// 페이지가 둘뿐이라 라우터 없이 상단 탭(state)으로 가른다.
-// 등록/수정은 목록 위 모달로 처리한다.
+// 페이지가 몇 개 안 되어 라우터 없이 상단 탭(state)으로 가른다. '데이터 편집' 안은
+// 좌측 사이드바로 코스/공지를 다시 가른다. 등록/수정은 목록 위 모달로 처리한다.
 export default function App() {
   const [auth, setAuth] = useState<Auth>({ status: 'checking' })
-  const [tab, setTab] = useState<Tab>('courses')
+  const [tab, setTab] = useState<Tab>('edit')
+  const [section, setSection] = useState<EditSection>('courses')
 
   // 최초 로드 시 세션이 살아있는지 서버에 물어본다(쿠키는 JS가 못 읽으므로).
   const checkSession = () => {
@@ -93,13 +103,34 @@ export default function App() {
           로그아웃
         </button>
       </header>
-      <main>
-        {tab === 'courses' ? (
-          <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
-        ) : (
-          <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
-        )}
-      </main>
+      {tab === 'edit' ? (
+        <div className="with-sidebar">
+          <aside className="sidebar">
+            {EDIT_SECTIONS.map((s) => (
+              <button
+                key={s.key}
+                className={section === s.key ? 'active' : undefined}
+                onClick={() => setSection(s.key)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </aside>
+          <main>
+            {section === 'courses' ? (
+              <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+            ) : (
+              <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+            )}
+          </main>
+        </div>
+      ) : (
+        <main>
+          <Suspense fallback={<p className="muted">불러오는 중…</p>}>
+            <StatsPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          </Suspense>
+        </main>
+      )}
     </>
   )
 }

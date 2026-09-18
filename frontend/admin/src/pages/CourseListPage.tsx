@@ -5,7 +5,7 @@ import CourseCreateModal from '../modals/CourseCreateModal'
 import CourseEditModal from '../modals/CourseEditModal'
 
 const DIFFICULTY_LABEL: Record<number, string> = { 1: '★', 2: '★★', 3: '★★★' }
-const VISIBILITY_LABEL = { public: '전체', admin: '운영자만' } as const
+const VISIBILITY_LABEL = { public: '전체', admin: '운영자' } as const
 
 interface Props {
   /** 목록 로딩이 401이면(키 폐기 등) 인증 화면으로 되돌린다. */

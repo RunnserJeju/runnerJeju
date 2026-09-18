@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -464,6 +464,12 @@ class StatsOverviewOut(BaseModel):
     total_completions: int
     total_favorites: int
     total_views: int
+    # 코스 따라가기 러닝(course_id 있는 runs)과 그중 검증 미통과(미완주) 건수.
+    course_runs: int
+    incomplete_runs: int
+    # 쿠폰 발급/사용 누적.
+    coupons_issued: int
+    coupons_used: int
 
 
 class CourseStatsOut(BaseModel):
@@ -478,6 +484,28 @@ class CourseStatsOut(BaseModel):
     runner_count: int
     # 코스별 조회수(하루 1회 중복제거한 고유 조회).
     view_count: int
+    # 코스 따라가기 러닝 횟수와 그중 검증 미통과(미완주) 횟수.
+    run_count: int
+    incomplete_run_count: int
+
+
+class DailyStatsOut(BaseModel):
+    """하루치 활동 건수(KST 날짜). 활동 없는 날도 0으로 채워 준다."""
+
+    date: date
+    signups: int
+    views: int
+    runs: int
+    completions: int
+    favorites: int
+    coupons_issued: int
+
+
+class StampDistributionOut(BaseModel):
+    """스탬프 n개를 보유한 회원 수. 0개는 가입 회원 중 스탬프 없는 사람이다."""
+
+    stamps: int
+    users: int
 
 
 # --- 쿠폰 (운영자 + 앱) ----------------------------------------------------
