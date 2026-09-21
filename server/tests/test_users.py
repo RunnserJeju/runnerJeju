@@ -18,6 +18,13 @@ from app.models import User
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def _no_platform_lookup(monkeypatch):
+    """기기 종류 조회(_latest_platforms)는 user_log 쿼리라 fake 세션이 못 받는다.
+    기본은 빈 결과로 막고, 필요한 테스트만 다시 patch한다."""
+    monkeypatch.setattr(users_router, "_latest_platforms", lambda db, ids: {})
+
+
 def _user(**over) -> User:
     fields = dict(
         id=uuid.uuid4(),
@@ -133,6 +140,7 @@ class TestListUsers:
         monkeypatch.setattr(
             users_router, "_completed_counts", lambda db, ids: {str(u.id): 2}
         )
+        monkeypatch.setattr(users_router, "_latest_platforms", lambda db, ids: {str(u.id): "ios"})
         db = ListFakeSession([u], total=1)
 
         result = users_router.list_users(keyword=None, limit=20, offset=0, db=db)
@@ -144,6 +152,7 @@ class TestListUsers:
         assert item["nickname"] == "러너"
         assert item["providers"] == ["kakao"]
         assert item["email"] == "a@example.com"
+        assert item["platform"] == "ios"
         assert item["completed_count"] == 2
 
     def test_count_defaults_to_zero(self, monkeypatch):

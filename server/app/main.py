@@ -17,6 +17,7 @@ from app.routers import (
     notices,
     runs,
     stamps,
+    user_logs,
     verifications,
 )
 
@@ -53,6 +54,7 @@ app.include_router(favorites.router)
 app.include_router(runs.router)
 app.include_router(verifications.router)
 app.include_router(stamps.router)
+app.include_router(user_logs.router)
 app.include_router(notices.router)
 
 # 운영자 전용. 로그인 라우터(admin_auth_router)는 가드 밖, 나머지(admin_router)는

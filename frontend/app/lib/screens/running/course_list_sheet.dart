@@ -121,6 +121,9 @@ class _CourseListSheetState extends State<CourseListSheet> {
           maxChildSize: CourseListSheet.fullSize,
           snap: true,
           snapSizes: const [CourseListSheet.halfSize],
+          // 손잡이·제목까지 스크롤 뷰 안에 둔다. DraggableScrollableSheet는
+          // scrollController가 달린 스크롤 위에서 시작한 드래그만 시트 이동으로
+          // 받으므로, 밖에 두면 접힌 상태에서 잡을 곳이 없어 시트가 안 올라온다.
           builder: (context, scrollController) => DecoratedBox(
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -133,16 +136,23 @@ class _CourseListSheetState extends State<CourseListSheet> {
                 ),
               ],
             ),
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                const SheetHandle(),
-                _Header(
-                  count: widget.courses.length,
-                  hasLocation: widget.myPosition != null,
+            child: CustomScrollView(
+              controller: scrollController,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 10),
+                      const SheetHandle(),
+                      _Header(
+                        count: widget.courses.length,
+                        hasLocation: widget.myPosition != null,
+                      ),
+                      const Divider(height: 1, color: AppColors.lineSoft),
+                    ],
+                  ),
                 ),
-                const Divider(height: 1, color: AppColors.lineSoft),
-                Expanded(child: _body(scrollController)),
+                _body(),
               ],
             ),
           ),
@@ -151,31 +161,30 @@ class _CourseListSheetState extends State<CourseListSheet> {
     );
   }
 
-  Widget _body(ScrollController scrollController) {
+  Widget _body() {
     if (_sorted.isEmpty) {
-      // 비어 있어도 스크롤이 되어야 시트를 손가락으로 다시 내릴 수 있다.
-      return ListView(
-        controller: scrollController,
+      return SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
-        children: [_emptyState()],
+        sliver: SliverToBoxAdapter(child: _emptyState()),
       );
     }
 
-    return ListView.separated(
-      controller: scrollController,
+    return SliverPadding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      itemCount: _sorted.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final item = _sorted[index];
-        return CourseCard(
-          course: item.course,
-          distanceLabel: item.distance == null
-              ? null
-              : Formatters.awayDistance(item.distance!),
-          onTap: () => widget.onSelect(item.course),
-        );
-      },
+      sliver: SliverList.separated(
+        itemCount: _sorted.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final item = _sorted[index];
+          return CourseCard(
+            course: item.course,
+            distanceLabel: item.distance == null
+                ? null
+                : Formatters.awayDistance(item.distance!),
+            onTap: () => widget.onSelect(item.course),
+          );
+        },
+      ),
     );
   }
 

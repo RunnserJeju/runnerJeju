@@ -133,7 +133,7 @@ class _ResultTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${course.distanceKm}km · ${course.address}',
+                    '${course.distanceKmLabel}km · ${course.address}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(

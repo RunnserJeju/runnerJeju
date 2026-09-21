@@ -3,9 +3,12 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { ApiError, getMe, logout, type AdminIdentity } from './api'
 import AuthPage from './pages/AuthPage'
 import CourseListPage from './pages/CourseListPage'
+import CourseStatsPage from './pages/CourseStatsPage'
+import LogsPage from './pages/LogsPage'
 import NoticeListPage from './pages/NoticeListPage'
+import UsersPage from './pages/UsersPage'
 
-// 차트 라이브러리(recharts)가 커서 지표 탭을 열 때만 내려받는다.
+// 차트 라이브러리(recharts)가 커서 대시보드를 열 때만 내려받는다.
 const StatsPage = lazy(() => import('./pages/StatsPage'))
 
 type Auth =
@@ -14,25 +17,35 @@ type Auth =
   | { status: 'error' }
   | { status: 'authed'; who: AdminIdentity }
 
-type Tab = 'edit' | 'stats'
-type EditSection = 'courses' | 'notices'
+type Page = 'courses' | 'notices' | 'dashboard' | 'course-stats' | 'users' | 'logs'
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'edit', label: '데이터 편집' },
-  { key: 'stats', label: '지표' },
+/** 사이드바 메뉴. 그룹 제목 아래 항목이 나열된다. */
+const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
+  {
+    // 지표 쪽은 전부 조회 전용이다. 로그는 원본 행을 보는 화면이라 여기 둔다.
+    // 대시보드는 그래프, 나머지는 표. 코스·회원은 목록형 자료라 따로 뺐다.
+    group: '지표',
+    items: [
+      { key: 'dashboard', label: '대시보드' },
+      { key: 'course-stats', label: '코스' },
+      { key: 'users', label: '회원' },
+      { key: 'logs', label: '로그' },
+    ],
+  },
+  {
+    group: '데이터 편집',
+    items: [
+      { key: 'courses', label: '코스' },
+      { key: 'notices', label: '공지사항' },
+    ],
+  },
 ]
 
-const EDIT_SECTIONS: { key: EditSection; label: string }[] = [
-  { key: 'courses', label: '코스' },
-  { key: 'notices', label: '공지사항' },
-]
-
-// 페이지가 몇 개 안 되어 라우터 없이 상단 탭(state)으로 가른다. '데이터 편집' 안은
-// 좌측 사이드바로 코스/공지를 다시 가른다. 등록/수정은 목록 위 모달로 처리한다.
+// 페이지가 몇 개 안 되어 라우터 없이 좌측 사이드바(state 하나)로 가른다.
+// 등록/수정은 목록 위 모달로 처리한다.
 export default function App() {
   const [auth, setAuth] = useState<Auth>({ status: 'checking' })
-  const [tab, setTab] = useState<Tab>('edit')
-  const [section, setSection] = useState<EditSection>('courses')
+  const [page, setPage] = useState<Page>('dashboard')
 
   // 최초 로드 시 세션이 살아있는지 서버에 물어본다(쿠키는 JS가 못 읽으므로).
   const checkSession = () => {
@@ -81,21 +94,6 @@ export default function App() {
     <>
       <header className="topbar">
         <h1>Runners Jeju Dashboard</h1>
-        <nav>
-          {TABS.map((t) => (
-            <a
-              key={t.key}
-              href={`#${t.key}`}
-              className={tab === t.key ? 'active' : undefined}
-              onClick={(event) => {
-                event.preventDefault()
-                setTab(t.key)
-              }}
-            >
-              {t.label}
-            </a>
-          ))}
-        </nav>
         <span className="muted" style={{ marginLeft: 'auto' }}>
           {auth.who.display_name ?? auth.who.username}
         </span>
@@ -103,34 +101,47 @@ export default function App() {
           로그아웃
         </button>
       </header>
-      {tab === 'edit' ? (
-        <div className="with-sidebar">
-          <aside className="sidebar">
-            {EDIT_SECTIONS.map((s) => (
-              <button
-                key={s.key}
-                className={section === s.key ? 'active' : undefined}
-                onClick={() => setSection(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </aside>
-          <main>
-            {section === 'courses' ? (
-              <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
-            ) : (
-              <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
-            )}
-          </main>
-        </div>
-      ) : (
+      <div className="with-sidebar">
+        <aside className="sidebar">
+          {MENU.map((section) => (
+            <div key={section.group} className="sidebar-group">
+              <div className="sidebar-title">{section.group}</div>
+              {section.items.map((item) => (
+                <button
+                  key={item.key}
+                  className={page === item.key ? 'active' : undefined}
+                  onClick={() => setPage(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </aside>
         <main>
-          <Suspense fallback={<p className="muted">불러오는 중…</p>}>
-            <StatsPage onUnauthorized={() => setAuth({ status: 'anon' })} />
-          </Suspense>
+          {page === 'courses' && (
+            <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'notices' && (
+            <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'dashboard' && (
+            <Suspense fallback={<p className="muted">불러오는 중…</p>}>
+              <StatsPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+            </Suspense>
+          )}
+          {page === 'course-stats' && (
+            <CourseStatsPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'users' && (
+            <UsersPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'logs' && (
+            <LogsPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
         </main>
-      )}
+      </div>
     </>
   )
 }
+

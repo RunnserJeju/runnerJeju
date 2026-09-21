@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # 필드 이름은 Flutter 클라이언트의 fromJson/toJson과 1:1로 맞춘다.
 # 이름을 바꾸면 앱이 조용히 깨지므로 양쪽을 같이 수정해야 한다.
@@ -163,7 +163,7 @@ class CourseListItem(BaseModel):
 
     id: uuid.UUID
     name: str
-    distance_km: int
+    distance_km: float
     difficulty: Difficulty
 
     # "해안도로,제주시,동쪽" — 칩으로 쪼개는 건 클라이언트가 한다.
@@ -222,7 +222,8 @@ class CourseUpdate(BaseModel):
     """
 
     name: str = Field(min_length=1)
-    distance_km: int = Field(ge=1)
+    # 소수 첫째 자리까지(DB Numeric(5,1)). 0.1 미만·9999.9 초과는 거절.
+    distance_km: float = Field(ge=0.1, le=9999.9)
     difficulty: Difficulty
     visibility: CourseVisibility
     address: str = Field(min_length=1)
@@ -235,6 +236,12 @@ class CourseUpdate(BaseModel):
 
 
 # --- 지오코딩 ------------------------------------------------------------
+
+    @field_validator("distance_km")
+    @classmethod
+    def _round_distance(cls, value: float) -> float:
+        # DB가 Numeric(5,1)로 반올림하기 전에 여기서 맞춰 응답과 저장값이 같게 한다.
+        return round(value, 1)
 
 
 class GeocodeResult(BaseModel):
@@ -422,7 +429,10 @@ class UserSummaryOut(BaseModel):
     # 가입에 쓰인 소셜 provider. 보통 하나: ["kakao"] / ["apple"] / ["google"].
     providers: list[str]
     email: str | None
+    # 최근 행동 로그에 찍힌 기기 종류('ios'/'android'). 로그가 없으면 None.
+    platform: str | None
     created_at: datetime
+    last_login_at: datetime | None
     # 완주 코스 수 = 획득 스탬프 수.
     completed_count: int
 
@@ -434,8 +444,10 @@ class UserDetailOut(BaseModel):
     nickname: str | None
     providers: list[str]
     email: str | None
+    platform: str | None
     profile_image_url: str | None
     created_at: datetime
+    last_login_at: datetime | None
     completed_count: int
     completed_courses: list[CompletedCourseOut]
 
@@ -450,62 +462,6 @@ class UserListOut(BaseModel):
 # --- 이용 통계 (운영자) ---------------------------------------------------
 # 완주·찜·이용자·회원·조회수를 집계한다. registered/active는 탈퇴자 제외(현재),
 # 누적 활동·코스 지표는 탈퇴자 포함(역사적 누적).
-
-
-class StatsOverviewOut(BaseModel):
-    """사이트 전체 요약."""
-
-    # 탈퇴자 제외(현재 기준).
-    registered_users: int
-    # 러닝 1회 이상 한 고유 사용자(탈퇴자 제외).
-    active_users: int
-    # 누적 총계(탈퇴자 포함).
-    total_runs: int
-    total_completions: int
-    total_favorites: int
-    total_views: int
-    # 코스 따라가기 러닝(course_id 있는 runs)과 그중 검증 미통과(미완주) 건수.
-    course_runs: int
-    incomplete_runs: int
-    # 쿠폰 발급/사용 누적.
-    coupons_issued: int
-    coupons_used: int
-
-
-class CourseStatsOut(BaseModel):
-    """코스별 이용 지표 한 행. completed_count = 완주자 수 = 획득 스탬프 수."""
-
-    id: uuid.UUID
-    name: str
-    address: str
-    completed_count: int
-    favorite_count: int
-    # 그 코스를 달린 고유 사용자(완주자의 상위 집합).
-    runner_count: int
-    # 코스별 조회수(하루 1회 중복제거한 고유 조회).
-    view_count: int
-    # 코스 따라가기 러닝 횟수와 그중 검증 미통과(미완주) 횟수.
-    run_count: int
-    incomplete_run_count: int
-
-
-class DailyStatsOut(BaseModel):
-    """하루치 활동 건수(KST 날짜). 활동 없는 날도 0으로 채워 준다."""
-
-    date: date
-    signups: int
-    views: int
-    runs: int
-    completions: int
-    favorites: int
-    coupons_issued: int
-
-
-class StampDistributionOut(BaseModel):
-    """스탬프 n개를 보유한 회원 수. 0개는 가입 회원 중 스탬프 없는 사람이다."""
-
-    stamps: int
-    users: int
 
 
 # --- 쿠폰 (운영자 + 앱) ----------------------------------------------------
@@ -578,3 +534,61 @@ class MyCouponOut(BaseModel):
     used_at: datetime | None
     valid_until: datetime | None
     status: CouponStatus
+
+
+class UserLogIn(BaseModel):
+    """앱이 보내는 행동 로그 한 건. log_name은 app/user_log.LOG_NAMES 안이어야 한다."""
+
+    log_name: Annotated[str, Field(max_length=50)]
+    detail: dict = Field(default_factory=dict)
+    session_id: Annotated[str, Field(max_length=36)] | None = None
+    platform: Literal["android", "ios"] | None = None
+    app_version: Annotated[str, Field(max_length=20)] | None = None
+
+
+class UserLogBatchIn(BaseModel):
+    """앱이 몇 초 모았다가 한 번에 보내는 묶음. 빈 묶음은 받지 않는다."""
+
+    logs: Annotated[list[UserLogIn], Field(min_length=1, max_length=100)]
+
+
+class MetricInfoOut(BaseModel):
+    """지표 목록의 한 항목. group은 드롭다운 묶음, group_bys는 지원하는 쪼개기 차원."""
+
+    name: str
+    label: str
+    group: str
+    group_bys: list[str]
+
+
+class MetricPointOut(BaseModel):
+    """지표 값 한 점. key는 group_by에 따라 null(합계)/날짜/코스 id, name은 코스명."""
+
+    key: str | None
+    name: str | None
+    count: int
+
+
+class UserLogOut(BaseModel):
+    id: uuid.UUID
+    log_name: str
+    user_id: str | None
+    nickname: str | None
+    session_id: str | None
+    detail: dict
+    platform: str | None
+    app_version: str | None
+    created_at: datetime
+
+
+class LogNameOut(BaseModel):
+    name: str
+    label: str
+    group: str
+
+
+class UserLogListOut(BaseModel):
+    """원본 로그 페이지. next_cursor가 null이면 마지막 페이지."""
+
+    items: list[UserLogOut]
+    next_cursor: str | None

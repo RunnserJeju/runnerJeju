@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
+import '../../models/user_log.dart';
 import '../../services/current_location.dart';
 import '../../services/service_locator.dart';
+import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/geo_utils.dart';
@@ -209,7 +211,7 @@ class _RunningScreenState extends State<RunningScreen> {
   void _selectSearchResult(RunningCourse course) {
     _searchFocus.unfocus();
     setState(() => _isSearchOpen = false);
-    _selectCourse(course);
+    _selectCourse(course, source: LogSource.search);
   }
 
   /// 검색창을 다시 누르면 남아 있던 결과를 다시 펼친다.
@@ -224,7 +226,15 @@ class _RunningScreenState extends State<RunningScreen> {
     if (_isSearchOpen) setState(() => _isSearchOpen = false);
   }
 
-  Future<void> _selectCourse(RunningCourse course) async {
+  /// [source]를 주면 미리보기 열림을 로그로 남긴다. 새로고침·재시도처럼 사용자가
+  /// 새로 고른 게 아닌 경우는 주지 않는다.
+  Future<void> _selectCourse(RunningCourse course, {LogSource? source}) async {
+    if (source != null) {
+      writeLog(
+        LogName.coursePreviewOpen,
+        detail: {LogKeys.courseId: course.id, LogKeys.source: source.name},
+      );
+    }
     setState(() {
       _selected = course;
       _selectedDetail = null;
@@ -493,7 +503,8 @@ class _RunningScreenState extends State<RunningScreen> {
                           ? const []
                           : (_selectedDetail ?? selected).restrooms,
                       myPosition: _currentLocation.latest,
-                      onCourseTap: _selectCourse,
+                      onCourseTap: (course) =>
+                          _selectCourse(course, source: LogSource.map),
                       onMapTap: _clearSelection,
                       // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
                       // 코스가 있으면 그 자리에서 다시 시작한다.
@@ -569,7 +580,8 @@ class _RunningScreenState extends State<RunningScreen> {
                 myPosition: _currentLocation.latest,
                 isLoading: _isLoadingCourses,
                 hasError: _coursesError != null,
-                onSelect: _selectCourse,
+                onSelect: (course) =>
+                    _selectCourse(course, source: LogSource.list),
                 onRetry: _loadCourses,
               ),
             )

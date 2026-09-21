@@ -20,7 +20,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Course, Stamp, User
+from app.models import Course, Stamp, User, UserLog
 from app.schemas import UserDetailOut, UserListOut
 
 router = APIRouter(tags=["users"])
@@ -56,6 +56,22 @@ def _completed_counts(db: Session, user_id_strs: list[str]) -> dict[str, int]:
     return {user_id: count for user_id, count in rows}
 
 
+def _latest_platforms(db: Session, user_id_strs: list[str]) -> dict[str, str]:
+    """유저별 최근 기기 종류(ios/android). users에는 없어서 그 유저의 가장 최근 행동
+    로그에 찍힌 platform을 쓴다. 로그가 없으면 빠진다(→ None)."""
+    if not user_id_strs:
+        return {}
+
+    rows = db.execute(
+        select(UserLog.user_id, UserLog.platform)
+        .distinct(UserLog.user_id)
+        .where(UserLog.user_id.in_(user_id_strs), UserLog.platform.is_not(None))
+        .order_by(UserLog.user_id, UserLog.created_at.desc())
+    ).all()
+
+    return {user_id: platform for user_id, platform in rows}
+
+
 def _completed_courses(db: Session, user: User) -> list[dict]:
     """이 유저가 완주한 코스 목록(코스명 포함, 최신순).
 
@@ -75,13 +91,15 @@ def _completed_courses(db: Session, user: User) -> list[dict]:
     ]
 
 
-def _to_summary(user: User, completed_count: int) -> dict:
+def _to_summary(user: User, completed_count: int, platform: str | None) -> dict:
     return {
         "id": user.id,
         "nickname": user.nickname,
         "providers": _providers(user),
         "email": user.email,
+        "platform": platform,
         "created_at": user.created_at,
+        "last_login_at": user.last_login_at,
         "completed_count": completed_count,
     }
 
@@ -122,11 +140,16 @@ def list_users(
     )
     users = list(db.execute(stmt).scalars())
 
-    counts = _completed_counts(db, [str(u.id) for u in users])
+    ids = [str(u.id) for u in users]
+    counts = _completed_counts(db, ids)
+    platforms = _latest_platforms(db, ids)
 
     return {
         "total": total,
-        "items": [_to_summary(u, counts.get(str(u.id), 0)) for u in users],
+        "items": [
+            _to_summary(u, counts.get(str(u.id), 0), platforms.get(str(u.id)))
+            for u in users
+        ],
     }
 
 
@@ -147,8 +170,10 @@ def get_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
         "nickname": user.nickname,
         "providers": _providers(user),
         "email": user.email,
+        "platform": _latest_platforms(db, [str(user.id)]).get(str(user.id)),
         "profile_image_url": user.profile_image_url,
         "created_at": user.created_at,
+        "last_login_at": user.last_login_at,
         "completed_count": len(courses),
         "completed_courses": courses,
     }

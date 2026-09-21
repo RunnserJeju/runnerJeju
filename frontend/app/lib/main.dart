@@ -30,6 +30,9 @@ Future<void> main() async {
   // 권한을 물은 뒤 열린다. 기다리지 않는다 — 첫 화면은 위치 없이도 뜬다.
   unawaited(Services.instance.currentLocation.start());
 
+  // 행동 로그 시작(app_open, 지난 러닝 이탈 감지). 기다리지 않는다.
+  unawaited(Services.instance.userLog.start());
+
   runApp(const RunnersJejuApp());
 }
 

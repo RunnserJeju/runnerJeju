@@ -77,9 +77,10 @@ export function validate(
     return { ok: false, message: '이름을 입력해 주세요.' }
   }
 
+  // 소수 첫째 자리까지(서버 Numeric(5,1)). '8.3'은 되고 '8.35'는 안 된다.
   const distanceKm = Number(values.distanceKm)
-  if (!Number.isInteger(distanceKm) || distanceKm < 1) {
-    return { ok: false, message: '거리(km)는 1 이상의 정수여야 해요.' }
+  if (!/^\d+(\.\d)?$/.test(values.distanceKm.trim()) || distanceKm < 0.1) {
+    return { ok: false, message: '거리(km)는 0.1 이상, 소수 첫째 자리까지 입력해 주세요. 예: 8.3' }
   }
 
   const difficulty = Number(values.difficulty)
@@ -199,12 +200,13 @@ export default function CourseForm({ values, onChange, nameOptional = false }: P
       <div className="row">
         <div className="field">
           <label htmlFor="course-distance">
-            거리(km) <span className="hint">왕복 안내값, 정수</span>
+            거리(km) <span className="hint">왕복 안내값, 예: 8.3</span>
           </label>
           <input
             id="course-distance"
             type="number"
-            min={1}
+            min={0.1}
+            step={0.1}
             value={values.distanceKm}
             onChange={(event) => set('distanceKm', event.target.value)}
           />

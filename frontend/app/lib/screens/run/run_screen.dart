@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
+import '../../models/user_log.dart';
 import '../../services/location_service.dart';
 import '../../services/run_live_widget.dart';
 import '../../services/run_tracker.dart';
 import '../../services/service_locator.dart';
+import '../../services/user_log_service.dart';
 import '../../test/simulation_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
@@ -137,6 +139,9 @@ class _RunScreenState extends State<RunScreen> {
       if (mounted) setState(() => _isFollowing = true);
       // 잠금화면 위젯을 띄운다(Android 상시 알림 / iOS Live Activity).
       unawaited(_liveWidget.start(_snapshot()));
+      final courseId = widget.course?.id;
+      writeLog(LogName.runStart, detail: {LogKeys.courseId: ?courseId});
+      unawaited(Services.instance.userLog.markRunStarted(courseId: courseId));
     }
     if (availability.isReady || !mounted) return;
 
@@ -189,6 +194,16 @@ class _RunScreenState extends State<RunScreen> {
     _tracker.finish();
     // 러닝이 끝났으니 잠금화면 위젯을 걷는다.
     unawaited(_liveWidget.stop());
+    final courseId = widget.course?.id;
+    writeLog(
+      LogName.runFinish,
+      detail: {
+        LogKeys.courseId: ?courseId,
+        LogKeys.distanceM: _tracker.distanceMeters.round(),
+        LogKeys.elapsedSec: _tracker.elapsed.inSeconds,
+      },
+    );
+    unawaited(Services.instance.userLog.markRunEnded());
     final record = _tracker.buildRecord();
     if (record == null || !mounted) return;
 

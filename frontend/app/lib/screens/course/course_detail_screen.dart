@@ -104,7 +104,7 @@ class _CourseDetailBody extends StatelessWidget {
                         Expanded(
                           child: MetricTile(
                             label: '거리 (왕복)',
-                            value: '${course.distanceKm}',
+                            value: course.distanceKmLabel,
                             unit: 'km',
                           ),
                         ),

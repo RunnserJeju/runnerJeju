@@ -178,7 +178,7 @@ class _MetaRow extends StatelessWidget {
       children: [
         _MetaItem(
           asset: 'assets/icons/meta_run.svg',
-          text: '${course.distanceKm} km',
+          text: '${course.distanceKmLabel} km',
         ),
         if (time != null) ...[
           const _Dot(),

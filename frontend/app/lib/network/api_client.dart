@@ -11,6 +11,7 @@ class ApiClient {
     Future<String> Function(String refreshToken)? refreshAccessToken,
     Future<void> Function(String accessToken)? saveAccessToken,
     Future<void> Function()? onRefreshFailed,
+    Interceptor? contextInterceptor,
   }) : dio = Dio(
          BaseOptions(
            baseUrl: baseUrl,
@@ -18,6 +19,8 @@ class ApiClient {
            receiveTimeout: const Duration(seconds: 30),
          ),
        ) {
+    // 앱 문맥 헤더(세션·플랫폼·앱 버전). 인증과 무관하게 모든 요청에 붙는다.
+    if (contextInterceptor != null) dio.interceptors.add(contextInterceptor);
     // access token을 읽을 수 있을 때만 인증 인터셉터를 붙인다. refresh 전용 클라이언트처럼
     // 토큰이 필요 없는 경우엔 붙이지 않아 401 재귀를 원천 차단한다.
     if (readAccessToken != null) {

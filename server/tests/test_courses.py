@@ -20,6 +20,7 @@ from pydantic import ValidationError
 
 from app import geocoding, storage
 from app.admin import courses as admin_courses_router
+from app.deps import ClientContext
 from app.models import Course, Stamp
 from app.routers import courses as courses_router
 from app.routers import stamps as stamps_router
@@ -791,17 +792,21 @@ class TestGetCourseRecordsView:
         course = _course()
         db = _GetCourseFake(course)
 
-        result = courses_router.get_course(course.id, db=db, user_id="u1", is_admin=False)
+        result = courses_router.get_course(
+            course.id, db=db, user_id="u1", is_admin=False, ctx=ClientContext()
+        )
 
         assert result["id"] == course.id
-        assert db.insert_count == 1  # 상세 조회 1건 기록(하루 1회 중복제거)
+        assert db.insert_count == 1  # user_log(course_detail_open) 1건 기록
         assert db.committed is True
 
     def test_404_does_not_record(self):
         db = _GetCourseFake(None)
 
         with pytest.raises(HTTPException) as exc:
-            courses_router.get_course(uuid.uuid4(), db=db, user_id="u1", is_admin=False)
+            courses_router.get_course(
+                uuid.uuid4(), db=db, user_id="u1", is_admin=False, ctx=ClientContext()
+            )
 
         assert exc.value.status_code == 404
         assert db.insert_count == 0

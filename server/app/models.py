@@ -1,14 +1,14 @@
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
-    Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     SmallInteger,
     String,
     Text,
@@ -117,10 +117,10 @@ class Course(Base):
     # 코스). 기본값 없음 — NULL은 공개가 아니라서 일반 사용자에게 보이지 않는다.
     visibility: Mapped[str | None] = mapped_column(String(20), default=None)
 
-    # 왕복 기준 km. GPX에서 계산한 실측 거리가 아니라 명단에 적힌 안내값이라
-    # 정수로 충분하다. 러닝 진행률처럼 정확도가 필요한 계산은 이 값이 아니라
-    # path에서 직접 거리를 재서 쓴다.
-    distance_km: Mapped[int] = mapped_column(Integer)
+    # 왕복 기준 km, 소수 첫째 자리까지(예: 8.3). GPX 실측이 아니라 명단에 적힌
+    # 안내값이다. 러닝 진행률처럼 정확도가 필요한 계산은 이 값이 아니라 path에서
+    # 직접 거리를 재서 쓴다. asdecimal=False라 파이썬에서는 float로 다룬다.
+    distance_km: Mapped[float] = mapped_column(Numeric(5, 1, asdecimal=False))
 
     # 1=★, 2=★★, 3=★★★ — 클라이언트 CourseDifficulty.value와 값이 같아야 한다.
     difficulty: Mapped[int] = mapped_column(SmallInteger)
@@ -413,36 +413,39 @@ class AdminSession(Base):
     )
 
 
-class CourseView(Base):
-    """코스 상세 조회 기록. '코스별 조회수'의 원천 데이터다.
+class UserLog(Base):
+    """사용자 행동 로그. 코스 조회·러닝 시작/이탈·배너 클릭 같은 '신호'를 한 테이블에 모은다.
 
-    하루 1회 중복제거: (course_id, user_id, view_date)가 유일하다 — 같은 사람이 하루에
-    같은 코스를 여러 번 열어도 행은 하나다. 그래서 조회수는 raw 클릭 수가 아니라
-    '고유 조회(사람·일 단위)'다. GET /courses/{id}가 ON CONFLICT DO NOTHING으로 남긴다.
+    상태(runs/stamps/favorites)는 각자 테이블에 두고, 여기는 "눌렀다/봤다/그만뒀다"만
+    쌓는다. 종류는 log_name으로 구분하고 부가 정보는 detail(JSONB)에 로그마다 다르게
+    담는다 — course_id/run_id도 필요한 로그만 detail에 넣는다(app/user_log.py 참고).
 
-    user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
+    옛 course_views(하루 1회 중복제거)는 log_name='course_detail_open'으로 여기에
+    편입됐다. 중복제거는 저장이 아니라 조회 시(user_id·KST 날짜 DISTINCT)에 한다.
+    탈퇴해도 행은 지우지 않는다 — user_id는 랜덤 UUID 문자열이라 users에서 PII를
+    비우면 익명 활동으로 남는다.
     """
 
-    __tablename__ = "course_views"
+    __tablename__ = "user_log"
     __table_args__ = (
-        UniqueConstraint(
-            "course_id", "user_id", "view_date", name="uq_course_view_user_day"
-        ),
+        Index("ix_user_log_name_created", "log_name", "created_at"),
+        Index("ix_user_log_user_created", "user_id", "created_at"),
+        Index("ix_user_log_session", "session_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    # 유니크 제약(course_id, user_id, view_date)의 인덱스가 course_id 조회를 이미
-    # 커버하므로 course_id엔 따로 index를 걸지 않는다.
-    course_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("courses.id")
-    )
-    # user_id로 거르는 쿼리가 아직 없어 단독 인덱스는 두지 않는다(핫한 조회 insert의
-    # 쓰기 비용만 늘 뿐). '내가 본 코스' 같은 기능이 생기면 그때 추가한다.
-    user_id: Mapped[str] = mapped_column(String(100))
-    # 조회한 날짜(중복제거 단위). KST 기준 날짜(routers/courses._record_view).
-    view_date: Mapped[date] = mapped_column(Date)
+    # 토큰 sub(문자열, FK 아님) — Stamp/Run/Favorite과 같다. 로그인 전 로그는 null.
+    user_id: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 앱 실행 단위 식별자(클라 생성). 서버가 직접 쓰는 로그는 null.
+    session_id: Mapped[str | None] = mapped_column(String(36), default=None)
+    log_name: Mapped[str] = mapped_column(String(50))
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # 'android' | 'ios'
+    platform: Mapped[str | None] = mapped_column(String(10), default=None)
+    app_version: Mapped[str | None] = mapped_column(String(20), default=None)
+    # 서버 수신 시각. 앱이 배치로 보내면 한 묶음이 거의 같은 값을 갖는다.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
