@@ -211,7 +211,7 @@ class RunTracker extends ChangeNotifier {
   /// 분모는 `course.distanceKm`이 아니라 **코스 경로를 실측한 길이**다. 서버
   /// 검증도 `courses` 컬럼이 아니라 `path`를 재서 같은 비율을 구하므로
   /// (verification.path_length_meters), 같은 기준을 써야 앱 진행률과 서버 판정이
-  /// 어긋나지 않는다. distanceKm은 시트에 적힌 왕복 안내값(정수 km)이라 이 계산에
+  /// 어긋나지 않는다. distanceKm은 시트에 적힌 왕복 안내값(km)이라 이 계산에
   /// 쓰면 최대 수백 m가 어긋난다.
   double? get _distanceRatio {
     if (_targetCourse == null || _courseLengthMeters <= 0) return null;

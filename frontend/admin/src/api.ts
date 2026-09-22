@@ -251,75 +251,136 @@ export function geocode(address: string): Promise<{ results: GeocodeResult[] }> 
 
 // --- 지표 ---------------------------------------------------------------
 
-/** 전체 요약(GET /admin/stats/overview). 서버 StatsOverviewOut과 1:1. */
-export interface StatsOverview {
-  registered_users: number
-  active_users: number
-  total_runs: number
-  total_completions: number
-  total_favorites: number
-  total_views: number
-  course_runs: number
-  incomplete_runs: number
-  coupons_issued: number
-  coupons_used: number
-}
-
-export interface CourseStats {
-  id: string
+/** 지표 하나의 메타. group_bys는 이 지표가 지원하는 쪼개기 차원. */
+export interface MetricInfo {
   name: string
-  address: string
-  completed_count: number
-  favorite_count: number
-  runner_count: number
-  view_count: number
-  run_count: number
-  incomplete_run_count: number
+  label: string
+  /** 드롭다운 묶음 이름(서버 registry가 정한다). */
+  group: string
+  group_bys: MetricGroupBy[]
 }
 
-/** 하루치 활동(KST 날짜, YYYY-MM-DD). 활동 없는 날도 0으로 온다. */
-export interface DailyStats {
-  date: string
-  signups: number
-  views: number
-  runs: number
-  completions: number
-  favorites: number
-  coupons_issued: number
+export type MetricGroupBy = 'none' | 'day' | 'course'
+
+/** 지표 값 한 점. key는 group_by에 따라 null(합계)/날짜/코스 id, name은 코스명. */
+export interface MetricPoint {
+  key: string | null
+  name: string | null
+  count: number
 }
 
-export interface StampDistribution {
-  stamps: number
-  users: number
+export interface MetricQuery {
+  from?: string
+  to?: string
+  group_by?: MetricGroupBy
 }
 
-export interface CouponSummary {
+function metricParams(query: MetricQuery): string {
+  const params = new URLSearchParams()
+  if (query.from) params.set('from', query.from)
+  if (query.to) params.set('to', query.to)
+  if (query.group_by) params.set('group_by', query.group_by)
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export function listMetrics(): Promise<MetricInfo[]> {
+  return request('/admin/metrics')
+}
+
+export function getMetric(name: string, query: MetricQuery = {}): Promise<MetricPoint[]> {
+  return request(`/admin/metrics/${name}${metricParams(query)}`)
+}
+
+/** 여러 지표를 한 번에. 응답은 {지표 이름: 점 목록}. */
+export function getMetricsBatch(
+  names: string[],
+  query: MetricQuery = {},
+): Promise<Record<string, MetricPoint[]>> {
+  const qs = metricParams(query)
+  const sep = qs ? '&' : '?'
+  return request(`/admin/metrics/batch${qs}${sep}names=${names.join(',')}`)
+}
+
+// --- 회원 ---------------------------------------------------------------
+
+export interface UserSummary {
   id: string
-  name: string
-  benefit: string
-  valid_until: string | null
+  nickname: string | null
+  /** 가입에 쓰인 소셜 로그인. 보통 하나: kakao / apple / google. */
+  providers: string[]
+  email: string | null
+  /** 최근 로그에 찍힌 기기(ios/android). 로그가 없으면 null. */
+  platform: string | null
   created_at: string
-  issued_count: number
-  used_count: number
+  last_login_at: string | null
+  completed_count: number
 }
 
-export function getStatsOverview(): Promise<StatsOverview> {
-  return request('/admin/stats/overview')
+export interface UserDetail extends UserSummary {
+  profile_image_url: string | null
+  completed_courses: { course_id: string; name: string; acquired_at: string }[]
 }
 
-/** 코스별 지표. 정렬은 클라이언트에서 다시 하므로 기본 정렬로 받는다. */
-export function getCourseStats(): Promise<CourseStats[]> {
-  return request('/admin/stats/courses')
+/** 회원 목록(탈퇴 제외, 가입일 최신순). keyword는 닉네임·이메일 부분일치. */
+export function listUsers(
+  keyword: string,
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: UserSummary[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (keyword.trim()) params.set('keyword', keyword.trim())
+  return request(`/admin/users?${params}`)
 }
 
-export function getDailyStats(days: number): Promise<DailyStats[]> {
-  return request(`/admin/stats/daily?days=${days}`)
+export function getUser(id: string): Promise<UserDetail> {
+  return request(`/admin/users/${id}`)
 }
 
-export function getStampDistribution(): Promise<StampDistribution[]> {
-  return request('/admin/stats/stamps')
+// --- 원본 로그 ---------------------------------------------------------
+
+export interface UserLogRow {
+  id: string
+  log_name: string
+  user_id: string | null
+  nickname: string | null
+  session_id: string | null
+  detail: Record<string, unknown>
+  platform: string | null
+  app_version: string | null
+  created_at: string
 }
 
-export function listCoupons(): Promise<CouponSummary[]> {
-  return request('/admin/coupons')
+export interface UserLogFilter {
+  log_name?: string
+  user_id?: string
+  session_id?: string
+  from?: string
+  to?: string
+}
+
+export interface LogNameInfo {
+  name: string
+  label: string
+  group: string
+}
+
+/** 앱이 보낼 수 있는 로그 이름 목록. 필터 드롭다운용. */
+export function listLogNames(): Promise<LogNameInfo[]> {
+  return request('/admin/user-logs/names')
+}
+
+/** 최신순 한 페이지. next_cursor를 다시 넘기면 다음 페이지가 이어진다. */
+export function listUserLogs(
+  filter: UserLogFilter,
+  cursor?: string | null,
+  limit = 50,
+): Promise<{ items: UserLogRow[]; next_cursor: string | null }> {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filter)) {
+    if (value) params.set(key, value)
+  }
+  params.set('limit', String(limit))
+  if (cursor) params.set('cursor', cursor)
+  return request(`/admin/user-logs?${params}`)
 }

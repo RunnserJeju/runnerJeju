@@ -433,7 +433,7 @@ class _StampSlot {
         imageUrl: stamp?.imageUrl ?? course.stampImageUrl,
         stamp: stamp,
         region: _regionOf(course.address),
-        distanceKm: course.distanceKm,
+        distanceKm: course.distanceKmLabel,
         difficulty: course.difficulty,
       );
 
@@ -453,7 +453,7 @@ class _StampSlot {
 
   /// 코스 메타. 코스 목록에 없는 스탬프는 null이라 카드에서 숨긴다.
   final String? region;
-  final int? distanceKm;
+  final String? distanceKm;
   final CourseDifficulty? difficulty;
 
   /// "제주시 · 14 km". 지역·거리 둘 다 없으면 null.

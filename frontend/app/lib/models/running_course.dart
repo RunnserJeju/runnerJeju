@@ -56,7 +56,13 @@ class RunningCourse {
 
   /// 왕복 기준 거리(km). 시트에 적힌 안내값이라 경로를 실측한 거리가 아니다 —
   /// 진행률처럼 정확도가 필요한 계산에는 [path]에서 직접 거리를 재서 쓴다.
-  final int distanceKm;
+  /// 왕복 안내 거리(km), 소수 첫째 자리까지. 표시는 [distanceKmLabel]로.
+  final double distanceKm;
+
+  /// '8.3' / '10' — 정수면 소수점을 빼고 보여준다.
+  String get distanceKmLabel => distanceKm == distanceKm.roundToDouble()
+      ? distanceKm.toStringAsFixed(0)
+      : distanceKm.toStringAsFixed(1);
 
   final CourseDifficulty difficulty;
 
@@ -124,7 +130,7 @@ class RunningCourse {
   factory RunningCourse.fromJson(Map<String, dynamic> json) => RunningCourse(
     id: json['id'].toString(),
     name: json['name'] as String,
-    distanceKm: (json['distance_km'] as num).toInt(),
+    distanceKm: (json['distance_km'] as num).toDouble(),
     difficulty: CourseDifficulty.fromValue(
       (json['difficulty'] as num?)?.toInt(),
     ),

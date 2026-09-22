@@ -107,7 +107,9 @@ def update_course(
 @router.post("/courses/gpx", response_model=CourseSummary, status_code=201)
 def create_course_from_gpx(
     file: UploadFile = File(..., description="GPX 파일"),
-    distance_km: int = Form(..., ge=1, description="왕복 기준 거리(km)"),
+    distance_km: float = Form(
+        ..., ge=0.1, le=9999.9, description="왕복 기준 거리(km), 소수 첫째 자리까지"
+    ),
     difficulty: Difficulty = Form(..., description="1=★, 2=★★, 3=★★★"),
     visibility: CourseVisibility = Form(..., description="public=모두, admin=운영자만"),
     address: str = Form(..., min_length=1, description="코스 시작 지점 주소"),
@@ -155,7 +157,7 @@ def create_course_from_gpx(
             db,
             content,
             name=name,
-            distance_km=distance_km,
+            distance_km=round(distance_km, 1),
             difficulty=difficulty,
             visibility=visibility,
             address=address,

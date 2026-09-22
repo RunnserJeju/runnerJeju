@@ -5,7 +5,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../data/curated_partners.dart';
 import '../../models/notice.dart';
 import '../../models/running_course.dart';
+import '../../models/user_log.dart';
 import '../../services/service_locator.dart';
+import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/banner_carousel.dart';
@@ -49,7 +51,20 @@ class _HomeScreenState extends State<HomeScreen> {
     await _coursesFuture.catchError((_) => <RunningCourse>[]);
   }
 
-  void _openCourse(RunningCourse course) {
+  /// [section]은 홈의 어느 구역(recommended/curation)에서 눌렀는지 — 로그용.
+  void _openCourse(
+    RunningCourse course, {
+    required String section,
+    int? position,
+  }) {
+    writeLog(
+      LogName.homeCourseClick,
+      detail: {
+        LogKeys.courseId: course.id,
+        LogKeys.section: section,
+        LogKeys.position: ?position,
+      },
+    );
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => CourseDetailScreen(courseId: course.id),
@@ -99,7 +114,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (banners.isEmpty) return const BrandHeroBanner();
                 return BannerCarousel(
                   banners: banners,
-                  onTap: (notice) => showNoticeDetail(context, notice),
+                  onTap: (notice) {
+                    writeLog(
+                      LogName.bannerClick,
+                      detail: {
+                        LogKeys.noticeId: notice.id,
+                        LogKeys.position: banners.indexOf(notice),
+                      },
+                    );
+                    showNoticeDetail(context, notice);
+                  },
                 );
               },
             ),
@@ -145,7 +169,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             final course = recommended[index];
                             return CourseRecommendCard(
                               course: course,
-                              onTap: () => _openCourse(course),
+                              onTap: () => _openCourse(
+                                course,
+                                section: 'recommended',
+                                position: index,
+                              ),
                             );
                           },
                         ),
@@ -190,7 +218,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         course: course,
                         partner: partnerForIndex(index),
                         isLast: index == picks.length - 1,
-                        onTap: () => _openCourse(course),
+                        onTap: () => _openCourse(
+                          course,
+                          section: 'curation',
+                          position: index,
+                        ),
                       ),
                   ],
                 );

@@ -1,21 +1,24 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import gpx
+from app import gpx, user_log
 from app.db import get_db
-from app.deps import current_user_id, current_user_is_admin
-from app.models import Course, CourseView, Stamp
+from app.deps import (
+    ClientContext,
+    client_context,
+    current_user_id,
+    current_user_is_admin,
+)
+from app.models import Course, Stamp
 from app.schemas import CourseListItem, CourseSummary
 
 router = APIRouter(tags=["courses"])
 
-# 조회수 '하루' 경계는 한국 시간(KST) 기준. 한국은 DST가 없어 고정 오프셋(UTC+9)이면
+# 통계의 '하루' 경계는 한국 시간(KST) 기준. 한국은 DST가 없어 고정 오프셋(UTC+9)이면
 # 정확하고, tzdata 의존도 없다.
 KST = timezone(timedelta(hours=9))
 
@@ -78,28 +81,24 @@ def _my_completed_course_ids(
     return set(rows)
 
 
-def _record_view(db: Session, course_id: uuid.UUID, user_id: str) -> None:
-    """코스 상세 조회를 하루 1회로 기록한다(중복제거). GET /courses/{id}의 부수효과.
+def _record_view(
+    db: Session, course_id: uuid.UUID, user_id: str, ctx: ClientContext
+) -> None:
+    """코스 상세 조회를 user_log(course_detail_open)에 남긴다. GET /courses/{id}의 부수효과.
 
-    같은 (코스, 사용자, 날짜)면 ON CONFLICT DO NOTHING으로 조용히 넘어가, 하루에 같은
-    코스를 여러 번 열어도 조회수는 1만 는다 — 조회수는 코스별 '고유 조회(사람·일)'다.
-    '하루'는 KST 기준(view_date). 분석용 쓰기라 **best-effort** — 실패하면 롤백만 하고
-    상세 조회(핵심 읽기)는 성공시킨다.
+    클릭마다 한 행이다 — '고유 조회(사람·일)'는 저장이 아니라 통계 쿼리에서
+    DISTINCT로 만든다(admin/stats). 세션·플랫폼·앱 버전은 요청 헤더에서 온다.
+    분석용 쓰기라 best-effort다.
     """
-    stmt = (
-        pg_insert(CourseView)
-        .values(
-            course_id=course_id,
-            user_id=user_id,
-            view_date=datetime.now(KST).date(),
-        )
-        .on_conflict_do_nothing(index_elements=["course_id", "user_id", "view_date"])
+    user_log.record_best_effort(
+        db,
+        log_name=user_log.COURSE_DETAIL_OPEN,
+        user_id=user_id,
+        detail={"course_id": str(course_id)},
+        session_id=ctx.session_id,
+        platform=ctx.platform,
+        app_version=ctx.app_version,
     )
-    try:
-        db.execute(stmt)
-        db.commit()
-    except SQLAlchemyError:
-        db.rollback()
 
 
 def visible_courses(stmt, is_admin: bool):
@@ -148,6 +147,7 @@ def get_course(
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
     is_admin: bool = Depends(current_user_is_admin),
+    ctx: ClientContext = Depends(client_context),
 ):
     # 숨긴 코스는 없는 것과 같이 404 — 있다는 사실도 알리지 않는다.
     course = db.scalar(
@@ -163,7 +163,7 @@ def get_course(
     # 응답을 다 만든 뒤 조회를 기록한다 — 여기 commit이 세션을 expire시켜도 이미 dict로
     # 뽑아둔 summary엔 영향이 없고(course 재로딩 없음), best-effort라 기록 실패가 상세
     # 조회를 깨지 않는다. 존재하는 코스만 센다.
-    _record_view(db, course.id, user_id)
+    _record_view(db, course.id, user_id, ctx)
 
     return summary
 
@@ -202,7 +202,7 @@ def create_course_from_gpx_bytes(
     content: bytes,
     *,
     name: str | None,
-    distance_km: int,
+    distance_km: float,
     difficulty: int,
     address: str,
     tags: str | None,

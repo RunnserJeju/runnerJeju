@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../models/run_record.dart';
 import '../../models/run_stamp.dart';
 import '../../models/run_verification.dart';
+import '../../models/user_log.dart';
 import '../../services/service_locator.dart';
+import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/run_metrics_card.dart';
 import '../../widgets/run_map_view.dart';
@@ -63,6 +65,11 @@ class _RunResultScreenState extends State<RunResultScreen> {
         await _loadStamp(result.earnedStampId!);
       }
     } catch (e) {
+      final courseId = widget.record.courseId;
+      writeLog(
+        LogName.runUploadFailed,
+        detail: {LogKeys.courseId: ?courseId, LogKeys.error: '$e'},
+      );
       if (!mounted) return;
       setState(() {
         _saveError = '$e';

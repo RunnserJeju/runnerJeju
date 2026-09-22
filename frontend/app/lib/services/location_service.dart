@@ -76,16 +76,16 @@ class LocationService {
   ///
   /// 정확도는 러닝과 같은 GPS급이다. 지도 화면의 내 위치 점과 코스 시작점까지의
   /// 거리 판정(100m 문턱)에 쓰이는데, Wi-Fi급(100m 안팎)이면 그 판정이 흔들린다.
-  /// 대신 10m 단위로만 받아 러닝(1m)보다 훨씬 성기고, 포그라운드 서비스나
-  /// 백그라운드 갱신은 걸지 않는다 — 앱이 뒤로 가면 닫히는 게 맞다.
-  static const int _ambientMeters = 10;
+  /// 3m 단위로 받는다. 10m면 걷는 속도에서 점이 한참 멈췄다 툭 뛰어 어색했다.
+  /// 포그라운드 서비스나 백그라운드 갱신은 걸지 않는다 — 앱이 뒤로 가면 닫히는 게 맞다.
+  static const int _ambientMeters = 3;
 
   static LocationSettings get _ambientSettings {
     if (Platform.isAndroid) {
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: _ambientMeters,
-        intervalDuration: const Duration(seconds: 2),
+        intervalDuration: const Duration(seconds: 1),
       );
     }
     if (Platform.isIOS) {

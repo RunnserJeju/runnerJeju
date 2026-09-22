@@ -346,7 +346,7 @@ class _MetaChips extends StatelessWidget {
       children: [
         TagChip(
           icon: Icons.straighten_rounded,
-          label: '왕복 ${course.distanceKm}km',
+          label: '왕복 ${course.distanceKmLabel}km',
         ),
         TagChip(
           icon: Icons.trending_up_rounded,

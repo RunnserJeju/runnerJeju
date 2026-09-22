@@ -4,9 +4,11 @@ import '../api/favorite_api.dart';
 import '../api/notice_api.dart';
 import '../api/run_api.dart';
 import '../api/stamp_api.dart';
+import '../api/user_log_api.dart';
 import '../api/verification_api.dart';
 import '../config/app_config.dart';
 import '../network/api_client.dart';
+import '../network/client_context_interceptor.dart';
 import 'auth_service.dart';
 import 'course_service.dart';
 import 'current_location.dart';
@@ -21,6 +23,7 @@ import 'run_service.dart';
 import 'run_tracker.dart';
 import 'stamp_service.dart';
 import 'token_storage.dart';
+import 'user_log_service.dart';
 import 'verification_service.dart';
 
 /// 앱 전역에서 공유하는 서비스 인스턴스 모음.
@@ -47,7 +50,18 @@ class Services {
     saveAccessToken: tokenStorage.saveAccessToken,
     // refresh도 실패하면(=30일 지났거나 폐기됨) 저장된 토큰을 지워 재로그인을 유도한다.
     onRefreshFailed: tokenStorage.clear,
+    // 서버가 직접 남기는 행동 로그(코스 상세 조회 등)에 세션을 채우기 위한 헤더.
+    // 전부 클로저다 — 여기서 userLog를 바로 읽으면 apiClient ↔ userLog 초기화가
+    // 서로를 기다리는 순환이 된다.
+    contextInterceptor: ClientContextInterceptor(
+      sessionId: () => userLog.sessionId,
+      platform: () => userLog.platform,
+      appVersion: () => userLog.appVersion,
+    ),
   );
+
+  /// 행동 로그(user_log). 화면은 전역 [writeLog]로 남긴다.
+  late final UserLogService userLog = UserLogService(UserLogApi(apiClient));
 
   late final AuthService auth = AuthService(AuthApi(apiClient), tokenStorage);
   late final CourseService course = CourseService(CourseApi(apiClient));
