@@ -42,4 +42,16 @@ class Formatters {
 
   static String dateTime(DateTime value) =>
       DateFormat('yyyy.MM.dd HH:mm').format(value.toLocal());
+
+  /// "오후 7:12" — 공유 카드처럼 날짜와 따로 두는 자리용.
+  ///
+  /// [DateFormat]에 'a'를 쓰지 않는다. 한국어 오전/오후를 받으려면 로케일
+  /// 심볼을 먼저 올려야 하는데(initializeDateFormatting), 앱은 그걸 하지 않아
+  /// 영어 AM/PM이 나온다. 이 한 줄 때문에 초기화를 들이지는 않는다.
+  static String timeOfDay(DateTime value) {
+    final local = value.toLocal();
+    final hour12 = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${local.hour < 12 ? '오전' : '오후'} $hour12:$minute';
+  }
 }

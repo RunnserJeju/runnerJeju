@@ -801,7 +801,7 @@ class _RunMapViewState extends State<RunMapView>
     }
     _staticRunRoutes.clear();
 
-    for (final segment in _splitAtBreaks(points)) {
+    for (final segment in GeoUtils.splitAtBreaks(points)) {
       // 선이 되려면 점이 둘 이상 필요하다. 재개하자마자 끝난 구간은 건너뛴다.
       if (segment.length < 2) continue;
 
@@ -813,23 +813,6 @@ class _RunMapViewState extends State<RunMapView>
         ),
       );
     }
-  }
-
-  /// 기록이 끊긴 자리에서 경로를 나눈다.
-  static List<List<GeoPoint>> _splitAtBreaks(List<GeoPoint> points) {
-    final segments = <List<GeoPoint>>[];
-    var current = <GeoPoint>[];
-
-    for (final point in points) {
-      if (point.startsNewSegment && current.isNotEmpty) {
-        segments.add(current);
-        current = [];
-      }
-      current.add(point);
-    }
-
-    if (current.isNotEmpty) segments.add(current);
-    return segments;
   }
 
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {

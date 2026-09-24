@@ -117,6 +117,27 @@ class GeoUtils {
     return pieces;
   }
 
+  /// 기록이 끊긴 자리([GeoPoint.startsNewSegment])에서 경로를 나눈다.
+  ///
+  /// 끊긴 구간을 이어 그리면 일시정지 동안 이동한 거리가 달린 길처럼 보인다.
+  /// 거리에도 서버 검증에도 안 들어가는 구간이라, 그림과 기록이 어긋난다.
+  /// 러닝 경로를 그리는 곳(지도·공유 카드)이 모두 이걸 통과시킨다.
+  static List<List<GeoPoint>> splitAtBreaks(List<GeoPoint> path) {
+    final segments = <List<GeoPoint>>[];
+    var current = <GeoPoint>[];
+
+    for (final point in path) {
+      if (point.startsNewSegment && current.isNotEmpty) {
+        segments.add(current);
+        current = [];
+      }
+      current.add(point);
+    }
+
+    if (current.isNotEmpty) segments.add(current);
+    return segments;
+  }
+
   /// 경로 전체 길이(m).
   static double pathLength(List<GeoPoint> path) {
     var total = 0.0;
@@ -127,7 +148,7 @@ class GeoUtils {
   }
 
   /// 경로를 모두 담는 사각형 범위. 비어 있으면 null.
-  static ({GeoPoint southWest, GeoPoint northEast})? _boundsOf(
+  static ({GeoPoint southWest, GeoPoint northEast})? boundsOf(
     List<GeoPoint> path,
   ) {
     if (path.isEmpty) return null;
@@ -152,7 +173,7 @@ class GeoUtils {
 
   /// 경로의 중심점. 비어 있으면 null.
   static GeoPoint? centerOf(List<GeoPoint> path) {
-    final bounds = _boundsOf(path);
+    final bounds = boundsOf(path);
     if (bounds == null) return null;
 
     return GeoPoint(
