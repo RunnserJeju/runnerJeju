@@ -249,6 +249,7 @@ class _RunScreenState extends State<RunScreen> {
                 coursePath: widget.course?.path ?? const [],
                 parkings: widget.course?.parkings ?? const [],
                 restrooms: widget.course?.restrooms ?? const [],
+                partners: widget.course?.partners ?? const [],
                 runPath: tracker.path,
                 currentPosition: tracker.currentPosition,
                 initialCenter: _initialCenter,

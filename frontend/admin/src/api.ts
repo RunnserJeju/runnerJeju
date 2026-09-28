@@ -8,6 +8,39 @@ export interface Facility {
   lng: number
 }
 
+/** 협력업체(코스 응답에 실리는 형태). 서버 PartnerSummary와 1:1. */
+export interface PartnerSummary {
+  id: string
+  name: string
+  address: string | null
+  lat: number
+  lng: number
+  comment: string | null
+  instagram: string | null
+  benefit: string | null
+  detail: Record<string, unknown>
+}
+
+/** 협력업체 관리 화면용. 서버 PartnerOut과 1:1. */
+export interface Partner extends PartnerSummary {
+  /** 연결된 코스 수. 삭제 경고에 쓴다. */
+  course_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** 협력업체 등록/수정(전체 교체) 페이로드. 서버 PartnerPayload와 1:1. */
+export interface PartnerPayload {
+  name: string
+  address: string | null
+  lat: number
+  lng: number
+  comment: string | null
+  instagram: string | null
+  benefit: string | null
+  detail: Record<string, unknown>
+}
+
 /** 공개 범위. null은 미설정(시드 스크립트로 올린 코스) — 앱에는 안 보인다. */
 export type CourseVisibility = 'public' | 'admin'
 
@@ -21,6 +54,7 @@ export interface Course {
   address: string
   parkings: Facility[]
   restrooms: Facility[]
+  partners: PartnerSummary[]
   description: string | null
   estimated_time_min: number | null
   thumbnail_url: string | null
@@ -66,6 +100,8 @@ export interface CourseUpdatePayload {
   estimated_time_min: number | null
   parkings: Facility[]
   restrooms: Facility[]
+  /** 연결할 협력업체 id(보여줄 순서대로). 통째로 교체된다. */
+  partner_ids: string[]
 }
 
 /** 운영자 신원. 로그인/세션확인(GET /admin/auth/me) 응답. */
@@ -145,6 +181,7 @@ export interface CourseCreateInput {
   estimatedTimeMin: number | null
   parkings: Facility[]
   restrooms: Facility[]
+  partnerIds: string[]
 }
 
 export function createCourse(input: CourseCreateInput): Promise<Course> {
@@ -162,6 +199,7 @@ export function createCourse(input: CourseCreateInput): Promise<Course> {
   }
   form.set('parkings', JSON.stringify(input.parkings))
   form.set('restrooms', JSON.stringify(input.restrooms))
+  form.set('partner_ids', JSON.stringify(input.partnerIds))
 
   return request('/admin/courses/gpx', { method: 'POST', body: form })
 }
@@ -243,6 +281,34 @@ export function setNoticeImage(id: string, file: File): Promise<Notice> {
 
 export function deleteNoticeImage(id: string): Promise<Notice> {
   return request(`/admin/notices/${id}/image`, { method: 'DELETE' })
+}
+
+// --- 협력업체 -----------------------------------------------------------
+
+/** 전체 목록(이름순). 코스 폼의 업체 선택지로도 쓴다. */
+export function listPartners(): Promise<Partner[]> {
+  return request('/admin/partners')
+}
+
+export function createPartner(payload: PartnerPayload): Promise<Partner> {
+  return request('/admin/partners', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updatePartner(id: string, payload: PartnerPayload): Promise<Partner> {
+  return request(`/admin/partners/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** 삭제하면 연결된 코스에서도 빠진다(서버 FK CASCADE). */
+export function deletePartner(id: string): Promise<void> {
+  return request(`/admin/partners/${id}`, { method: 'DELETE' })
 }
 
 export function geocode(address: string): Promise<{ results: GeocodeResult[] }> {

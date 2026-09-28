@@ -13,13 +13,14 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
-from app.models import Course, Run, Stamp, Verification
+from app.models import Course, Partner, Run, Stamp, Verification
 from app.routers.courses import (
     CourseUploadError,
     _completed_counts,
     _to_summary,
     create_course_from_gpx_bytes,
     resample_path_from_gpx,
+    set_course_partners,
 )
 from app.schemas import (
     CourseListItem,
@@ -48,6 +49,21 @@ _ALLOWED_IMAGE_TYPES = {
 # 멀티파트 폼에 파일과 함께 실려오는 parkings/restrooms를 검증한다. 폼 필드라
 # JSON 문자열로 오므로 validate_json으로 파싱한다(각 원소는 Facility = 좌표 포함).
 _facility_list = TypeAdapter(list[Facility])
+_partner_id_list = TypeAdapter(list[uuid.UUID])
+
+
+def _ensure_partners_exist(db: Session, partner_ids: list[uuid.UUID]) -> None:
+    """없는 협력업체 id가 섞여 있으면 422. 확인 없이 저장하면 커밋 때 FK 위반(500)이 난다."""
+    if not partner_ids:
+        return
+    found = set(
+        db.execute(select(Partner.id).where(Partner.id.in_(partner_ids))).scalars()
+    )
+    if len(found) < len(set(partner_ids)):
+        raise HTTPException(
+            status_code=422,
+            detail="없는 협력업체가 포함돼 있어요. 목록을 새로고침한 뒤 다시 골라 주세요.",
+        )
 
 
 # 운영 웹용 목록/상세. 공개 GET /courses는 앱 로그인(JWT)이 필요해
@@ -83,6 +99,7 @@ def update_course(
     course = db.get(Course, course_id)
     if course is None:
         raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+    _ensure_partners_exist(db, payload.partner_ids)
 
     course.name = payload.name
     course.distance_km = payload.distance_km
@@ -94,6 +111,7 @@ def update_course(
     course.estimated_time_min = payload.estimated_time_min
     course.parkings = [facility.model_dump() for facility in payload.parkings]
     course.restrooms = [facility.model_dump() for facility in payload.restrooms]
+    set_course_partners(course, payload.partner_ids)
 
     db.commit()
     db.refresh(course)
@@ -121,6 +139,10 @@ def create_course_from_gpx(
     ),
     restrooms: str = Form(
         default="[]", description="화장실 목록 JSON. 형식은 parkings와 같다"
+    ),
+    partner_ids: str = Form(
+        default="[]",
+        description="연결할 협력업체 id 목록 JSON(보여줄 순서대로). 업체는 /admin/partners에서 먼저 등록한다",
     ),
     description: str | None = Form(default=None),
     estimated_time_min: int | None = Form(
@@ -153,6 +175,14 @@ def create_course_from_gpx(
         ) from exc
 
     try:
+        parsed_partner_ids = _partner_id_list.validate_json(partner_ids)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422, detail="협력업체 id 목록 형식이 올바르지 않아요."
+        ) from exc
+    _ensure_partners_exist(db, parsed_partner_ids)
+
+    try:
         course = create_course_from_gpx_bytes(
             db,
             content,
@@ -164,6 +194,7 @@ def create_course_from_gpx(
             tags=tags,
             parkings=[facility.model_dump() for facility in parsed_parkings],
             restrooms=[facility.model_dump() for facility in parsed_restrooms],
+            partner_ids=parsed_partner_ids,
             description=description,
             estimated_time_min=estimated_time_min,
             # API 키 인증이라 개인 식별자가 없다. 세션 인증이 오면 운영자 id로 바꾼다.

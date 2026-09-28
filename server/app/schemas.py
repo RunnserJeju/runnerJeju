@@ -151,6 +151,50 @@ class Facility(BaseModel):
     lng: float
 
 
+class PartnerPayload(BaseModel):
+    """협력업체 등록/수정(전체 교체) 요청. POST/PATCH /admin/partners.
+
+    이름과 좌표가 필수, 나머지는 선택이다. 좌표는 지도 마커에 쓰므로 반드시 있어야
+    하고, 운영 웹은 주소 "좌표 확인"으로 채우거나 직접 입력한다. 범위 검사는 위도와
+    경도를 뒤바꿔 넣는 실수를 거른다.
+    """
+
+    name: str = Field(min_length=1, max_length=200)
+    address: str | None = Field(default=None, max_length=300)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    comment: str | None = None
+    instagram: str | None = Field(default=None, max_length=200)
+    benefit: str | None = Field(default=None, max_length=500)
+    # 형태 미정인 부가 정보. 서버는 내용을 해석하지 않는다.
+    detail: dict = Field(default_factory=dict)
+
+
+class PartnerSummary(BaseModel):
+    """코스 응답에 실리는 협력업체 한 곳. Flutter CoursePartner.fromJson과 1:1이다."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    address: str | None
+    lat: float
+    lng: float
+    comment: str | None
+    instagram: str | None
+    benefit: str | None
+    detail: dict
+
+
+class PartnerOut(PartnerSummary):
+    """운영 웹 협력업체 목록/상세 응답."""
+
+    # 이 업체가 연결된 코스 수. 삭제하면 그 코스들에서 빠진다는 경고에 쓴다.
+    course_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class CourseListItem(BaseModel):
     """목록용. 카드에 필요한 것만 담고 경로 좌표는 뺀다.
 
@@ -171,14 +215,12 @@ class CourseListItem(BaseModel):
 
     address: str
 
-    # 옛 단일 주소 필드. parkings/restrooms(아래)로 대체되는 중이라 새 코스에선
-    # 늘 None이다 — 옛 코스와의 호환을 위해 컬럼 drop(0010) 전까지만 남겨둔다.
-    parking_address: str | None
-    restroom_address: str | None
-
     # 코스당 여러 개. 각 원소는 좌표까지 포함(app/geocoding.py로 변환해 저장).
     parkings: list[Facility]
     restrooms: list[Facility]
+
+    # 연결된 협력업체(운영 웹에서 고른 순서). 시설처럼 좌표를 포함해 지도 마커로 찍는다.
+    partners: list[PartnerSummary]
 
     description: str | None
 
@@ -233,6 +275,8 @@ class CourseUpdate(BaseModel):
     estimated_time_min: int | None = Field(default=None, ge=1)
     parkings: list[Facility] = Field(default_factory=list)
     restrooms: list[Facility] = Field(default_factory=list)
+    # 연결할 협력업체 id(보여줄 순서대로). 통째로 교체한다 — 빈 목록이면 전부 해제.
+    partner_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 # --- 지오코딩 ------------------------------------------------------------
