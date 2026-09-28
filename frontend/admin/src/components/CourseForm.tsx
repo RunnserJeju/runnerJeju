@@ -1,5 +1,6 @@
 import type { Course, CourseUpdatePayload, CourseVisibility, Facility } from '../api'
 import FacilityListEditor, { type FacilityDraft } from './FacilityListEditor'
+import PartnerPicker from './PartnerPicker'
 
 /** 등록/수정이 공유하는 메타데이터 폼 값. 입력 중에는 전부 문자열로 들고,
  * 제출 시 validate()가 숫자 변환·필수값 검사를 한다. */
@@ -15,6 +16,8 @@ export interface CourseFormValues {
   estimatedTimeMin: string
   parkings: FacilityDraft[]
   restrooms: FacilityDraft[]
+  /** 연결할 협력업체 id(보여줄 순서대로). 업체 자체는 협력업체 메뉴에서 관리한다. */
+  partnerIds: string[]
 }
 
 export function emptyValues(): CourseFormValues {
@@ -29,6 +32,7 @@ export function emptyValues(): CourseFormValues {
     estimatedTimeMin: '',
     parkings: [],
     restrooms: [],
+    partnerIds: [],
   }
 }
 
@@ -50,6 +54,7 @@ export function valuesFromCourse(course: Course): CourseFormValues {
     estimatedTimeMin: course.estimated_time_min == null ? '' : String(course.estimated_time_min),
     parkings: course.parkings.map(toDraft),
     restrooms: course.restrooms.map(toDraft),
+    partnerIds: course.partners.map((partner) => partner.id),
   }
 }
 
@@ -64,15 +69,19 @@ export interface ValidatedCourseForm {
   estimatedTimeMin: number | null
   parkings: Facility[]
   restrooms: Facility[]
+  partnerIds: string[]
 }
 
 /** 서버 규칙(app/schemas.py·admin/courses.py)과 같은 검사. 통과하면 변환된 값을,
  * 실패하면 message를 돌려준다. nameRequired: 등록은 GPX <name>으로 대신할 수 있어
- * 선택이고, 수정은 필수다. */
+ * 선택이고, 수정은 필수다. alert가 true면 폼 아래 문구 대신 얼럿으로 띄운다 — 좌표
+ * 미확인은 폼 중간 행에서 난 문제라 아래쪽 문구만으로는 놓치기 쉽다. */
 export function validate(
   values: CourseFormValues,
   { nameRequired }: { nameRequired: boolean },
-): { ok: true; data: ValidatedCourseForm } | { ok: false; message: string } {
+):
+  | { ok: true; data: ValidatedCourseForm }
+  | { ok: false; message: string; alert?: boolean } {
   if (nameRequired && !values.name.trim()) {
     return { ok: false, message: '이름을 입력해 주세요.' }
   }
@@ -108,13 +117,17 @@ export function validate(
   const convertFacilities = (
     drafts: FacilityDraft[],
     label: string,
-  ): Facility[] | string => {
+  ): Facility[] | { ok: false; message: string; alert?: boolean } => {
     const result: Facility[] = []
     for (const draft of drafts) {
       if (!draft.address.trim() && !draft.name.trim()) continue // 빈 줄은 버린다.
-      if (!draft.address.trim()) return `${label}의 주소가 비어 있어요.`
+      if (!draft.address.trim()) return { ok: false, message: `${label}의 주소가 비어 있어요.` }
       if (draft.lat == null || draft.lng == null) {
-        return `${label} "${draft.address}"의 좌표를 확인해 주세요("좌표 확인" 버튼).`
+        return {
+          ok: false,
+          alert: true,
+          message: `좌표 확인 버튼을 먼저 눌러주세요.\n(${label}: ${draft.address.trim()})`,
+        }
       }
       result.push({
         name: draft.name.trim() || null,
@@ -127,9 +140,9 @@ export function validate(
   }
 
   const parkings = convertFacilities(values.parkings, '주차장')
-  if (typeof parkings === 'string') return { ok: false, message: parkings }
+  if (!Array.isArray(parkings)) return parkings
   const restrooms = convertFacilities(values.restrooms, '화장실')
-  if (typeof restrooms === 'string') return { ok: false, message: restrooms }
+  if (!Array.isArray(restrooms)) return restrooms
 
   return {
     ok: true,
@@ -144,6 +157,7 @@ export function validate(
       estimatedTimeMin,
       parkings,
       restrooms,
+      partnerIds: values.partnerIds,
     },
   }
 }
@@ -169,6 +183,7 @@ export function toUpdatePayload(data: ValidatedCourseForm): CourseUpdatePayload 
     estimated_time_min: data.estimatedTimeMin,
     parkings: data.parkings,
     restrooms: data.restrooms,
+    partner_ids: data.partnerIds,
   }
 }
 
@@ -200,7 +215,7 @@ export default function CourseForm({ values, onChange, nameOptional = false }: P
       <div className="row">
         <div className="field">
           <label htmlFor="course-distance">
-            거리(km) <span className="hint">왕복 안내값, 예: 8.3</span>
+            거리(km)
           </label>
           <input
             id="course-distance"
@@ -291,6 +306,10 @@ export default function CourseForm({ values, onChange, nameOptional = false }: P
         label="화장실"
         items={values.restrooms}
         onChange={(restrooms) => set('restrooms', restrooms)}
+      />
+      <PartnerPicker
+        selectedIds={values.partnerIds}
+        onChange={(partnerIds) => set('partnerIds', partnerIds)}
       />
     </>
   )

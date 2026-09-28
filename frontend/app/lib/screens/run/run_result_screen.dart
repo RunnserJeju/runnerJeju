@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/run_metrics_card.dart';
 import '../../widgets/run_map_view.dart';
 import '../../widgets/stamp_badge.dart';
+import 'run_share_screen.dart';
 
 /// 러닝 결과: 기록을 서버에 저장하고, 완주 스탬프를 받았으면 함께 보여준다.
 class RunResultScreen extends StatefulWidget {
@@ -139,6 +140,17 @@ class _RunResultScreenState extends State<RunResultScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  /// 공유 카드로 넘어간다. 저장에 성공한 기록만 공유한다 — 서버에 없는 기록을
+  /// 인증으로 올리면 나중에 프로필에서 찾을 수 없다.
+  void _openShare() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            RunShareScreen(record: _uploadResult?.record ?? widget.record),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final record = widget.record;
@@ -194,6 +206,14 @@ class _RunResultScreenState extends State<RunResultScreen> {
             const SizedBox(height: 20),
             RunMetricsCard(record: record),
             const SizedBox(height: 28),
+            if (!_saving && _saveError == null) ...[
+              OutlinedButton.icon(
+                onPressed: _openShare,
+                icon: const Icon(Icons.ios_share_rounded),
+                label: const Text('공유하기'),
+              ),
+              const SizedBox(height: 12),
+            ],
             FilledButton(onPressed: _close, child: const Text('완료')),
           ],
         ),

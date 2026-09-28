@@ -7,6 +7,7 @@ import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 
 import '../config/app_config.dart';
 import '../models/course_facility.dart';
+import '../models/course_partner.dart';
 import '../models/geo_point.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
@@ -28,6 +29,7 @@ class RunMapView extends StatefulWidget {
     this.coursePath = const [],
     this.parkings = const [],
     this.restrooms = const [],
+    this.partners = const [],
     this.runPath = const [],
     this.currentPosition,
     this.initialCenter,
@@ -45,6 +47,9 @@ class RunMapView extends StatefulWidget {
   /// 러닝 내내 바뀌지 않는 정적 마커라 시작할 때 한 번만 그린다.
   final List<CourseFacility> parkings;
   final List<CourseFacility> restrooms;
+
+  /// 코스 협력업체. 시설과 같은 정적 배지로 찍는다.
+  final List<CoursePartner> partners;
 
   /// 이미 끝난 러닝의 경로. 결과 화면처럼 정지 화면에서 쓴다.
   ///
@@ -130,8 +135,10 @@ class _RunMapViewState extends State<RunMapView>
   final List<kakao.Poi> _facilityMarkers = [];
   List<CourseFacility>? _drawnParkings;
   List<CourseFacility>? _drawnRestrooms;
+  List<CoursePartner>? _drawnPartners;
   kakao.PoiStyle? _parkingStyle;
   kakao.PoiStyle? _restroomStyle;
+  kakao.PoiStyle? _partnerStyle;
 
   /// 코스 시작/끝의 '출발'/'도착' 배지. 코스가 바뀔 때만 다시 그린다.
   final List<kakao.Poi> _endpointMarkers = [];
@@ -270,7 +277,8 @@ class _RunMapViewState extends State<RunMapView>
       !_isSamePath(old.coursePath, widget.coursePath) ||
       !_isSamePath(old.runPath, widget.runPath) ||
       !identical(old.parkings, widget.parkings) ||
-      !identical(old.restrooms, widget.restrooms);
+      !identical(old.restrooms, widget.restrooms) ||
+      !identical(old.partners, widget.partners);
 
   /// 경로는 뒤에 점이 붙기만 하므로 길이와 마지막 점만 보면 같은지 알 수 있다.
   /// (GeoPoint는 값 비교를 정의하지 않아 identical로 본다 — 점이 추가되면
@@ -703,11 +711,13 @@ class _RunMapViewState extends State<RunMapView>
     );
   }
 
-  /// 코스 주차장(파란 'P')·화장실(초록 'WC') 배지를 좌표에 찍는다. 러닝 중 안
-  /// 바뀌는 정적 마커라 처음 한 번만 그린다(CourseMapView와 같은 배지를 쓴다).
+  /// 코스 주차장(파란 'P')·화장실(초록 'WC')·협력업체(주황 '★') 배지를 좌표에
+  /// 찍는다. 러닝 중 안 바뀌는 정적 마커라 처음 한 번만 그린다(CourseMapView와
+  /// 같은 배지를 쓴다).
   Future<void> _drawFacilities(kakao.KakaoMapController controller) async {
     if (identical(_drawnParkings, widget.parkings) &&
-        identical(_drawnRestrooms, widget.restrooms)) {
+        identical(_drawnRestrooms, widget.restrooms) &&
+        identical(_drawnPartners, widget.partners)) {
       return;
     }
 
@@ -718,19 +728,28 @@ class _RunMapViewState extends State<RunMapView>
     _facilityMarkers.clear();
 
     // 찍을 시설이 없으면 배지 이미지를 만들 이유도 없다.
-    if (widget.parkings.isEmpty && widget.restrooms.isEmpty) {
+    if (widget.parkings.isEmpty &&
+        widget.restrooms.isEmpty &&
+        widget.partners.isEmpty) {
       _drawnParkings = widget.parkings;
       _drawnRestrooms = widget.restrooms;
+      _drawnPartners = widget.partners;
       return;
     }
 
     final parkingStyle = await _ensureParkingStyle();
     final restroomStyle = await _ensureRestroomStyle();
-    if (parkingStyle == null || restroomStyle == null || _disposed) return;
+    final partnerStyle = await _ensurePartnerStyle();
+    if (parkingStyle == null ||
+        restroomStyle == null ||
+        partnerStyle == null ||
+        _disposed) {
+      return;
+    }
 
-    Future<void> place(CourseFacility facility, kakao.PoiStyle style) async {
+    Future<void> place(double lat, double lng, kakao.PoiStyle style) async {
       final poi = await controller.labelLayer.addPoi(
-        kakao.LatLng(facility.lat, facility.lng),
+        kakao.LatLng(lat, lng),
         style: style,
       );
       if (_disposed) {
@@ -741,16 +760,21 @@ class _RunMapViewState extends State<RunMapView>
     }
 
     for (final facility in widget.parkings) {
-      await place(facility, parkingStyle);
+      await place(facility.lat, facility.lng, parkingStyle);
       if (_disposed) return;
     }
     for (final facility in widget.restrooms) {
-      await place(facility, restroomStyle);
+      await place(facility.lat, facility.lng, restroomStyle);
+      if (_disposed) return;
+    }
+    for (final partner in widget.partners) {
+      await place(partner.lat, partner.lng, partnerStyle);
       if (_disposed) return;
     }
 
     _drawnParkings = widget.parkings;
     _drawnRestrooms = widget.restrooms;
+    _drawnPartners = widget.partners;
   }
 
   Future<kakao.PoiStyle?> _ensureParkingStyle() async {
@@ -771,6 +795,16 @@ class _RunMapViewState extends State<RunMapView>
     );
     if (_disposed) return null;
     return _restroomStyle = kakao.PoiStyle(
+      anchor: const kakao.KPoint(0.5, 0.5),
+      icon: icon,
+    );
+  }
+
+  Future<kakao.PoiStyle?> _ensurePartnerStyle() async {
+    if (_partnerStyle != null) return _partnerStyle;
+    final icon = await buildFacilityBadge(partnerBadgeColor, partnerBadgeLabel);
+    if (_disposed) return null;
+    return _partnerStyle = kakao.PoiStyle(
       anchor: const kakao.KPoint(0.5, 0.5),
       icon: icon,
     );
@@ -801,7 +835,7 @@ class _RunMapViewState extends State<RunMapView>
     }
     _staticRunRoutes.clear();
 
-    for (final segment in _splitAtBreaks(points)) {
+    for (final segment in GeoUtils.splitAtBreaks(points)) {
       // 선이 되려면 점이 둘 이상 필요하다. 재개하자마자 끝난 구간은 건너뛴다.
       if (segment.length < 2) continue;
 
@@ -813,23 +847,6 @@ class _RunMapViewState extends State<RunMapView>
         ),
       );
     }
-  }
-
-  /// 기록이 끊긴 자리에서 경로를 나눈다.
-  static List<List<GeoPoint>> _splitAtBreaks(List<GeoPoint> points) {
-    final segments = <List<GeoPoint>>[];
-    var current = <GeoPoint>[];
-
-    for (final point in points) {
-      if (point.startsNewSegment && current.isNotEmpty) {
-        segments.add(current);
-        current = [];
-      }
-      current.add(point);
-    }
-
-    if (current.isNotEmpty) segments.add(current);
-    return segments;
   }
 
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {

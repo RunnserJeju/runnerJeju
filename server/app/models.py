@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     SmallInteger,
     String,
@@ -131,13 +132,6 @@ class Course(Base):
 
     address: Mapped[str] = mapped_column(String(300))
 
-    # 명단에 값이 없는 코스가 있어서 둘 다 nullable이다.
-    #
-    # 아래 parkings/restrooms(JSONB)로 대체되는 중이다(단계적 교체 — 0009 마이그레이션
-    # 주석 참고). 코드가 새 컬럼으로 완전히 넘어가면 옛 컬럼은 0010에서 지운다.
-    parking_address: Mapped[str | None] = mapped_column(String(300), default=None)
-    restroom_address: Mapped[str | None] = mapped_column(String(300), default=None)
-
     # 주차장/화장실을 코스당 여러 개 담는다. 각 원소는
     # {"name": str|null, "address": str, "lat": float, "lng": float}.
     # 좌표는 등록 시점에 주소를 변환(app/geocoding.py)해 넣는다. path와 같은 JSONB 전략.
@@ -164,6 +158,16 @@ class Course(Base):
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
+    # 업로드한 GPX 파일 바이트 그대로. path는 리샘플본이라 원본 점이 남지 않아서
+    # 따로 둔다 — 판정·지도는 path만 보고, 이건 GPX 내려받기(GET /courses/{id}/gpx)
+    # 전용이다. 원본 없이 올라간 옛 코스는 NULL.
+    #
+    # deferred: 코스 목록 같은 일반 조회가 파일 바이트까지 끌어오지 않게, 이 속성에
+    # 접근할 때만 따로 읽는다.
+    original_gpx: Mapped[bytes | None] = mapped_column(
+        LargeBinary, default=None, deferred=True
+    )
+
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -173,6 +177,75 @@ class Course(Base):
     )
 
     stamps: Mapped[list["Stamp"]] = relationship(back_populates="course")
+
+    # 이 코스에 연결된 협력업체(순서대로). 목록 응답이 코스마다 업체를 따로 조회하지
+    # 않게 selectin으로 한 번에 불러온다(링크 → 업체는 CoursePartner.partner가 join).
+    # 연결을 바꿀 때는 이 컬렉션을 교체한다 — 빠진 링크는 delete-orphan으로 지워진다.
+    partner_links: Mapped[list["CoursePartner"]] = relationship(
+        order_by="CoursePartner.sort_order",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class Partner(Base):
+    """협력업체. 운영 웹에서 따로 관리하고 코스에는 course_partners로 연결한다.
+
+    업체 정보는 여기에만 있다 — 코스에 복사하지 않으므로 고치면 연결된 모든 코스에
+    바로 반영되고, 한 업체를 여러 코스에 걸 수 있다.
+    """
+
+    __tablename__ = "partners"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(200))
+
+    # 한글 주소는 안내용이라 선택이다. 지도 마커는 좌표만 있으면 찍힌다.
+    address: Mapped[str | None] = mapped_column(String(300), default=None)
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+
+    comment: Mapped[str | None] = mapped_column(Text, default=None)
+    # 계정명이나 URL. 서버가 형식을 해석하지 않는다.
+    instagram: Mapped[str | None] = mapped_column(String(200), default=None)
+    # 예) "러너 인증 시 아메리카노 10% 할인". 쿠폰 혜택처럼 자유 텍스트다.
+    benefit: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    # 아직 정해지지 않은 부가 정보(영업시간·업종·이미지 등)를 담는 자리. 형태가
+    # 굳어지면 컬럼으로 승격한다(user_log.detail과 같은 전략).
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CoursePartner(Base):
+    """코스 ↔ 협력업체 연결. 코스나 업체가 지워지면 연결도 함께 지워진다(CASCADE)."""
+
+    __tablename__ = "course_partners"
+
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 복합 PK의 두 번째 열이라 PK 인덱스로는 "이 업체가 걸린 코스"를 못 찾는다.
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partners.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    # 코스 안에서 업체를 보여줄 순서(운영 웹에서 고른 순서).
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    partner: Mapped[Partner] = relationship(lazy="joined")
 
 
 class Run(Base):

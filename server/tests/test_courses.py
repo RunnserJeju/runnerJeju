@@ -21,16 +21,32 @@ from pydantic import ValidationError
 from app import geocoding, storage
 from app.admin import courses as admin_courses_router
 from app.deps import ClientContext
-from app.models import Course, Stamp
+from app.models import Course, CoursePartner, Partner, Stamp
 from app.routers import courses as courses_router
 from app.routers import stamps as stamps_router
-from app.schemas import CourseUpdate, Facility
+from app.schemas import CourseUpdate, Facility, PartnerPayload
 from tools import push_courses
 
 SAGYE = Path(__file__).resolve().parent.parent / "courses" / "sagye-coastal.gpx"
 
 PARKING = {"name": "송악산 주차장", "address": "제주 대정읍 상모리 4165", "lat": 33.21, "lng": 126.29}
 RESTROOM = {"name": None, "address": "제주 대정읍 송악관광로 40", "lat": 33.22, "lng": 126.28}
+
+
+def _partner(**overrides) -> Partner:
+    fields = dict(
+        id=uuid.uuid4(),
+        name="송악 카페",
+        address=None,
+        lat=33.215,
+        lng=126.285,
+        comment=None,
+        instagram="@songak_cafe",
+        benefit="러너 10% 할인",
+        detail={},
+    )
+    fields.update(overrides)
+    return Partner(**fields)
 
 
 class FakeSession:
@@ -90,6 +106,15 @@ class TestCreateCourseFacilities:
 
         assert course.parkings == []
         assert course.restrooms == []
+        assert course.partner_links == []
+
+    def test_links_partners_in_order(self):
+        db = FakeSession()
+        first, second = uuid.uuid4(), uuid.uuid4()
+        course = _create(db, partner_ids=[first, second])
+
+        assert [link.partner_id for link in course.partner_links] == [first, second]
+        assert [link.sort_order for link in course.partner_links] == [0, 1]
 
     def test_multiple_facilities_of_same_kind(self):
         db = FakeSession()
@@ -97,6 +122,16 @@ class TestCreateCourseFacilities:
         course = _create(db, restrooms=[RESTROOM, rest2])
 
         assert len(course.restrooms) == 2
+
+
+class TestCreateCourseOriginalGpx:
+    def test_keeps_uploaded_bytes_alongside_resampled_path(self):
+        db = FakeSession()
+        course = _create(db)
+
+        # 원본은 파일 그대로, path는 리샘플본(원본과 점 개수가 다르다).
+        assert course.original_gpx == SAGYE.read_bytes()
+        assert len(course.path) > 0
 
 
 class TestCreateCourseEstimatedTime:
@@ -141,6 +176,7 @@ class TestToSummary:
 
         assert summary["parkings"] == [PARKING]
         assert summary["restrooms"] == []
+        assert summary["partners"] == []
         assert summary["estimated_time_min"] == 75
         assert summary["thumbnail_url"] == "https://example.com/a.png"
         assert summary["stamp_image_url"] == "https://example.com/stamp.png"
@@ -181,6 +217,30 @@ class TestToSummary:
         assert summary["parkings"] == []
         assert summary["restrooms"] == []
 
+    def test_includes_linked_partners_in_order(self):
+        cafe = _partner(name="카페")
+        diner = _partner(name="식당", address="제주 대정읍 1")
+        course = Course(
+            id=uuid.uuid4(),
+            name="c",
+            distance_km=6,
+            difficulty=2,
+            address="제주",
+            path=[],
+            parkings=[],
+            restrooms=[],
+        )
+        course.partner_links = [
+            CoursePartner(partner_id=diner.id, partner=diner, sort_order=0),
+            CoursePartner(partner_id=cafe.id, partner=cafe, sort_order=1),
+        ]
+
+        summary = courses_router._to_summary(course, 0, False)
+
+        assert [p.name for p in summary["partners"]] == ["식당", "카페"]
+        assert summary["partners"][0].address == "제주 대정읍 1"
+        assert summary["partners"][1].benefit == "러너 10% 할인"
+
 
 class TestFacilitySchema:
     def test_rejects_missing_coordinates(self):
@@ -199,19 +259,72 @@ class TestFacilitySchema:
         assert (facility.lat, facility.lng) == (33.5, 126.5)
 
 
+class TestPartnerPayloadSchema:
+    def test_accepts_name_and_coordinates_only(self):
+        # 주소·코멘트·인스타·혜택은 선택이다 — 좌표만 있으면 지도에 찍을 수 있다.
+        payload = PartnerPayload(name="카페", lat=33.5, lng=126.5)
+
+        assert payload.address is None
+        assert payload.detail == {}
+
+    def test_rejects_missing_coordinates(self):
+        with pytest.raises(ValidationError):
+            PartnerPayload(name="카페", address="제주 A")
+
+    def test_rejects_blank_name(self):
+        with pytest.raises(ValidationError):
+            PartnerPayload(name="", lat=33.5, lng=126.5)
+
+    def test_rejects_out_of_range_coordinates(self):
+        # 직접 입력하다 위도/경도를 뒤바꿔 넣는 실수를 거른다.
+        with pytest.raises(ValidationError):
+            PartnerPayload(name="카페", lat=126.5, lng=33.5)
+
+
+class TestSetCoursePartners:
+    def test_reuses_existing_link_and_reorders(self):
+        # 이미 걸린 업체는 링크를 새로 만들지 않는다 — 같은 PK를 지웠다 넣으면 flush가 충돌한다.
+        kept, dropped, added = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        course = _course()
+        course.partner_links = [
+            CoursePartner(partner_id=dropped, sort_order=0),
+            CoursePartner(partner_id=kept, sort_order=1),
+        ]
+        kept_link = course.partner_links[1]
+
+        courses_router.set_course_partners(course, [added, kept])
+
+        assert [link.partner_id for link in course.partner_links] == [added, kept]
+        assert course.partner_links[1] is kept_link
+        assert kept_link.sort_order == 1
+
+    def test_ignores_duplicate_ids(self):
+        course = _course()
+        pid = uuid.uuid4()
+
+        courses_router.set_course_partners(course, [pid, pid])
+
+        assert [link.partner_id for link in course.partner_links] == [pid]
+
+
 class _EmptyResult:
-    """완주자 수/내 완주 조회가 비어 있는 것으로 흉내낸다(수정 로직만 볼 것이므로)."""
+    """완주자 수 조회는 비어 있는 것으로 흉내낸다(수정 로직만 볼 것이므로).
+    scalars()는 협력업체 존재 확인(_ensure_partners_exist)이 쓴다 — DB에 있는 업체 id."""
+
+    def __init__(self, partner_ids=()):
+        self._partner_ids = list(partner_ids)
 
     def all(self):
         return []
 
     def scalars(self):
-        return []
+        return self._partner_ids
 
 
 class UpdateFakeSession:
-    def __init__(self, course: Course | None):
+    def __init__(self, course: Course | None, partner_ids=()):
         self._course = course
+        self._partner_ids = partner_ids
         self.committed = False
 
     def get(self, _model, course_id):
@@ -220,13 +333,17 @@ class UpdateFakeSession:
         return None
 
     def execute(self, _stmt):
-        return _EmptyResult()
+        return _EmptyResult(self._partner_ids)
 
     def commit(self):
         self.committed = True
 
-    def refresh(self, _obj):
-        pass
+    def refresh(self, obj):
+        # 실제 DB는 커밋 후 링크를 다시 읽으며 업체(partner)를 join해 온다. 새로 만든
+        # 링크는 partner_id만 있으니 그 자리를 흉내낸다.
+        for link in getattr(obj, "partner_links", []):
+            if link.partner is None:
+                link.partner = _partner(id=link.partner_id)
 
 
 def _course(**overrides) -> Course:
@@ -312,6 +429,31 @@ class TestUpdateCourse:
         assert course.parkings == [PARKING]
         assert course.restrooms == [RESTROOM]
 
+    def test_replaces_partner_links(self):
+        old, new = uuid.uuid4(), uuid.uuid4()
+        course = _course()
+        course.partner_links = [CoursePartner(partner_id=old, sort_order=0)]
+        db = UpdateFakeSession(course, partner_ids=[new])
+
+        admin_courses_router.update_course(
+            course.id, self._payload(partner_ids=[new]), db
+        )
+
+        assert [link.partner_id for link in course.partner_links] == [new]
+
+    def test_rejects_unknown_partner(self):
+        # 없는 업체 id는 저장 전에 422로 거른다(커밋 때 FK 위반 500이 나지 않게).
+        course = _course()
+        db = UpdateFakeSession(course, partner_ids=[])
+
+        with pytest.raises(HTTPException) as exc_info:
+            admin_courses_router.update_course(
+                course.id, self._payload(partner_ids=[uuid.uuid4()]), db
+            )
+
+        assert exc_info.value.status_code == 422
+        assert db.committed is False
+
     def test_does_not_touch_path(self):
         course = _course()
         original_path = list(course.path)
@@ -345,6 +487,7 @@ class TestCourseUpdateSchema:
 
         assert payload.parkings == []
         assert payload.restrooms == []
+        assert payload.partner_ids == []
 
     def test_estimated_time_defaults_to_none(self):
         payload = CourseUpdate(name="x", distance_km=5, difficulty=2, visibility="public", address="제주")
@@ -559,6 +702,8 @@ class TestReplaceCourseGpx:
         assert course.path != original_path
         assert len(course.path) > 0
         assert result["path"] == course.path
+        # 원본도 새 파일로 같이 바뀐다.
+        assert course.original_gpx == SAGYE.read_bytes()
         assert db.committed is True
         # 기록이 없으면 초기화(delete)는 하지 않는다.
         assert db.delete_count == 0
@@ -590,6 +735,7 @@ class TestReplaceCourseGpx:
         assert exc_info.value.status_code == 409
         # 경로는 그대로 — 커밋도 초기화도 안 한다.
         assert course.path == original_path
+        assert course.original_gpx is None
         assert db.committed is False
         assert db.delete_count == 0
 
@@ -810,3 +956,45 @@ class TestGetCourseRecordsView:
 
         assert exc.value.status_code == 404
         assert db.insert_count == 0
+
+
+class TestDownloadCourseGpx:
+    def _download(self, course):
+        return courses_router.download_course_gpx(
+            course.id if course else uuid.uuid4(),
+            db=_GetCourseFake(course),
+            _user_id="u1",
+            is_admin=False,
+        )
+
+    def test_returns_original_bytes_as_attachment(self):
+        course = _course(name="No.1 이호랜드", original_gpx=SAGYE.read_bytes())
+
+        response = self._download(course)
+
+        assert response.body == SAGYE.read_bytes()
+        assert response.media_type == "application/gpx+xml"
+        disposition = response.headers["content-disposition"]
+        assert disposition.startswith("attachment;")
+        # 한글 이름은 퍼센트 인코딩된 filename*으로 실린다.
+        assert "filename*=UTF-8''No.1%20%EC%9D%B4%ED%98%B8%EB%9E%9C%EB%93%9C.gpx" in disposition
+
+    def test_404_when_no_original(self):
+        with pytest.raises(HTTPException) as exc:
+            self._download(_course())
+
+        assert exc.value.status_code == 404
+
+    def test_404_when_course_missing(self):
+        with pytest.raises(HTTPException) as exc:
+            self._download(None)
+
+        assert exc.value.status_code == 404
+
+
+class TestGpxFilename:
+    def test_replaces_characters_unsafe_for_filenames(self):
+        assert courses_router._gpx_filename('a/b:c*?"<>|') == "a_b_c_.gpx"
+
+    def test_falls_back_when_name_is_empty_after_cleanup(self):
+        assert courses_router._gpx_filename(" . ") == "course.gpx"

@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
 import '../models/running_course.dart';
 import '../network/api_client.dart';
 import '../network/json.dart';
@@ -28,5 +32,14 @@ class CourseApi {
   Future<RunningCourse> fetchCourse(String courseId) async {
     final response = await _client.dio.get('/courses/$courseId');
     return RunningCourse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// 코스 GPX 원본 파일 바이트. 서버에 원본이 없는 코스는 404.
+  Future<Uint8List> downloadGpx(String courseId) async {
+    final response = await _client.dio.get<List<int>>(
+      '/courses/$courseId/gpx',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
   }
 }

@@ -50,6 +50,8 @@ enum LogName {
   runAbandon('run_abandon'),
   runUploadFailed('run_upload_failed'),
   runDetailOpen('run_detail_open'),
+  runShare('run_share'),
+  runShareFailed('run_share_failed'),
   // 스탬프·쿠폰
   stampDetailOpen('stamp_detail_open'),
   couponView('coupon_view'),
@@ -80,6 +82,10 @@ abstract final class LogKeys {
   static const elapsedSec = 'elapsed_sec';
   static const distanceM = 'distance_m';
   static const error = 'error';
+
+  /// 공유 카드 배색(dark/light)과 공유 시트 결과(success/dismissed/unavailable).
+  static const cardTheme = 'card_theme';
+  static const shareStatus = 'share_status';
 }
 
 /// 어디서 눌렀는지(detail[LogKeys.source]).

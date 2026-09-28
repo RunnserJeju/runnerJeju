@@ -19,6 +19,9 @@ from datetime import datetime
 
 from app import geo
 
+# build_gpx가 쓰는 GPX 1.1 네임스페이스. 파싱은 태그의 로컬 이름만 봐서 필요 없다.
+_GPX_NS = "http://www.topografix.com/GPX/1/1"
+
 # 시작점과 끝점이 이 거리 안이면 순환 코스로 본다.
 # 사계해안도로 예시는 10.5m다.
 LOOP_THRESHOLD_METERS = 50.0
@@ -275,3 +278,37 @@ def parse(content: bytes) -> ParsedCourse:
         <= LOOP_THRESHOLD_METERS,
         resampled_points=_resample(coordinates, elevations),
     )
+
+
+def build_gpx(name: str, points: list[dict], *, description: str | None = None) -> bytes:
+    """경로 점 목록(`courses.path` 형식)으로 GPX 1.1 파일을 만든다.
+
+    업로드 원본이 없는 코스의 original_gpx를 채울 때 쓴다(tools/backfill_course_original_gpx).
+    점은 받은 그대로 한 트랙 한 세그먼트에 담고, 고도가 있으면 `<ele>`로 싣는다.
+    원본이 아니라는 사실은 [description]으로 `<metadata><desc>`에 남긴다.
+    """
+    ET.register_namespace("", _GPX_NS)
+
+    def el(parent, tag, text=None, **attrs):
+        child = ET.SubElement(parent, f"{{{_GPX_NS}}}{tag}", attrs)
+        if text is not None:
+            child.text = text
+        return child
+
+    root = ET.Element(
+        f"{{{_GPX_NS}}}gpx", {"version": "1.1", "creator": "RunnersJeju"}
+    )
+    metadata = el(root, "metadata")
+    el(metadata, "name", name)
+    if description:
+        el(metadata, "desc", description)
+
+    track = el(root, "trk")
+    el(track, "name", name)
+    segment = el(track, "trkseg")
+    for point in points:
+        trkpt = el(segment, "trkpt", lat=repr(point["lat"]), lon=repr(point["lng"]))
+        if point.get("altitude") is not None:
+            el(trkpt, "ele", repr(point["altitude"]))
+
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)

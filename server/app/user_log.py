@@ -39,6 +39,8 @@ LOG_NAMES: frozenset[str] = frozenset(
         "run_abandon",
         "run_upload_failed",
         "run_detail_open",
+        "run_share",
+        "run_share_failed",
         # 스탬프·쿠폰
         "stamp_detail_open",
         "coupon_view",

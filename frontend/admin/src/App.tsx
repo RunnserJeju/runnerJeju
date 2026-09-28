@@ -6,6 +6,7 @@ import CourseListPage from './pages/CourseListPage'
 import CourseStatsPage from './pages/CourseStatsPage'
 import LogsPage from './pages/LogsPage'
 import NoticeListPage from './pages/NoticeListPage'
+import PartnerListPage from './pages/PartnerListPage'
 import UsersPage from './pages/UsersPage'
 
 // 차트 라이브러리(recharts)가 커서 대시보드를 열 때만 내려받는다.
@@ -17,7 +18,14 @@ type Auth =
   | { status: 'error' }
   | { status: 'authed'; who: AdminIdentity }
 
-type Page = 'courses' | 'notices' | 'dashboard' | 'course-stats' | 'users' | 'logs'
+type Page =
+  | 'courses'
+  | 'partners'
+  | 'notices'
+  | 'dashboard'
+  | 'course-stats'
+  | 'users'
+  | 'logs'
 
 /** 사이드바 메뉴. 그룹 제목 아래 항목이 나열된다. */
 const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
@@ -36,6 +44,7 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
     group: '데이터 편집',
     items: [
       { key: 'courses', label: '코스' },
+      { key: 'partners', label: '협력업체' },
       { key: 'notices', label: '공지사항' },
     ],
   },
@@ -121,6 +130,9 @@ export default function App() {
         <main>
           {page === 'courses' && (
             <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'partners' && (
+            <PartnerListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
           )}
           {page === 'notices' && (
             <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />

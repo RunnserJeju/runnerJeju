@@ -21,6 +21,7 @@ import 'program_service.dart';
 import 'run_live_widget.dart';
 import 'run_service.dart';
 import 'run_tracker.dart';
+import 'share_card_renderer.dart';
 import 'stamp_service.dart';
 import 'token_storage.dart';
 import 'user_log_service.dart';
@@ -88,6 +89,9 @@ class Services {
 
   /// 코스 시작점까지의 길안내. 카카오맵 앱/웹을 띄우기만 하는 얇은 계층이다.
   late final KakaoMapLauncher kakaoMapLauncher = const KakaoMapLauncher();
+
+  /// 공유 카드를 PNG로 굽는 계층. 상태가 없어 하나만 둔다.
+  late final ShareCardRenderer shareCardRenderer = const ShareCardRenderer();
 
   /// 기기 정지 감지(가속도계). 러닝 중 정지 상태의 GPS 지터를 거르는 데 쓴다.
   late final MotionService motion = MotionService();

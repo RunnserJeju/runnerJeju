@@ -6,6 +6,7 @@ import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 
 import '../config/app_config.dart';
 import '../models/course_facility.dart';
+import '../models/course_partner.dart';
 import '../models/geo_point.dart';
 import '../models/running_course.dart';
 import '../theme/app_theme.dart';
@@ -31,6 +32,7 @@ class CourseMapView extends StatefulWidget {
     this.selectedPath = const [],
     this.selectedParkings = const [],
     this.selectedRestrooms = const [],
+    this.selectedPartners = const [],
     this.myPosition,
     this.onCourseTap,
     this.onMapTap,
@@ -51,6 +53,9 @@ class CourseMapView extends StatefulWidget {
   /// 찍으면 지도가 배지로 뒤덮인다). 등록 시점에 변환해 둔 좌표를 그대로 쓴다.
   final List<CourseFacility> selectedParkings;
   final List<CourseFacility> selectedRestrooms;
+
+  /// 선택된 코스의 협력업체. 시설과 같은 규칙으로 선택됐을 때만 찍는다.
+  final List<CoursePartner> selectedPartners;
 
   /// 내 현재 위치. 있으면 점으로 찍는다.
   final GeoPoint? myPosition;
@@ -114,6 +119,7 @@ class _CourseMapViewState extends State<CourseMapView> {
   final List<kakao.Poi> _facilityMarkers = [];
   List<CourseFacility>? _drawnParkings;
   List<CourseFacility>? _drawnRestrooms;
+  List<CoursePartner>? _drawnPartners;
 
   kakao.Poi? _myPositionMarker;
 
@@ -121,6 +127,7 @@ class _CourseMapViewState extends State<CourseMapView> {
   kakao.PoiStyle? _selectedCourseStyle;
   kakao.PoiStyle? _parkingStyle;
   kakao.PoiStyle? _restroomStyle;
+  kakao.PoiStyle? _partnerStyle;
   kakao.PoiStyle? _myPositionStyle;
   late final kakao.RouteStyle _routeStyle = kakao.RouteStyle(
     AppColors.accent,
@@ -179,7 +186,8 @@ class _CourseMapViewState extends State<CourseMapView> {
       !_isSameCourseList(old.courses, widget.courses) ||
       !identical(old.selectedPath, widget.selectedPath) ||
       !identical(old.selectedParkings, widget.selectedParkings) ||
-      !identical(old.selectedRestrooms, widget.selectedRestrooms);
+      !identical(old.selectedRestrooms, widget.selectedRestrooms) ||
+      !identical(old.selectedPartners, widget.selectedPartners);
 
   /// 목록이 바뀌었는지. 코스는 서버에서 통째로 다시 받으므로 id 구성만 본다.
   static bool _isSameCourseList(List<RunningCourse> a, List<RunningCourse> b) {
@@ -479,11 +487,12 @@ class _CourseMapViewState extends State<CourseMapView> {
     );
   }
 
-  /// 선택된 코스의 주차장/화장실 배지를 좌표에 찍는다. 선택이 바뀌면 통째로
-  /// 지우고 다시 그린다 — 시설은 코스당 몇 개뿐이라 부분 갱신할 만큼 크지 않다.
+  /// 선택된 코스의 주차장/화장실/협력업체 배지를 좌표에 찍는다. 선택이 바뀌면
+  /// 통째로 지우고 다시 그린다 — 코스당 몇 개뿐이라 부분 갱신할 만큼 크지 않다.
   Future<void> _syncFacilityMarkers(kakao.KakaoMapController controller) async {
     if (identical(_drawnParkings, widget.selectedParkings) &&
-        identical(_drawnRestrooms, widget.selectedRestrooms)) {
+        identical(_drawnRestrooms, widget.selectedRestrooms) &&
+        identical(_drawnPartners, widget.selectedPartners)) {
       return;
     }
 
@@ -495,11 +504,17 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     final parkingStyle = await _ensureParkingStyle();
     final restroomStyle = await _ensureRestroomStyle();
-    if (parkingStyle == null || restroomStyle == null || _disposed) return;
+    final partnerStyle = await _ensurePartnerStyle();
+    if (parkingStyle == null ||
+        restroomStyle == null ||
+        partnerStyle == null ||
+        _disposed) {
+      return;
+    }
 
-    Future<void> place(CourseFacility facility, kakao.PoiStyle style) async {
+    Future<void> place(double lat, double lng, kakao.PoiStyle style) async {
       final poi = await controller.labelLayer.addPoi(
-        kakao.LatLng(facility.lat, facility.lng),
+        kakao.LatLng(lat, lng),
         style: style,
       );
       if (_disposed) {
@@ -510,16 +525,21 @@ class _CourseMapViewState extends State<CourseMapView> {
     }
 
     for (final facility in widget.selectedParkings) {
-      await place(facility, parkingStyle);
+      await place(facility.lat, facility.lng, parkingStyle);
       if (_disposed) return;
     }
     for (final facility in widget.selectedRestrooms) {
-      await place(facility, restroomStyle);
+      await place(facility.lat, facility.lng, restroomStyle);
+      if (_disposed) return;
+    }
+    for (final partner in widget.selectedPartners) {
+      await place(partner.lat, partner.lng, partnerStyle);
       if (_disposed) return;
     }
 
     _drawnParkings = widget.selectedParkings;
     _drawnRestrooms = widget.selectedRestrooms;
+    _drawnPartners = widget.selectedPartners;
   }
 
   Future<void> _syncMyPosition(kakao.KakaoMapController controller) async {
@@ -650,6 +670,18 @@ class _CourseMapViewState extends State<CourseMapView> {
     if (_disposed) return null;
 
     return _restroomStyle = kakao.PoiStyle(
+      anchor: const kakao.KPoint(0.5, 0.5),
+      icon: icon,
+    );
+  }
+
+  Future<kakao.PoiStyle?> _ensurePartnerStyle() async {
+    if (_partnerStyle != null) return _partnerStyle;
+
+    final icon = await buildFacilityBadge(partnerBadgeColor, partnerBadgeLabel);
+    if (_disposed) return null;
+
+    return _partnerStyle = kakao.PoiStyle(
       anchor: const kakao.KPoint(0.5, 0.5),
       icon: icon,
     );

@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../exceptions/app_exception.dart';
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../models/user_log.dart';
@@ -70,6 +72,9 @@ class _RunningScreenState extends State<RunningScreen> {
 
   /// 고른 코스의 찜 여부. 프리뷰 시트의 하트가 이 값을 따른다.
   bool _selectedIsFavorite = false;
+
+  /// GPX를 받는 중. 그동안 시트의 GPX 칸이 잠겨 같은 파일을 두 번 받지 않는다.
+  bool _downloadingGpx = false;
 
   /// 상세 요청의 순번. 코스를 빠르게 옮겨 누르면 먼저 보낸 요청이 나중에 도착할
   /// 수 있어서, 마지막으로 보낸 것 말고는 버린다.
@@ -274,6 +279,39 @@ class _RunningScreenState extends State<RunningScreen> {
     if (!mounted || _selected?.id != course.id) return;
     setState(() => _selectedIsFavorite = nowFavorite);
     _showMessage(nowFavorite ? '찜한 코스에 담았어요.' : '찜을 해제했어요.');
+  }
+
+  /// 고른 코스의 GPX 원본을 받아 공유 시트로 넘긴다. '파일에 저장'이나 다른 러닝
+  /// 앱으로 열기는 사용자가 시트에서 고른다 — 저장 위치를 앱이 정하면 플랫폼마다
+  /// 저장소 권한·폴더 노출 설정이 따로 필요하다.
+  Future<void> _downloadSelectedGpx() async {
+    final course = _selected;
+    if (course == null || _downloadingGpx) return;
+    setState(() => _downloadingGpx = true);
+
+    try {
+      final file = await Services.instance.course.downloadGpx(course);
+      if (!mounted) return;
+
+      final size = MediaQuery.sizeOf(context);
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'application/gpx+xml')],
+          // 아이패드는 공유 시트를 띄울 자리를 알아야 한다. 시트의 버튼 줄 근처.
+          sharePositionOrigin: Rect.fromCenter(
+            center: Offset(size.width / 2, size.height * 0.6),
+            width: 1,
+            height: 1,
+          ),
+        ),
+      );
+    } on AppException catch (e) {
+      if (mounted) _showMessage(e.message);
+    } catch (_) {
+      if (mounted) _showMessage('GPX 파일을 열지 못했어요.');
+    } finally {
+      if (mounted) setState(() => _downloadingGpx = false);
+    }
   }
 
   /// 지도 바닥을 눌렀을 때. 코스 상세는 걷고, 탐색 시트는 접는다.
@@ -502,6 +540,9 @@ class _RunningScreenState extends State<RunningScreen> {
                       selectedRestrooms: selected == null
                           ? const []
                           : (_selectedDetail ?? selected).restrooms,
+                      selectedPartners: selected == null
+                          ? const []
+                          : (_selectedDetail ?? selected).partners,
                       myPosition: _currentLocation.latest,
                       onCourseTap: (course) =>
                           _selectCourse(course, source: LogSource.map),
@@ -597,6 +638,8 @@ class _RunningScreenState extends State<RunningScreen> {
               onClose: _clearSelection,
               onRetryDetail: () => _selectCourse(selected),
               onStart: () => _startRun(course: _selectedDetail),
+              isDownloadingGpx: _downloadingGpx,
+              onDownloadGpx: _downloadSelectedGpx,
             ),
         ],
       ),

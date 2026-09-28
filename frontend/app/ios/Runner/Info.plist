@@ -39,6 +39,11 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- 공유 시트의 "이미지 저장". 이 설명이 없으면 사용자가 저장을 누르는
+	     순간 iOS가 앱을 강제 종료한다(사진 라이브러리 접근은 사유 명시가 필수).
+	     읽기(NSPhotoLibraryUsageDescription)는 필요 없다 — 저장만 한다. -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>러닝 기록 공유 카드를 사진 앨범에 저장하기 위해 사용해요.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>kakaokompassauth</string>

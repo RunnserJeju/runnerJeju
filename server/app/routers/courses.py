@@ -1,7 +1,9 @@
+import re
 import uuid
 from datetime import timedelta, timezone
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -13,8 +15,8 @@ from app.deps import (
     current_user_id,
     current_user_is_admin,
 )
-from app.models import Course, Stamp
-from app.schemas import CourseListItem, CourseSummary
+from app.models import Course, CoursePartner, Stamp
+from app.schemas import CourseListItem, CourseSummary, PartnerSummary
 
 router = APIRouter(tags=["courses"])
 
@@ -33,10 +35,12 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "difficulty": course.difficulty,
         "tags": course.tags,
         "address": course.address,
-        "parking_address": course.parking_address,
-        "restroom_address": course.restroom_address,
         "parkings": course.parkings or [],
         "restrooms": course.restrooms or [],
+        # partner_links는 selectin으로 미리 불러와 있어 코스마다 추가 조회가 없다.
+        "partners": [
+            PartnerSummary.model_validate(link.partner) for link in course.partner_links
+        ],
         "description": course.description,
         "estimated_time_min": course.estimated_time_min,
         "thumbnail_url": course.thumbnail_url,
@@ -168,6 +172,49 @@ def get_course(
     return summary
 
 
+# 파일명에 쓸 수 없는 문자(Windows 기준이 가장 엄격하다)와 제어 문자.
+_UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+
+
+def _gpx_filename(course_name: str) -> str:
+    name = _UNSAFE_FILENAME.sub("_", course_name).strip(" .") or "course"
+    return f"{name}.gpx"
+
+
+@router.get("/courses/{course_id}/gpx")
+def download_course_gpx(
+    course_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
+):
+    """코스 GPX 원본을 내려받는다. 리샘플한 path가 아니라 업로드한 파일 그대로다.
+
+    original_gpx가 NULL이면 404. 0028 전에 원본 없이 올라간 코스는 백필 도구가
+    리샘플 경로로 지은 GPX로 채운다(tools/backfill_course_original_gpx). 숨긴 코스도
+    상세와 같이 404.
+    """
+    course = db.scalar(
+        visible_courses(select(Course).where(Course.id == course_id), is_admin)
+    )
+    if course is None:
+        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+    if not course.original_gpx:
+        raise HTTPException(status_code=404, detail="이 코스는 GPX 원본이 없어요.")
+
+    filename = _gpx_filename(course.name)
+    return Response(
+        content=course.original_gpx,
+        media_type="application/gpx+xml",
+        headers={
+            # 한글 코스명은 filename*(RFC 5987)로, 이를 모르는 클라이언트용 ASCII 이름도 둔다.
+            "Content-Disposition": (
+                f"attachment; filename=\"course.gpx\"; filename*=UTF-8''{quote(filename)}"
+            ),
+        },
+    )
+
+
 class CourseUploadError(Exception):
     """GPX 업로드 검증 실패. HTTP 라우터와 tools/push_courses.py가 각자 방식으로 처리한다."""
 
@@ -208,6 +255,7 @@ def create_course_from_gpx_bytes(
     tags: str | None,
     parkings: list[dict] | None = None,
     restrooms: list[dict] | None = None,
+    partner_ids: list[uuid.UUID] | None = None,
     description: str | None,
     estimated_time_min: int | None = None,
     # 운영 웹은 필수로 받고, 시드 스크립트는 안 넘겨 NULL(미설정)로 올라간다.
@@ -221,6 +269,8 @@ def create_course_from_gpx_bytes(
     DB에 바로 써도 규칙이 두 벌로 갈라지지 않는다.
 
     parkings/restrooms는 각 원소가 {"name", "address", "lat", "lng"}인 dict 목록이다.
+    partner_ids는 연결할 협력업체 id 목록이다 — 존재 여부는 호출하는 쪽이 먼저
+    확인한다(없는 id면 커밋 시 FK 위반이 난다).
     좌표 변환은 호출하는 쪽 책임이다 — HTTP는 클라이언트가 "확인"으로 채워 보내고,
     스크립트는 push 시점에 geocode한다. 이 함수는 좌표를 그대로 저장만 하므로
     네트워크에 의존하지 않는다(테스트가 쉬워진다).
@@ -253,11 +303,30 @@ def create_course_from_gpx_bytes(
         # 검증 매칭률이 "코스 거리의 몇 %"와 일치하려면 점 밀도가 균등해야 하고,
         # 클라이언트도 이 경로를 그대로 받아 실시간 커버리지 계산의 기준점으로 쓴다.
         path=[point.to_json() for point in parsed.resampled_points],
+        # 리샘플로 사라지는 원본은 파일째 따로 보관한다(GPX 내려받기용).
+        original_gpx=content,
         created_by=created_by,
     )
+    set_course_partners(course, partner_ids or [])
 
     db.add(course)
     db.commit()
     db.refresh(course)
 
     return course
+
+
+def set_course_partners(course: Course, partner_ids: list[uuid.UUID]) -> None:
+    """코스의 협력업체 연결을 partner_ids(순서 포함)로 통째로 맞춘다. 커밋은 호출한 쪽이 한다.
+
+    이미 걸린 업체는 링크를 재사용해 순서만 고친다. 같은 (코스, 업체) 링크를 지웠다
+    새로 만들면 한 flush 안에서 PK가 겹칠 수 있어서다. 빠진 링크는 delete-orphan으로
+    지워진다. 같은 id가 두 번 오면 처음 자리만 남긴다.
+    """
+    existing = {link.partner_id: link for link in course.partner_links}
+    links: list[CoursePartner] = []
+    for partner_id in dict.fromkeys(partner_ids):
+        link = existing.get(partner_id) or CoursePartner(partner_id=partner_id)
+        link.sort_order = len(links)
+        links.append(link)
+    course.partner_links = links
