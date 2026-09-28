@@ -267,7 +267,7 @@ def replace_course_gpx(
       교체한다. 개인 러닝 기록(Run)은 남긴다(_reset_course_records 참고).
     - 기록이 없으면 플래그와 무관하게 그냥 교체한다.
 
-    메타데이터·썸네일은 건드리지 않는다 — 경로만 리샘플해 갈아끼운다. 파일 검증을
+    메타데이터·썸네일은 건드리지 않는다 — 경로(리샘플본)와 원본 GPX만 갈아끼운다. 파일 검증을
     먼저 끝낸 뒤에 초기화하므로, GPX가 잘못됐으면 아무것도 지우지 않고 422로 멈춘다.
     """
     course = _load_course_or_404(db, course_id)
@@ -298,6 +298,8 @@ def replace_course_gpx(
         _reset_course_records(db, course_id)
 
     course.path = new_path
+    # 원본도 같이 바꾼다 — 안 그러면 내려받는 GPX가 옛 경로가 된다.
+    course.original_gpx = content
     db.commit()
     db.refresh(course)
 

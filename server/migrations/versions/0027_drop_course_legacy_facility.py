@@ -9,8 +9,9 @@
 없는 컬럼을 SELECT해 코스 API가 실패한다.
 
 옛 컬럼에만 값이 있고 JSONB는 빈 코스가 있으면 지우는 순간 그 정보가 사라지므로,
-그런 행이 하나라도 있으면 멈춘다. 그 경우 해당 코스의 주소를 좌표와 함께
-parkings/restrooms로 옮긴 뒤 다시 돌린다.
+그런 행이 하나라도 있으면 멈춘다. 그 경우 `python -m tools.backfill_course_facilities`로
+옛 주소를 좌표와 함께 parkings/restrooms로 옮긴 뒤 다시 돌린다(개발 DB가 실제로 그랬다 —
+코스 14개가 옛 컬럼에만 주차장/화장실을 갖고 있었다).
 
 downgrade는 컬럼만 되살린다(값은 복구되지 않는다).
 
@@ -45,7 +46,8 @@ def upgrade() -> None:
         ).scalars().all()
         if orphaned:
             raise RuntimeError(
-                f"{old}에만 값이 있는 코스가 있어 지우지 않는다 — {new}로 먼저 옮길 것: "
+                f"{old}에만 값이 있는 코스가 있어 지우지 않는다 — "
+                f"tools.backfill_course_facilities로 {new}에 먼저 옮길 것: "
                 + ", ".join(orphaned)
             )
 

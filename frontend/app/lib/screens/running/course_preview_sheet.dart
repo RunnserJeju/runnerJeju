@@ -30,6 +30,8 @@ class CoursePreviewSheet extends StatelessWidget {
     required this.onClose,
     required this.onRetryDetail,
     required this.onStart,
+    required this.isDownloadingGpx,
+    required this.onDownloadGpx,
   });
 
   /// 목록에서 온 코스. 이름·거리처럼 시트에 바로 보여줄 값은 여기 다 있다.
@@ -47,6 +49,10 @@ class CoursePreviewSheet extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onRetryDetail;
   final VoidCallback onStart;
+
+  /// GPX 받기도 부모가 한다 — 받은 파일을 공유 시트로 넘기는 일이 화면 몫이다.
+  final bool isDownloadingGpx;
+  final VoidCallback onDownloadGpx;
 
   /// 접힌 높이. 시작 버튼까지는 끌어올리지 않아도 보여야 한다.
   static const double _collapsedSize = 0.36;
@@ -83,20 +89,40 @@ class CoursePreviewSheet extends StatelessWidget {
             children: [
               const Center(child: SheetHandle()),
               const SizedBox(height: 14),
-              _Header(
-                course: course,
-                isFavorite: isFavorite,
-                onToggleFavorite: onToggleFavorite,
-                onClose: onClose,
-              ),
+              _Header(course: course, onClose: onClose),
               const SizedBox(height: 12),
               _MetaChips(course: course),
               const SizedBox(height: 16),
-              _StartButton(
-                isReady: detail != null,
-                hasError: detailError != null,
-                onStart: onStart,
-                onRetry: onRetryDetail,
+              // 시작이 주 동작이라 남는 폭을 다 쓰고, 찜·GPX는 옆에 작은 칸으로 붙는다.
+              Row(
+                children: [
+                  Expanded(
+                    child: _StartButton(
+                      isReady: detail != null,
+                      hasError: detailError != null,
+                      onStart: onStart,
+                      onRetry: onRetryDetail,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _ActionTile(
+                    icon: isFavorite
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    iconColor: isFavorite ? AppColors.accent : null,
+                    label: '찜',
+                    tooltip: isFavorite ? '찜 해제' : '찜하기',
+                    onTap: onToggleFavorite,
+                  ),
+                  const SizedBox(width: 8),
+                  _ActionTile(
+                    icon: Icons.download_rounded,
+                    label: 'GPX다운',
+                    tooltip: 'GPX 파일 받기',
+                    isBusy: isDownloadingGpx,
+                    onTap: onDownloadGpx,
+                  ),
+                ],
               ),
               const SizedBox(height: 20),
               const Divider(height: 1, color: AppColors.lineFaint),
@@ -246,16 +272,9 @@ class _ElevationUnavailable extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({
-    required this.course,
-    required this.isFavorite,
-    required this.onToggleFavorite,
-    required this.onClose,
-  });
+  const _Header({required this.course, required this.onClose});
 
   final RunningCourse course;
-  final bool isFavorite;
-  final VoidCallback onToggleFavorite;
   final VoidCallback onClose;
 
   @override
@@ -298,22 +317,6 @@ class _Header extends StatelessWidget {
                       color: AppColors.success,
                     ),
                   ],
-                  // 찜 버튼은 이름 옆에 둔다 — 무엇을 찜하는지 바로 옆에서 보여준다.
-                  const SizedBox(width: 4),
-                  IconButton(
-                    onPressed: onToggleFavorite,
-                    icon: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      size: 22,
-                      color: isFavorite
-                          ? AppColors.accent
-                          : AppColors.textSubtle,
-                    ),
-                    tooltip: isFavorite ? '찜 해제' : '찜하기',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
                 ],
               ),
               const SizedBox(height: 4),
@@ -391,10 +394,11 @@ class _StartButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (hasError) {
+      // 옆에 찜·GPX 칸이 붙어 폭이 좁으므로 문구를 줄인다.
       return OutlinedButton.icon(
         onPressed: onRetry,
         icon: const Icon(Icons.refresh_rounded),
-        label: const Text('코스 정보를 불러오지 못했어요. 다시 시도'),
+        label: const Text('불러오기 실패 · 다시 시도', maxLines: 1),
       );
     }
 
@@ -413,6 +417,78 @@ class _StartButton extends StatelessWidget {
       onPressed: onStart,
       icon: const Icon(Icons.directions_run_rounded),
       label: const Text('이 코스로 달리기'),
+    );
+  }
+}
+
+/// 시작 버튼 옆의 작은 칸(찜·GPX). 아이콘 아래 짧은 이름을 단다 — 아이콘만으로는
+/// GPX 받기가 무엇인지 알기 어렵다. 높이는 시작 버튼(테마 최소 54)과 맞춘다.
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+    this.iconColor,
+    this.isBusy = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color? iconColor;
+
+  /// 처리 중이면 아이콘 자리에 진행 표시를 두고 다시 눌리지 않게 한다.
+  final bool isBusy;
+
+  static const double _width = 58;
+  static const double _height = 54;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.paper,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: isBusy ? null : onTap,
+          child: SizedBox(
+            width: _width,
+            height: _height,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox.square(
+                  dimension: 22,
+                  child: isBusy
+                      ? const Padding(
+                          padding: EdgeInsets.all(3),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          icon,
+                          size: 22,
+                          color: iconColor ?? AppColors.iconSubtle,
+                        ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSubtle,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

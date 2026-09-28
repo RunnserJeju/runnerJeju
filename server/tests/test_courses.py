@@ -124,6 +124,16 @@ class TestCreateCourseFacilities:
         assert len(course.restrooms) == 2
 
 
+class TestCreateCourseOriginalGpx:
+    def test_keeps_uploaded_bytes_alongside_resampled_path(self):
+        db = FakeSession()
+        course = _create(db)
+
+        # 원본은 파일 그대로, path는 리샘플본(원본과 점 개수가 다르다).
+        assert course.original_gpx == SAGYE.read_bytes()
+        assert len(course.path) > 0
+
+
 class TestCreateCourseEstimatedTime:
     def test_stores_estimated_time_min(self):
         db = FakeSession()
@@ -692,6 +702,8 @@ class TestReplaceCourseGpx:
         assert course.path != original_path
         assert len(course.path) > 0
         assert result["path"] == course.path
+        # 원본도 새 파일로 같이 바뀐다.
+        assert course.original_gpx == SAGYE.read_bytes()
         assert db.committed is True
         # 기록이 없으면 초기화(delete)는 하지 않는다.
         assert db.delete_count == 0
@@ -723,6 +735,7 @@ class TestReplaceCourseGpx:
         assert exc_info.value.status_code == 409
         # 경로는 그대로 — 커밋도 초기화도 안 한다.
         assert course.path == original_path
+        assert course.original_gpx is None
         assert db.committed is False
         assert db.delete_count == 0
 
@@ -943,3 +956,45 @@ class TestGetCourseRecordsView:
 
         assert exc.value.status_code == 404
         assert db.insert_count == 0
+
+
+class TestDownloadCourseGpx:
+    def _download(self, course):
+        return courses_router.download_course_gpx(
+            course.id if course else uuid.uuid4(),
+            db=_GetCourseFake(course),
+            _user_id="u1",
+            is_admin=False,
+        )
+
+    def test_returns_original_bytes_as_attachment(self):
+        course = _course(name="No.1 이호랜드", original_gpx=SAGYE.read_bytes())
+
+        response = self._download(course)
+
+        assert response.body == SAGYE.read_bytes()
+        assert response.media_type == "application/gpx+xml"
+        disposition = response.headers["content-disposition"]
+        assert disposition.startswith("attachment;")
+        # 한글 이름은 퍼센트 인코딩된 filename*으로 실린다.
+        assert "filename*=UTF-8''No.1%20%EC%9D%B4%ED%98%B8%EB%9E%9C%EB%93%9C.gpx" in disposition
+
+    def test_404_when_no_original(self):
+        with pytest.raises(HTTPException) as exc:
+            self._download(_course())
+
+        assert exc.value.status_code == 404
+
+    def test_404_when_course_missing(self):
+        with pytest.raises(HTTPException) as exc:
+            self._download(None)
+
+        assert exc.value.status_code == 404
+
+
+class TestGpxFilename:
+    def test_replaces_characters_unsafe_for_filenames(self):
+        assert courses_router._gpx_filename('a/b:c*?"<>|') == "a_b_c_.gpx"
+
+    def test_falls_back_when_name_is_empty_after_cleanup(self):
+        assert courses_router._gpx_filename(" . ") == "course.gpx"

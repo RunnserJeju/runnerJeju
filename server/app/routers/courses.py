@@ -1,7 +1,9 @@
+import re
 import uuid
 from datetime import timedelta, timezone
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -170,6 +172,48 @@ def get_course(
     return summary
 
 
+# 파일명에 쓸 수 없는 문자(Windows 기준이 가장 엄격하다)와 제어 문자.
+_UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+
+
+def _gpx_filename(course_name: str) -> str:
+    name = _UNSAFE_FILENAME.sub("_", course_name).strip(" .") or "course"
+    return f"{name}.gpx"
+
+
+@router.get("/courses/{course_id}/gpx")
+def download_course_gpx(
+    course_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
+):
+    """코스 GPX 원본을 내려받는다. 리샘플한 path가 아니라 업로드한 파일 그대로다.
+
+    원본 없이 올라간 옛 코스(original_gpx NULL)는 404 — 리샘플본으로 GPX를 지어
+    주면 "원본"이라는 약속이 깨진다. 숨긴 코스도 상세와 같이 404.
+    """
+    course = db.scalar(
+        visible_courses(select(Course).where(Course.id == course_id), is_admin)
+    )
+    if course is None:
+        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+    if not course.original_gpx:
+        raise HTTPException(status_code=404, detail="이 코스는 GPX 원본이 없어요.")
+
+    filename = _gpx_filename(course.name)
+    return Response(
+        content=course.original_gpx,
+        media_type="application/gpx+xml",
+        headers={
+            # 한글 코스명은 filename*(RFC 5987)로, 이를 모르는 클라이언트용 ASCII 이름도 둔다.
+            "Content-Disposition": (
+                f"attachment; filename=\"course.gpx\"; filename*=UTF-8''{quote(filename)}"
+            ),
+        },
+    )
+
+
 class CourseUploadError(Exception):
     """GPX 업로드 검증 실패. HTTP 라우터와 tools/push_courses.py가 각자 방식으로 처리한다."""
 
@@ -258,6 +302,8 @@ def create_course_from_gpx_bytes(
         # 검증 매칭률이 "코스 거리의 몇 %"와 일치하려면 점 밀도가 균등해야 하고,
         # 클라이언트도 이 경로를 그대로 받아 실시간 커버리지 계산의 기준점으로 쓴다.
         path=[point.to_json() for point in parsed.resampled_points],
+        # 리샘플로 사라지는 원본은 파일째 따로 보관한다(GPX 내려받기용).
+        original_gpx=content,
         created_by=created_by,
     )
     set_course_partners(course, partner_ids or [])

@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     SmallInteger,
     String,
@@ -156,6 +157,16 @@ class Course(Base):
     stamp_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
+
+    # 업로드한 GPX 파일 바이트 그대로. path는 리샘플본이라 원본 점이 남지 않아서
+    # 따로 둔다 — 판정·지도는 path만 보고, 이건 GPX 내려받기(GET /courses/{id}/gpx)
+    # 전용이다. 원본 없이 올라간 옛 코스는 NULL.
+    #
+    # deferred: 코스 목록 같은 일반 조회가 파일 바이트까지 끌어오지 않게, 이 속성에
+    # 접근할 때만 따로 읽는다.
+    original_gpx: Mapped[bytes | None] = mapped_column(
+        LargeBinary, default=None, deferred=True
+    )
 
     created_by: Mapped[str | None] = mapped_column(String(100), default=None)
     created_at: Mapped[datetime] = mapped_column(

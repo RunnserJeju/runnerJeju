@@ -52,7 +52,7 @@
 | `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·사용여부, 닉네임) |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
-공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /notices`.
+공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /courses/{id}/gpx`(업로드한 GPX 원본 내려받기, 원본 없으면 404), `GET /notices`.
 
 ## 코스 관리 필드·썸네일 (백엔드, 2026-08-30)
 
@@ -62,7 +62,7 @@
 
 **수정 `PATCH /courses/{id}`** (JSON) — `name`, `distance_km`, `difficulty`, `address`, `tags?`, `description?`, **`estimated_time_min?`**, `parkings`/`restrooms`. path·썸네일은 안 건드린다.
 
-**경로 교체 `PUT /courses/{id}/gpx`** (multipart, `file`: GPX, `reset_records?`: bool) — path만 새 GPX로 갈아끼운다. 메타데이터·썸네일은 안 건드린다. 응답은 `CourseSummary`.
+**경로 교체 `PUT /courses/{id}/gpx`** (multipart, `file`: GPX, `reset_records?`: bool) — path(리샘플본)와 원본 GPX(`original_gpx`)를 새 파일로 갈아끼운다. 메타데이터·썸네일은 안 건드린다. 응답은 `CourseSummary`.
 - 이 코스로 달린 기록(러닝·검증·완주 스탬프)이 있는데 `reset_records`가 없으면(false) → **409**. 클라가 "완주 기록이 초기화됩니다" 경고를 띄우고 확인받으라는 신호.
 - `reset_records=true` → **완주 스탬프·검증을 hard delete로 초기화**한 뒤 경로 교체. **개인 러닝 기록(Run)은 유지**(개인 활동 히스토리 + 감사 흔적). 완주 수는 0으로 리셋됨.
 - 기록이 없으면 플래그와 무관하게 그냥 교체.
