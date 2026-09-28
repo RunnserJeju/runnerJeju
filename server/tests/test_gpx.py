@@ -230,3 +230,27 @@ class TestTimestamps:
         )
         parsed = gpx.parse(wrap(f"<trk><trkseg>{inner}</trkseg></trk>"))
         assert parsed.points[0].recorded_at is None
+
+
+class TestBuildGpx:
+    """원본 없는 코스의 original_gpx를 지을 때 쓰는 build_gpx. 파서로 되읽어 확인한다."""
+
+    def test_round_trips_points_and_altitude(self):
+        path = [p.to_json() for p in gpx.parse(SAGYE.read_bytes()).resampled_points]
+
+        rebuilt = gpx.parse(gpx.build_gpx("No10. 사계 해안도로", path))
+
+        assert rebuilt.name == "No10. 사계 해안도로"
+        assert [(p.lat, p.lng) for p in rebuilt.points] == [
+            (p["lat"], p["lng"]) for p in path
+        ]
+        assert [p.altitude for p in rebuilt.points] == [p.get("altitude") for p in path]
+
+    def test_omits_ele_without_altitude_and_keeps_description(self):
+        path = [{"lat": lat, "lng": lng} for lat, lng in JEJU_POINTS]
+
+        content = gpx.build_gpx("c", path, description="리샘플본")
+
+        assert b"<ele>" not in content
+        assert "리샘플본".encode() in content
+        assert len(gpx.parse(content).points) == 3

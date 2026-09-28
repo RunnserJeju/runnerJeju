@@ -190,8 +190,9 @@ def download_course_gpx(
 ):
     """코스 GPX 원본을 내려받는다. 리샘플한 path가 아니라 업로드한 파일 그대로다.
 
-    원본 없이 올라간 옛 코스(original_gpx NULL)는 404 — 리샘플본으로 GPX를 지어
-    주면 "원본"이라는 약속이 깨진다. 숨긴 코스도 상세와 같이 404.
+    original_gpx가 NULL이면 404. 0028 전에 원본 없이 올라간 코스는 백필 도구가
+    리샘플 경로로 지은 GPX로 채운다(tools/backfill_course_original_gpx). 숨긴 코스도
+    상세와 같이 404.
     """
     course = db.scalar(
         visible_courses(select(Course).where(Course.id == course_id), is_admin)

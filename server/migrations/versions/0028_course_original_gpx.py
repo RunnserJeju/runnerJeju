@@ -8,8 +8,9 @@ path는 등록 시 15m 간격으로 리샘플한 경로라 원본 점이 남지 
 버리는 정보까지 올린 그대로 돌려주려는 것이고, 인코딩 선언이 UTF-8이 아닌 파일도
 있어 텍스트로 바꾸지 않는다.
 
-nullable이다. 이 컬럼 전에 올라간 코스는 원본이 없어 NULL로 남는다(레포에 GPX가
-있는 코스는 tools/backfill_course_original_gpx로 채운다).
+nullable이다. 이 컬럼 전에 올라간 코스는 NULL로 시작하고, 적용 뒤
+tools/backfill_course_original_gpx로 채운다(레포 GPX가 있으면 그 파일, 없으면
+리샘플 경로로 지은 GPX).
 
 Revision ID: 0028_course_original_gpx
 Revises: 0027_drop_course_legacy_facility
