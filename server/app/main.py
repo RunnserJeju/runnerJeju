@@ -15,6 +15,7 @@ from app.routers import (
     courses,
     favorites,
     notices,
+    partners,
     runs,
     stamps,
     user_logs,
@@ -56,6 +57,7 @@ app.include_router(verifications.router)
 app.include_router(stamps.router)
 app.include_router(user_logs.router)
 app.include_router(notices.router)
+app.include_router(partners.router)
 
 # 운영자 전용. 로그인 라우터(admin_auth_router)는 가드 밖, 나머지(admin_router)는
 # 라우터 레벨에서 require_admin_session으로 보호된다(app/admin/__init__.py).

@@ -42,6 +42,9 @@ enum LogName {
   favoriteAdd('favorite_add'),
   favoriteRemove('favorite_remove'),
   navigateClick('navigate_click'),
+  // 협력업체
+  partnerListOpen('partner_list_open'),
+  partnerPreviewOpen('partner_preview_open'),
   // 러닝
   runStart('run_start'),
   runPause('run_pause'),
@@ -75,6 +78,7 @@ abstract final class LogKeys {
   static const courseId = 'course_id';
   static const runId = 'run_id';
   static const noticeId = 'notice_id';
+  static const partnerId = 'partner_id';
   static const source = 'source';
   static const section = 'section';
   static const position = 'position';

@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../exceptions/app_exception.dart';
+import '../../models/course_partner.dart';
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../models/user_log.dart';
@@ -19,6 +21,8 @@ import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
 import 'course_preview_sheet.dart';
 import 'course_search_results.dart';
+import 'partner_list_sheet.dart';
+import 'partner_preview_sheet.dart';
 
 /// '러닝' 탭: 지도에서 코스를 골라 러닝을 시작한다.
 ///
@@ -85,6 +89,22 @@ class _RunningScreenState extends State<RunningScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
+  /// '협력업체' 칩으로 켜는 모드. 켜져 있으면 지도에 협력업체 전체를 핀으로 찍고,
+  /// 아래 시트 자리에 코스 목록 대신 협력업체 목록([PartnerListSheet])이 온다.
+  /// 코스 라벨은 그대로 둔다 — 업체와 코스의 위치 관계가 보여야 해서다.
+  bool _isPartnerMode = false;
+
+  /// 협력업체 전체. 처음 모드를 켤 때 한 번 받고, 실패했을 때만 다시 받는다.
+  List<CoursePartner> _partners = const [];
+  bool _isLoadingPartners = false;
+  Object? _partnersError;
+
+  /// 협력업체 모드에서 고른 업체. 목록 시트 자리를 상세([PartnerPreviewSheet])가 맡는다.
+  CoursePartner? _selectedPartner;
+
+  final DraggableScrollableController _partnerSheetController =
+      DraggableScrollableController();
+
   /// 앱 전역의 최신 현위치. 이 화면은 조회하지 않고 읽기만 한다 — 내 위치
   /// 점, 내 위치 버튼, 시작점까지의 거리 판정이 전부 이 값을 쓴다.
   CurrentLocation get _currentLocation => Services.instance.currentLocation;
@@ -113,6 +133,7 @@ class _RunningScreenState extends State<RunningScreen> {
     _searchFocus.dispose();
     _searchController.dispose();
     _sheetController.dispose();
+    _partnerSheetController.dispose();
     super.dispose();
   }
 
@@ -245,6 +266,10 @@ class _RunningScreenState extends State<RunningScreen> {
       _selectedDetail = null;
       _detailError = null;
       _selectedIsFavorite = false;
+      // 코스를 고르면(협력업체 시트의 연결 코스, 지도의 코스 라벨) 협력업체 모드를
+      // 끝낸다. 지도에는 그 코스에 연결된 업체만 남는다.
+      _isPartnerMode = false;
+      _selectedPartner = null;
     });
 
     final start = course.startPoint;
@@ -317,6 +342,15 @@ class _RunningScreenState extends State<RunningScreen> {
   /// 지도 바닥을 눌렀을 때. 코스 상세는 걷고, 탐색 시트는 접는다.
   void _clearSelection() {
     _closeSearch();
+    if (_isPartnerMode) {
+      // 업체 상세가 떠 있으면 목록으로, 목록이면 시트만 접는다(모드는 유지).
+      if (_selectedPartner != null) {
+        setState(() => _selectedPartner = null);
+      } else {
+        _movePartnerSheet(CourseListSheet.peekHeight, isPixels: true);
+      }
+      return;
+    }
     if (_selected == null) {
       _moveSheet(CourseListSheet.peekHeight, isPixels: true);
       return;
@@ -338,6 +372,8 @@ class _RunningScreenState extends State<RunningScreen> {
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
+      _isPartnerMode = false;
+      _selectedPartner = null;
     });
     // 상세를 걷은 프레임에서 시트가 다시 트리에 붙는다. 붙은 뒤에 움직인다.
     WidgetsBinding.instance.addPostFrameCallback(
@@ -346,14 +382,152 @@ class _RunningScreenState extends State<RunningScreen> {
   }
 
   /// 탐색 시트를 [size]로 움직인다. 비율(0~1) 또는 [isPixels]면 픽셀.
-  void _moveSheet(double size, {bool isPixels = false}) {
-    if (!mounted || !_sheetController.isAttached) return;
-    final target = isPixels ? _sheetController.pixelsToSize(size) : size;
-    _sheetController.animateTo(
+  void _moveSheet(double size, {bool isPixels = false}) =>
+      _animateSheet(_sheetController, size, isPixels: isPixels);
+
+  void _movePartnerSheet(double size, {bool isPixels = false}) =>
+      _animateSheet(_partnerSheetController, size, isPixels: isPixels);
+
+  void _animateSheet(
+    DraggableScrollableController controller,
+    double size, {
+    required bool isPixels,
+  }) {
+    if (!mounted || !controller.isAttached) return;
+    final target = isPixels ? controller.pixelsToSize(size) : size;
+    controller.animateTo(
       target,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 협력업체
+  // ---------------------------------------------------------------------------
+
+  /// '협력업체' 칩. 켜면 코스 선택을 걷고 협력업체 전체를 지도·목록에 펼친다.
+  void _togglePartnerMode() {
+    if (_isPartnerMode) {
+      setState(() {
+        _isPartnerMode = false;
+        _selectedPartner = null;
+      });
+      return;
+    }
+
+    _closeSearch();
+    _detailRequestId++;
+    setState(() {
+      _isPartnerMode = true;
+      _selectedPartner = null;
+      _selected = null;
+      _selectedDetail = null;
+      _detailError = null;
+    });
+    writeLog(LogName.partnerListOpen);
+
+    if (_partners.isEmpty || _partnersError != null) {
+      unawaited(_loadPartners());
+    } else {
+      _fitPartners();
+    }
+  }
+
+  Future<void> _loadPartners() async {
+    setState(() {
+      _isLoadingPartners = true;
+      _partnersError = null;
+    });
+
+    try {
+      final partners = await Services.instance.partner.loadPartners();
+      if (!mounted) return;
+      setState(() {
+        _partners = partners;
+        _isLoadingPartners = false;
+      });
+      if (_isPartnerMode && _selectedPartner == null) _fitPartners();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _partnersError = error;
+        _isLoadingPartners = false;
+      });
+    }
+  }
+
+  /// 협력업체가 모두 보이게 카메라를 맞춘다.
+  void _fitPartners() {
+    unawaited(
+      _mapController.fitPoints([for (final partner in _partners) partner.point]),
+    );
+  }
+
+  void _selectPartner(CoursePartner partner, {required LogSource source}) {
+    writeLog(
+      LogName.partnerPreviewOpen,
+      detail: {LogKeys.partnerId: partner.id, LogKeys.source: source.name},
+    );
+    setState(() => _selectedPartner = partner);
+    unawaited(_mapController.moveTo(partner.point));
+  }
+
+  /// 지도의 협력업체 핀. 협력업체 모드면 그 업체를 고르고, 코스를 보던 중이면
+  /// 코스 선택을 깨지 않게 모달로 상세만 띄운다.
+  void _onPartnerMarkerTap(CoursePartner partner) {
+    if (_isPartnerMode) {
+      _selectPartner(partner, source: LogSource.map);
+      return;
+    }
+
+    writeLog(
+      LogName.partnerPreviewOpen,
+      detail: {LogKeys.partnerId: partner.id, LogKeys.source: LogSource.detail.name},
+    );
+    unawaited(
+      showPartnerDetailModal(
+        context,
+        partner: partner,
+        onNavigate: () => _navigateToPartner(partner),
+        onOpenInstagram: () => _openInstagram(partner),
+      ),
+    );
+  }
+
+  /// 협력업체 시트의 '근처 러닝 코스'. 그 코스를 지도에서 고른 것처럼 연다.
+  void _selectPartnerCourse(PartnerCourseRef ref) {
+    final course = _courses.where((c) => c.id == ref.id).firstOrNull;
+    if (course == null) {
+      _showMessage('코스를 찾지 못했어요. 목록을 새로고침해 주세요.');
+      return;
+    }
+    unawaited(_selectCourse(course, source: LogSource.detail));
+  }
+
+  /// 협력업체까지 길찾기. 현위치를 알면 도보 길찾기를, 모르면 카카오맵에 업체를
+  /// 띄운다(거기서 길찾기를 누르면 카카오맵이 현위치를 잡는다).
+  Future<void> _navigateToPartner(CoursePartner partner) async {
+    writeLog(LogName.navigateClick, detail: {LogKeys.partnerId: partner.id});
+    final me = _currentLocation.latest;
+    final launcher = Services.instance.kakaoMapLauncher;
+    final opened = me != null
+        ? await launcher.openWalkingRoute(from: me, to: partner.point)
+        : await launcher.openPlace(name: partner.name, point: partner.point);
+    if (!mounted || opened) return;
+    _showMessage('길찾기를 열지 못했어요.');
+  }
+
+  Future<void> _openInstagram(CoursePartner partner) async {
+    final url = partner.instagramUrl;
+    if (url == null) return;
+    writeLog(
+      LogName.externalLinkOpen,
+      detail: {LogKeys.partnerId: partner.id, 'url': url.toString()},
+    );
+    final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!mounted || opened) return;
+    _showMessage('인스타그램을 열지 못했어요.');
   }
 
   // ---------------------------------------------------------------------------
@@ -540,9 +714,14 @@ class _RunningScreenState extends State<RunningScreen> {
                       selectedRestrooms: selected == null
                           ? const []
                           : (_selectedDetail ?? selected).restrooms,
-                      selectedPartners: selected == null
+                      // 협력업체 모드면 전체를, 코스를 골랐으면 그 코스의 업체만.
+                      partners: _isPartnerMode
+                          ? _partners
+                          : selected == null
                           ? const []
                           : (_selectedDetail ?? selected).partners,
+                      selectedPartnerId: _selectedPartner?.id,
+                      onPartnerTap: _onPartnerMarkerTap,
                       myPosition: _currentLocation.latest,
                       onCourseTap: (course) =>
                           _selectCourse(course, source: LogSource.map),
@@ -588,7 +767,8 @@ class _RunningScreenState extends State<RunningScreen> {
                     _ActionChips(
                       onTapFavorite: () => _showComingSoon('찜'),
                       onTapExplore: _openExplore,
-                      onTapPartner: () => _showComingSoon('협력업체'),
+                      onTapPartner: _togglePartnerMode,
+                      isPartnerMode: _isPartnerMode,
                     ),
                     const SizedBox(height: 10),
                     Padding(
@@ -602,7 +782,7 @@ class _RunningScreenState extends State<RunningScreen> {
           ),
           // 내 위치 버튼은 우하단, 접힌 탐색 시트 바로 위. 코스 상세 시트가 떠
           // 있을 때는 시트가 그 자리를 덮으므로 숨긴다.
-          if (selected == null)
+          if (selected == null && _selectedPartner == null)
             Positioned(
               right: 16,
               bottom: CourseListSheet.peekHeight + 12,
@@ -612,7 +792,9 @@ class _RunningScreenState extends State<RunningScreen> {
                 onTap: _moveToMyLocation,
               ),
             ),
-          if (selected == null)
+          if (selected == null && _isPartnerMode)
+            _partnerSheet()
+          else if (selected == null)
             ListenableBuilder(
               listenable: _currentLocation,
               builder: (context, _) => CourseListSheet(
@@ -642,6 +824,36 @@ class _RunningScreenState extends State<RunningScreen> {
               onDownloadGpx: _downloadSelectedGpx,
             ),
         ],
+      ),
+    );
+  }
+
+  /// 협력업체 모드의 아래 시트: 고른 업체가 있으면 상세, 없으면 목록.
+  Widget _partnerSheet() {
+    final partner = _selectedPartner;
+    if (partner != null) {
+      return PartnerPreviewSheet(
+        // 업체를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
+        key: ValueKey(partner.id),
+        partner: partner,
+        onClose: () => setState(() => _selectedPartner = null),
+        onNavigate: () => _navigateToPartner(partner),
+        onOpenInstagram: () => _openInstagram(partner),
+        onSelectCourse: _selectPartnerCourse,
+      );
+    }
+
+    return ListenableBuilder(
+      listenable: _currentLocation,
+      builder: (context, _) => PartnerListSheet(
+        controller: _partnerSheetController,
+        partners: _partners,
+        myPosition: _currentLocation.latest,
+        isLoading: _isLoadingPartners,
+        hasError: _partnersError != null,
+        onSelect: (partner) => _selectPartner(partner, source: LogSource.list),
+        onRetry: _loadPartners,
+        onClose: _togglePartnerMode,
       ),
     );
   }
@@ -729,11 +941,13 @@ class _ActionChips extends StatelessWidget {
     required this.onTapFavorite,
     required this.onTapExplore,
     required this.onTapPartner,
+    required this.isPartnerMode,
   });
 
   final VoidCallback onTapFavorite;
   final VoidCallback onTapExplore;
   final VoidCallback onTapPartner;
+  final bool isPartnerMode;
 
   @override
   Widget build(BuildContext context) {
@@ -752,6 +966,7 @@ class _ActionChips extends StatelessWidget {
         icon: Icons.storefront_rounded,
         label: '협력업체',
         onTap: onTapPartner,
+        active: isPartnerMode,
       ),
     ];
 
@@ -777,16 +992,22 @@ class _ActionChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.active = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
+  /// 켜진 모드(예: 협력업체 모드)면 칩을 채워 켜져 있음을 보인다.
+  final bool active;
+
   @override
   Widget build(BuildContext context) {
+    final foreground = active ? Colors.white : AppColors.ink;
+
     return Material(
-      color: Colors.white,
+      color: active ? AppColors.ink : Colors.white,
       elevation: 2,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(999),
@@ -798,14 +1019,14 @@ class _ActionChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: AppColors.ink),
+              Icon(icon, size: 16, color: foreground),
               const SizedBox(width: 5),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.ink,
+                  color: foreground,
                 ),
               ),
             ],

@@ -17,6 +17,7 @@ import 'kakao_geo.dart';
 import 'marker_canvas.dart';
 import 'my_position_marker.dart';
 import 'map_status_views.dart';
+import 'partner_marker.dart';
 
 /// '러닝' 탭이 쓰는 지도. 코스마다 라벨을 찍고, 라벨을 누르면 알려준다.
 ///
@@ -32,7 +33,9 @@ class CourseMapView extends StatefulWidget {
     this.selectedPath = const [],
     this.selectedParkings = const [],
     this.selectedRestrooms = const [],
-    this.selectedPartners = const [],
+    this.partners = const [],
+    this.selectedPartnerId,
+    this.onPartnerTap,
     this.myPosition,
     this.onCourseTap,
     this.onMapTap,
@@ -54,8 +57,14 @@ class CourseMapView extends StatefulWidget {
   final List<CourseFacility> selectedParkings;
   final List<CourseFacility> selectedRestrooms;
 
-  /// 선택된 코스의 협력업체. 시설과 같은 규칙으로 선택됐을 때만 찍는다.
-  final List<CoursePartner> selectedPartners;
+  /// 지도에 핀으로 찍을 협력업체. 화면이 상황에 맞게 넘긴다 — 협력업체 모드면 전체,
+  /// 코스를 골랐으면 그 코스에 연결된 업체. 업체 이름을 핀 아래 글씨로 붙인다.
+  final List<CoursePartner> partners;
+
+  /// 강조할 업체(목록·지도에서 고른 것). 큰 핀으로 그린다.
+  final String? selectedPartnerId;
+
+  final ValueChanged<CoursePartner>? onPartnerTap;
 
   /// 내 현재 위치. 있으면 점으로 찍는다.
   final GeoPoint? myPosition;
@@ -96,6 +105,10 @@ class CourseMapController {
   /// [point]가 화면 중앙에 오도록 옮긴다.
   Future<void> moveTo(GeoPoint point, {int? zoomLevel}) async =>
       _state?.moveTo(point, zoomLevel: zoomLevel);
+
+  /// [points]가 모두 들어오도록 카메라를 맞춘다(협력업체 전체 보기 등).
+  Future<void> fitPoints(List<GeoPoint> points) async =>
+      _state?.fitPoints(points);
 }
 
 class _CourseMapViewState extends State<CourseMapView> {
@@ -119,7 +132,13 @@ class _CourseMapViewState extends State<CourseMapView> {
   final List<kakao.Poi> _facilityMarkers = [];
   List<CourseFacility>? _drawnParkings;
   List<CourseFacility>? _drawnRestrooms;
+
+  /// 협력업체 핀. 목록이나 선택이 바뀌면 통째로 다시 그린다 — 많아야 수십 개라
+  /// 부분 갱신할 만큼 크지 않다.
+  final List<kakao.Poi> _partnerMarkers = [];
   List<CoursePartner>? _drawnPartners;
+  String? _drawnSelectedPartnerId;
+  final Map<String, kakao.PoiStyle> _partnerStyles = {};
 
   kakao.Poi? _myPositionMarker;
 
@@ -127,7 +146,6 @@ class _CourseMapViewState extends State<CourseMapView> {
   kakao.PoiStyle? _selectedCourseStyle;
   kakao.PoiStyle? _parkingStyle;
   kakao.PoiStyle? _restroomStyle;
-  kakao.PoiStyle? _partnerStyle;
   kakao.PoiStyle? _myPositionStyle;
   late final kakao.RouteStyle _routeStyle = kakao.RouteStyle(
     AppColors.accent,
@@ -187,7 +205,8 @@ class _CourseMapViewState extends State<CourseMapView> {
       !identical(old.selectedPath, widget.selectedPath) ||
       !identical(old.selectedParkings, widget.selectedParkings) ||
       !identical(old.selectedRestrooms, widget.selectedRestrooms) ||
-      !identical(old.selectedPartners, widget.selectedPartners);
+      !identical(old.partners, widget.partners) ||
+      old.selectedPartnerId != widget.selectedPartnerId;
 
   /// 목록이 바뀌었는지. 코스는 서버에서 통째로 다시 받으므로 id 구성만 본다.
   static bool _isSameCourseList(List<RunningCourse> a, List<RunningCourse> b) {
@@ -291,6 +310,24 @@ class _CourseMapViewState extends State<CourseMapView> {
     );
   }
 
+  Future<void> fitPoints(List<GeoPoint> points) async {
+    final controller = _controller;
+    if (controller == null || _disposed || points.isEmpty) return;
+
+    if (points.length == 1) {
+      await moveTo(points.single);
+      return;
+    }
+
+    await controller.moveCamera(
+      kakao.CameraUpdate.fitMapPoints(
+        points.map((p) => p.toLatLng()).toList(),
+        padding: _fitPadding,
+      ),
+      animation: const kakao.CameraAnimation(350),
+    );
+  }
+
   /// 코스 하나를 골랐을 때의 배율. 주변 지형이 같이 보이는 정도로 둔다.
   static const int _focusZoomLevel = 14;
 
@@ -323,6 +360,7 @@ class _CourseMapViewState extends State<CourseMapView> {
         await _syncSelectedRoute(controller);
         await _syncEndpointMarkers(controller);
         await _syncFacilityMarkers(controller);
+        await _syncPartnerMarkers(controller);
         await _syncMyPosition(controller);
         await _fitOnFirstLoad();
       } while (_needsRedraw && !_disposed);
@@ -487,12 +525,11 @@ class _CourseMapViewState extends State<CourseMapView> {
     );
   }
 
-  /// 선택된 코스의 주차장/화장실/협력업체 배지를 좌표에 찍는다. 선택이 바뀌면
-  /// 통째로 지우고 다시 그린다 — 코스당 몇 개뿐이라 부분 갱신할 만큼 크지 않다.
+  /// 선택된 코스의 주차장/화장실 배지를 좌표에 찍는다. 선택이 바뀌면 통째로
+  /// 지우고 다시 그린다 — 시설은 코스당 몇 개뿐이라 부분 갱신할 만큼 크지 않다.
   Future<void> _syncFacilityMarkers(kakao.KakaoMapController controller) async {
     if (identical(_drawnParkings, widget.selectedParkings) &&
-        identical(_drawnRestrooms, widget.selectedRestrooms) &&
-        identical(_drawnPartners, widget.selectedPartners)) {
+        identical(_drawnRestrooms, widget.selectedRestrooms)) {
       return;
     }
 
@@ -504,13 +541,7 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     final parkingStyle = await _ensureParkingStyle();
     final restroomStyle = await _ensureRestroomStyle();
-    final partnerStyle = await _ensurePartnerStyle();
-    if (parkingStyle == null ||
-        restroomStyle == null ||
-        partnerStyle == null ||
-        _disposed) {
-      return;
-    }
+    if (parkingStyle == null || restroomStyle == null || _disposed) return;
 
     Future<void> place(double lat, double lng, kakao.PoiStyle style) async {
       final poi = await controller.labelLayer.addPoi(
@@ -532,14 +563,55 @@ class _CourseMapViewState extends State<CourseMapView> {
       await place(facility.lat, facility.lng, restroomStyle);
       if (_disposed) return;
     }
-    for (final partner in widget.selectedPartners) {
-      await place(partner.lat, partner.lng, partnerStyle);
-      if (_disposed) return;
-    }
 
     _drawnParkings = widget.selectedParkings;
     _drawnRestrooms = widget.selectedRestrooms;
-    _drawnPartners = widget.selectedPartners;
+  }
+
+  /// 협력업체 핀을 찍는다. 핀을 누르면 [CourseMapView.onPartnerTap]으로 알리고, 고른
+  /// 업체는 큰 핀으로 강조한다. 목록이나 선택이 바뀌면 통째로 다시 그린다.
+  Future<void> _syncPartnerMarkers(kakao.KakaoMapController controller) async {
+    if (identical(_drawnPartners, widget.partners) &&
+        _drawnSelectedPartnerId == widget.selectedPartnerId) {
+      return;
+    }
+
+    for (final marker in _partnerMarkers) {
+      await marker.remove();
+      if (_disposed) return;
+    }
+    _partnerMarkers.clear();
+
+    // 고른 업체를 마지막에 찍어 이웃 핀과 겹쳐도 위에 오게 한다.
+    final ordered = [
+      for (final partner in widget.partners)
+        if (partner.id != widget.selectedPartnerId) partner,
+      for (final partner in widget.partners)
+        if (partner.id == widget.selectedPartnerId) partner,
+    ];
+
+    for (final partner in ordered) {
+      final style = await _ensurePartnerStyle(
+        partner.category,
+        selected: partner.id == widget.selectedPartnerId,
+      );
+      if (style == null || _disposed) return;
+
+      final poi = await controller.labelLayer.addPoi(
+        kakao.LatLng(partner.lat, partner.lng),
+        style: style,
+        text: partner.name,
+        onClick: () => widget.onPartnerTap?.call(partner),
+      );
+      if (_disposed) {
+        await poi.remove();
+        return;
+      }
+      _partnerMarkers.add(poi);
+    }
+
+    _drawnPartners = widget.partners;
+    _drawnSelectedPartnerId = widget.selectedPartnerId;
   }
 
   Future<void> _syncMyPosition(kakao.KakaoMapController controller) async {
@@ -675,15 +747,21 @@ class _CourseMapViewState extends State<CourseMapView> {
     );
   }
 
-  Future<kakao.PoiStyle?> _ensurePartnerStyle() async {
-    if (_partnerStyle != null) return _partnerStyle;
+  Future<kakao.PoiStyle?> _ensurePartnerStyle(
+    PartnerCategory category, {
+    required bool selected,
+  }) async {
+    final key = '${category.wire}|$selected';
+    final cached = _partnerStyles[key];
+    if (cached != null) return cached;
 
-    final icon = await buildFacilityBadge(partnerBadgeColor, partnerBadgeLabel);
+    final icon = await buildPartnerPin(category, selected: selected);
     if (_disposed) return null;
 
-    return _partnerStyle = kakao.PoiStyle(
-      anchor: const kakao.KPoint(0.5, 0.5),
+    return _partnerStyles[key] = kakao.PoiStyle(
+      anchor: partnerPinAnchor,
       icon: icon,
+      textStyle: partnerLabelStyle,
     );
   }
 

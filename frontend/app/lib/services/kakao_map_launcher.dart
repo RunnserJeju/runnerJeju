@@ -39,6 +39,16 @@ class KakaoMapLauncher {
     );
   }
 
+  /// [point]에 [name] 핀을 꽂은 카카오맵을 연다. 출발지(현위치)를 몰라 길찾기를
+  /// 못 할 때 쓴다 — 카카오맵에서 "길찾기"를 누르면 거기서 현위치를 잡아 준다.
+  Future<bool> openPlace({required String name, required GeoPoint point}) {
+    final label = Uri.encodeComponent(name.replaceAll(',', ' '));
+    return launchUrl(
+      Uri.parse('https://map.kakao.com/link/map/$label,${_coord(point)}'),
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
   static String _coord(GeoPoint point) =>
       '${point.latitude},${point.longitude}';
 }

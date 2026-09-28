@@ -31,6 +31,9 @@ LOG_NAMES: frozenset[str] = frozenset(
         "favorite_add",
         "favorite_remove",
         "navigate_click",
+        # 협력업체 (detail: partner_id, source)
+        "partner_list_open",
+        "partner_preview_open",
         # 러닝
         "run_start",
         "run_pause",
