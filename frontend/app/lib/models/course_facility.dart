@@ -15,6 +15,9 @@ class CourseFacility {
   final double lat;
   final double lng;
 
+  /// 목록 한 줄 표기. 이름이 있으면 "이름 · 주소", 없으면 주소만.
+  String get label => name == null ? address : '$name · $address';
+
   factory CourseFacility.fromJson(Map<String, dynamic> json) => CourseFacility(
     name: json['name'] as String?,
     address: json['address'] as String,

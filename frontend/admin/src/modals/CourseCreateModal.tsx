@@ -51,7 +51,8 @@ export default function CourseCreateModal({ onClose, onCreated }: Props) {
     }
     const validated = validate(values, { nameRequired: false })
     if (!validated.ok) {
-      setError(validated.message)
+      if (validated.alert) window.alert(validated.message)
+      else setError(validated.message)
       return
     }
 
@@ -69,6 +70,7 @@ export default function CourseCreateModal({ onClose, onCreated }: Props) {
         estimatedTimeMin: validated.data.estimatedTimeMin,
         parkings: validated.data.parkings,
         restrooms: validated.data.restrooms,
+        partnerIds: validated.data.partnerIds,
       })
 
       // 썸네일·스탬프 도안은 등록과 분리된 전용 엔드포인트다(docs/admin-web.md).

@@ -132,13 +132,20 @@ class CoursePreviewSheet extends StatelessWidget {
       _InfoRow(
         icon: Icons.local_parking_rounded,
         label: '주차',
-        value: course.parkingAddress,
+        value: course.parkings.map((f) => f.label).join('\n'),
       ),
       _InfoRow(
         icon: Icons.wc_rounded,
         label: '화장실',
-        value: course.restroomAddress,
+        value: course.restrooms.map((f) => f.label).join('\n'),
       ),
+      // 협력업체는 없는 코스가 대부분이라 '정보 없음' 줄을 두지 않고 있을 때만 보인다.
+      if (course.partners.isNotEmpty)
+        _InfoRow(
+          icon: Icons.storefront_rounded,
+          label: '제휴',
+          value: course.partners.map((p) => p.label).join('\n'),
+        ),
       if (course.tagList.isNotEmpty) ...[
         const SizedBox(height: 20),
         const SectionTitle('태그', small: true),

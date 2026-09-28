@@ -104,7 +104,8 @@ function MetaSection({
     setError(null)
     const validated = validate(values, { nameRequired: true })
     if (!validated.ok) {
-      setError(validated.message)
+      if (validated.alert) window.alert(validated.message)
+      else setError(validated.message)
       return
     }
     setSaving(true)
@@ -125,7 +126,7 @@ function MetaSection({
       {error && <div className="error">{error}</div>}
       <div className="submit-row">
         <button onClick={save} disabled={saving}>
-          {saving ? '저장 중…' : '메타데이터 저장'}
+          {saving ? '저장 중…' : '저장'}
         </button>
       </div>
     </div>

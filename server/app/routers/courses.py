@@ -13,8 +13,8 @@ from app.deps import (
     current_user_id,
     current_user_is_admin,
 )
-from app.models import Course, Stamp
-from app.schemas import CourseListItem, CourseSummary
+from app.models import Course, CoursePartner, Stamp
+from app.schemas import CourseListItem, CourseSummary, PartnerSummary
 
 router = APIRouter(tags=["courses"])
 
@@ -33,10 +33,12 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "difficulty": course.difficulty,
         "tags": course.tags,
         "address": course.address,
-        "parking_address": course.parking_address,
-        "restroom_address": course.restroom_address,
         "parkings": course.parkings or [],
         "restrooms": course.restrooms or [],
+        # partner_links는 selectin으로 미리 불러와 있어 코스마다 추가 조회가 없다.
+        "partners": [
+            PartnerSummary.model_validate(link.partner) for link in course.partner_links
+        ],
         "description": course.description,
         "estimated_time_min": course.estimated_time_min,
         "thumbnail_url": course.thumbnail_url,
@@ -208,6 +210,7 @@ def create_course_from_gpx_bytes(
     tags: str | None,
     parkings: list[dict] | None = None,
     restrooms: list[dict] | None = None,
+    partner_ids: list[uuid.UUID] | None = None,
     description: str | None,
     estimated_time_min: int | None = None,
     # 운영 웹은 필수로 받고, 시드 스크립트는 안 넘겨 NULL(미설정)로 올라간다.
@@ -221,6 +224,8 @@ def create_course_from_gpx_bytes(
     DB에 바로 써도 규칙이 두 벌로 갈라지지 않는다.
 
     parkings/restrooms는 각 원소가 {"name", "address", "lat", "lng"}인 dict 목록이다.
+    partner_ids는 연결할 협력업체 id 목록이다 — 존재 여부는 호출하는 쪽이 먼저
+    확인한다(없는 id면 커밋 시 FK 위반이 난다).
     좌표 변환은 호출하는 쪽 책임이다 — HTTP는 클라이언트가 "확인"으로 채워 보내고,
     스크립트는 push 시점에 geocode한다. 이 함수는 좌표를 그대로 저장만 하므로
     네트워크에 의존하지 않는다(테스트가 쉬워진다).
@@ -255,9 +260,26 @@ def create_course_from_gpx_bytes(
         path=[point.to_json() for point in parsed.resampled_points],
         created_by=created_by,
     )
+    set_course_partners(course, partner_ids or [])
 
     db.add(course)
     db.commit()
     db.refresh(course)
 
     return course
+
+
+def set_course_partners(course: Course, partner_ids: list[uuid.UUID]) -> None:
+    """코스의 협력업체 연결을 partner_ids(순서 포함)로 통째로 맞춘다. 커밋은 호출한 쪽이 한다.
+
+    이미 걸린 업체는 링크를 재사용해 순서만 고친다. 같은 (코스, 업체) 링크를 지웠다
+    새로 만들면 한 flush 안에서 PK가 겹칠 수 있어서다. 빠진 링크는 delete-orphan으로
+    지워진다. 같은 id가 두 번 오면 처음 자리만 남긴다.
+    """
+    existing = {link.partner_id: link for link in course.partner_links}
+    links: list[CoursePartner] = []
+    for partner_id in dict.fromkeys(partner_ids):
+        link = existing.get(partner_id) or CoursePartner(partner_id=partner_id)
+        link.sort_order = len(links)
+        links.append(link)
+    course.partner_links = links

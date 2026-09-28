@@ -140,17 +140,23 @@ class _CourseDetailBody extends StatelessWidget {
                       label: '주소',
                       value: course.address,
                     ),
-                    if (course.parkingAddress != null)
+                    if (course.parkings.isNotEmpty)
                       _InfoRow(
                         icon: Icons.local_parking_outlined,
                         label: '근처 주차장',
-                        value: course.parkingAddress!,
+                        value: course.parkings.map((f) => f.label).join('\n'),
                       ),
-                    if (course.restroomAddress != null)
+                    if (course.restrooms.isNotEmpty)
                       _InfoRow(
                         icon: Icons.wc_outlined,
                         label: '근처 화장실',
-                        value: course.restroomAddress!,
+                        value: course.restrooms.map((f) => f.label).join('\n'),
+                      ),
+                    if (course.partners.isNotEmpty)
+                      _InfoRow(
+                        icon: Icons.storefront_outlined,
+                        label: '협력업체',
+                        value: course.partners.map((p) => p.label).join('\n'),
                       ),
                     const SizedBox(height: 24),
                     _CompletionRow(course: course),

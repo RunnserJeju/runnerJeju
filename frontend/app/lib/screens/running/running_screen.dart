@@ -502,6 +502,9 @@ class _RunningScreenState extends State<RunningScreen> {
                       selectedRestrooms: selected == null
                           ? const []
                           : (_selectedDetail ?? selected).restrooms,
+                      selectedPartners: selected == null
+                          ? const []
+                          : (_selectedDetail ?? selected).partners,
                       myPosition: _currentLocation.latest,
                       onCourseTap: (course) =>
                           _selectCourse(course, source: LogSource.map),

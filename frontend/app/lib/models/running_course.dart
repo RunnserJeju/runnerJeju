@@ -1,5 +1,6 @@
 import '../network/json.dart';
 import 'course_facility.dart';
+import 'course_partner.dart';
 import 'geo_point.dart';
 
 /// 코스 난이도. [value]는 서버 `courses.difficulty`(SMALLINT)와 같은 값이어야 한다.
@@ -38,10 +39,9 @@ class RunningCourse {
     required this.path,
     this.difficulty = CourseDifficulty.normal,
     this.tags,
-    this.parkingAddress,
-    this.restroomAddress,
     this.parkings = const [],
     this.restrooms = const [],
+    this.partners = const [],
     this.description,
     this.estimatedTimeMin,
     this.thumbnailUrl,
@@ -72,14 +72,12 @@ class RunningCourse {
   /// 코스 시작 지점 주소.
   final String address;
 
-  /// 옛 단일 주소 필드. [parkings]/[restrooms]로 대체되는 중이라 새 코스에선
-  /// 늘 null이다(서버 컬럼 drop 전까지만 유지).
-  final String? parkingAddress;
-  final String? restroomAddress;
-
   /// 근처 주차장/화장실. 코스당 여러 개이고 좌표를 포함해 지도에 마커로 찍는다.
   final List<CourseFacility> parkings;
   final List<CourseFacility> restrooms;
+
+  /// 근처 협력업체. 시설처럼 좌표를 포함해 지도에 마커로 찍는다.
+  final List<CoursePartner> partners;
 
   final String? description;
 
@@ -136,10 +134,9 @@ class RunningCourse {
     ),
     tags: json['tags'] as String?,
     address: json['address'] as String,
-    parkingAddress: json['parking_address'] as String?,
-    restroomAddress: json['restroom_address'] as String?,
     parkings: parseList(json['parkings'], CourseFacility.fromJson),
     restrooms: parseList(json['restrooms'], CourseFacility.fromJson),
+    partners: parseList(json['partners'], CoursePartner.fromJson),
     description: json['description'] as String?,
     estimatedTimeMin: (json['estimated_time_min'] as num?)?.toInt(),
     thumbnailUrl: json['thumbnail_url'] as String?,
