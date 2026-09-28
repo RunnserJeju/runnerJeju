@@ -83,12 +83,13 @@ export function validatePartner(
 }
 
 /** 업종. 앱은 detail.category 값으로 마커 색·아이콘을 고른다(Flutter PartnerCategory와
- * 같은 값). 목록에 없는 값은 앱에서 '협력업체'(기타)로 보인다. */
+ * 같은 값). 목록에 없는 값은 앱에서 '기타'(other)로 보인다. */
 export const PARTNER_CATEGORIES: { value: string; label: string }[] = [
   { value: 'cafe', label: '카페' },
   { value: 'food', label: '음식점' },
-  { value: 'gear', label: '러닝 용품' },
   { value: 'stay', label: '숙박' },
+  { value: 'store', label: '상점' },
+  { value: 'other', label: '기타' },
 ]
 
 /** detail JSON 원문에서 category를 읽는다. JSON이 깨져 있으면 null. */

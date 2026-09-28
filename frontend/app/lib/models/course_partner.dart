@@ -4,13 +4,13 @@ import '../theme/app_theme.dart';
 import 'geo_point.dart';
 
 /// 협력업체 업종. 서버는 업종 컬럼 없이 `detail.category`에 문자열로 담는다
-/// (운영 웹 협력업체 폼의 "업종" 선택이 채운다). 모르는 값·빈 값은 [etc]다.
+/// (운영 웹 협력업체 폼의 "업종" 선택이 채운다). 모르는 값·빈 값은 [other]다.
 enum PartnerCategory {
   cafe('cafe', '카페', Icons.local_cafe_rounded, AppColors.tintAmber, 'assets/icons/partner_cafe.svg'),
   food('food', '음식점', Icons.restaurant_rounded, Color(0xFFEF6C57), null),
-  gear('gear', '러닝 용품', Icons.directions_run_rounded, AppColors.tintBlue, 'assets/icons/partner_shoe.svg'),
   stay('stay', '숙박', Icons.hotel_rounded, AppColors.tintGreen, 'assets/icons/partner_house.svg'),
-  etc('etc', '협력업체', Icons.storefront_rounded, Color(0xFFFF8A00), null);
+  store('store', '상점', Icons.shopping_bag_rounded, AppColors.tintBlue, null),
+  other('other', '기타', Icons.storefront_rounded, Color(0xFFFF8A00), null);
 
   const PartnerCategory(this.wire, this.label, this.icon, this.tint, this.svgAsset);
 
@@ -27,7 +27,7 @@ enum PartnerCategory {
 
   static PartnerCategory fromWire(Object? value) => PartnerCategory.values.firstWhere(
     (category) => category.wire == value,
-    orElse: () => PartnerCategory.etc,
+    orElse: () => PartnerCategory.other,
   );
 }
 

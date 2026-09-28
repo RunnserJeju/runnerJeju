@@ -52,12 +52,12 @@ void main() {
       expect(partner.category, PartnerCategory.cafe);
     });
 
-    test('모르는 값이나 빈 detail은 etc', () {
+    test('모르는 값이나 빈 detail은 other', () {
       expect(
         CoursePartner.fromJson(_json(detail: {'category': 'spa'})).category,
-        PartnerCategory.etc,
+        PartnerCategory.other,
       );
-      expect(CoursePartner.fromJson(_json()).category, PartnerCategory.etc);
+      expect(CoursePartner.fromJson(_json()).category, PartnerCategory.other);
     });
   });
 
