@@ -32,6 +32,8 @@ class CoursePreviewSheet extends StatelessWidget {
     required this.onStart,
     required this.isDownloadingGpx,
     required this.onDownloadGpx,
+    required this.isReversed,
+    required this.onReverse,
   });
 
   /// 목록에서 온 코스. 이름·거리처럼 시트에 바로 보여줄 값은 여기 다 있다.
@@ -53,6 +55,11 @@ class CoursePreviewSheet extends StatelessWidget {
   /// GPX 받기도 부모가 한다 — 받은 파일을 공유 시트로 넘기는 일이 화면 몫이다.
   final bool isDownloadingGpx;
   final VoidCallback onDownloadGpx;
+
+  /// 출발·도착을 바꿔 보고 있는지. [detail]은 이미 뒤집힌 사본으로 온다 — 시트는
+  /// 문구만 바꾼다. 저장하지 않는 값이라 코스를 바꾸거나 시트를 닫으면 풀린다.
+  final bool isReversed;
+  final VoidCallback onReverse;
 
   /// 접힌 높이. 시작 버튼까지는 끌어올리지 않아도 보여야 한다.
   static const double _collapsedSize = 0.36;
@@ -154,7 +161,12 @@ class CoursePreviewSheet extends StatelessWidget {
       ],
       const SectionTitle('위치', small: true),
       const SizedBox(height: 8),
-      _InfoRow(icon: Icons.place_outlined, label: '출발지', value: course.address),
+      // 코스 주소는 원래 출발점 기준이라, 방향을 바꾸면 도착지 주소가 된다.
+      _InfoRow(
+        icon: Icons.place_outlined,
+        label: isReversed ? '도착지' : '출발지',
+        value: course.address,
+      ),
       _InfoRow(
         icon: Icons.local_parking_rounded,
         label: '주차',
@@ -185,6 +197,13 @@ class CoursePreviewSheet extends StatelessWidget {
       // 고도는 경로에 딸려 오므로 목록의 course가 아니라 상세(detail)를 본다.
       // 상세가 오기 전에는 "없음"인지 아직 모르는 것이라 섹션을 그리지 않는다.
       if (detail != null) _ElevationSection(path: detail!.path),
+      const SizedBox(height: 24),
+      // 방향을 바꾸려면 뒤집을 경로가 있어야 해서 상세가 오기 전엔 잠근다.
+      OutlinedButton.icon(
+        onPressed: (detail?.path.length ?? 0) >= 2 ? onReverse : null,
+        icon: const Icon(Icons.swap_vert_rounded),
+        label: Text(isReversed ? '원래 방향으로 되돌리기' : '코스 방향 바꾸기'),
+      ),
     ];
   }
 }

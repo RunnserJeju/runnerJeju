@@ -28,6 +28,8 @@ LOG_NAMES: frozenset[str] = frozenset(
         "course_preview_open",
         "course_search",
         "course_list_sort",
+        # 코스 방향 바꾸기 (detail: course_id, reversed — 누른 뒤 역방향인지)
+        "course_reverse",
         "favorite_add",
         "favorite_remove",
         "navigate_click",

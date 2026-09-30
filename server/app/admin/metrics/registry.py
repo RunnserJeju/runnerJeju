@@ -33,6 +33,7 @@ COURSE_LOGS: frozenset[str] = frozenset(
     {
         "course_detail_open",
         "course_preview_open",
+        "course_reverse",
         "home_course_click",
         "favorite_add",
         "favorite_remove",
@@ -91,6 +92,7 @@ LOG_LABELS = {
     "course_preview_open": "코스 미리보기",
     "course_search": "코스 검색",
     "course_list_sort": "코스 정렬",
+    "course_reverse": "코스 방향 바꾸기",
     "favorite_add": "즐겨찾기 추가",
     "favorite_remove": "즐겨찾기 해제",
     "navigate_click": "길찾기 클릭",

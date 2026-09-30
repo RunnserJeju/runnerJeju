@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../models/user_log.dart';
 import '../theme/app_theme.dart';
 import 'community/community_screen.dart';
 import 'home/home_screen.dart';
@@ -25,6 +26,16 @@ class _AppShellState extends State<AppShell> {
 
   static const _runningTab = 2;
 
+  /// 다른 탭에서 코스를 열 때 러닝 탭의 선택을 바깥에서 움직이려고 둔다.
+  /// 러닝 탭은 IndexedStack 안에서 계속 살아 있어 State가 늘 붙어 있다.
+  final GlobalKey<RunningScreenState> _runningKey = GlobalKey();
+
+  /// 러닝 탭으로 옮기고 그 코스를 지도에서 고른 상태로 연다.
+  void _openCourse(String courseId, LogSource source) {
+    setState(() => _index = _runningTab);
+    _runningKey.currentState?.openCourse(courseId, source: source);
+  }
+
   static const _items = <({IconData? icon, String? asset, String label})>[
     (icon: Icons.home, asset: null, label: '홈'),
     (icon: Icons.groups, asset: null, label: '커뮤니티'),
@@ -36,11 +47,16 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final tabs = <Widget>[
-      HomeScreen(onShowMap: () => setState(() => _index = _runningTab)),
+      HomeScreen(
+        onShowMap: () => setState(() => _index = _runningTab),
+        onOpenCourse: (courseId) => _openCourse(courseId, LogSource.home),
+      ),
       const CommunityScreen(),
-      const RunningScreen(),
+      RunningScreen(key: _runningKey),
       const StampScreen(),
-      const ProfileScreen(),
+      ProfileScreen(
+        onOpenCourse: (courseId) => _openCourse(courseId, LogSource.favorite),
+      ),
     ];
 
     return Scaffold(
