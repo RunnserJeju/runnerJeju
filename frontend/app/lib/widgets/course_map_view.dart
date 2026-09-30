@@ -120,6 +120,9 @@ class _CourseMapViewState extends State<CourseMapView> {
   /// 마지막으로 그린 강조 라벨. 선택이 바뀌면 이것만 원래대로 되돌린다.
   String? _highlightedCourseId;
 
+  /// 선택돼 숨겨 둔 코스 라벨. '출발' 배지와 같은 자리라 겹쳐 보인다.
+  String? _hiddenCourseId;
+
   kakao.Route? _selectedRoute;
   List<GeoPoint>? _drawnSelectedPath;
 
@@ -356,6 +359,7 @@ class _CourseMapViewState extends State<CourseMapView> {
         if (controller == null || _disposed) return;
 
         await _syncMarkers(controller);
+        await _syncSelectedMarkerVisibility();
         await _syncHighlight();
         await _syncSelectedRoute(controller);
         await _syncEndpointMarkers(controller);
@@ -385,6 +389,7 @@ class _CourseMapViewState extends State<CourseMapView> {
 
       await _markers.remove(id)?.remove();
       if (_highlightedCourseId == id) _highlightedCourseId = null;
+      if (_hiddenCourseId == id) _hiddenCourseId = null;
       if (_disposed) return;
     }
 
@@ -418,12 +423,31 @@ class _CourseMapViewState extends State<CourseMapView> {
     if (previous != null) await previous.changeStyles(base);
     if (_disposed) return;
 
-    final next = selected == null ? null : _markers[selected];
+    final next = selected == null || selected == _hiddenCourseId
+        ? null
+        : _markers[selected];
     if (next != null) await next.changeStyles(highlight);
     if (_disposed) return;
 
     // 강조에 실패한 코스를 기억해 두면 다음 선택 때 되돌릴 라벨을 놓친다.
     _highlightedCourseId = next == null ? null : selected;
+  }
+
+  /// 선택된 코스의 라벨은 숨기고, 선택이 풀리면 다시 보인다. 경로가 오길
+  /// 기다리지 않는다 — 기다리면 강조 핀이 잠깐 보였다가 사라진다.
+  Future<void> _syncSelectedMarkerVisibility() async {
+    final wanted = widget.selectedCourseId;
+    if (_hiddenCourseId == wanted) return;
+
+    final previous = _markers[_hiddenCourseId];
+    if (previous != null) await previous.show();
+    if (_disposed) return;
+
+    final next = wanted == null ? null : _markers[wanted];
+    if (next != null) await next.hide();
+    if (_disposed) return;
+
+    _hiddenCourseId = next == null ? null : wanted;
   }
 
   Future<void> _syncSelectedRoute(kakao.KakaoMapController controller) async {
