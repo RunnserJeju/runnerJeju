@@ -186,6 +186,20 @@ class PartnerSummary(BaseModel):
     detail: dict
 
 
+class PartnerCourseRef(BaseModel):
+    """협력업체에 연결된 코스 하나(앱 협력업체 시트에서 그 코스로 넘어가는 데 쓴다)."""
+
+    id: uuid.UUID
+    name: str
+
+
+class PartnerWithCourses(PartnerSummary):
+    """앱 GET /partners 응답 한 건. 협력업체 모드의 지도·목록 시트가 쓴다."""
+
+    # 이 업체가 연결된 코스(이름순). 사용자에게 보이지 않는 코스는 빠진다.
+    courses: list[PartnerCourseRef]
+
+
 class PartnerOut(PartnerSummary):
     """운영 웹 협력업체 목록/상세 응답."""
 

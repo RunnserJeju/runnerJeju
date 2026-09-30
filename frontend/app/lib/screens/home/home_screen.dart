@@ -2,7 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../data/curated_partners.dart';
+import '../../models/course_partner.dart';
 import '../../models/notice.dart';
 import '../../models/running_course.dart';
 import '../../models/user_log.dart';
@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/banner_carousel.dart';
 import '../../widgets/course_recommend_card.dart';
+import '../../widgets/partner_category_tile.dart';
 import '../course/course_detail_screen.dart';
 import '../notification/notification_screen.dart';
 import '../../widgets/section_title.dart';
@@ -33,6 +34,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Notice>> _noticesFuture;
   late Future<List<RunningCourse>> _coursesFuture;
+  late Future<List<CoursePartner>> _partnersFuture;
+
+  /// 큐레이션에 보여줄 최대 줄 수.
+  static const int _curationLimit = 5;
 
   @override
   void initState() {
@@ -43,31 +48,33 @@ class _HomeScreenState extends State<HomeScreen> {
   void _load() {
     _noticesFuture = Services.instance.notice.loadNotices();
     _coursesFuture = Services.instance.course.loadCourses();
+    _partnersFuture = Services.instance.partner.loadPartners();
   }
 
   Future<void> _refresh() async {
     setState(_load);
     await _noticesFuture.catchError((_) => <Notice>[]);
     await _coursesFuture.catchError((_) => <RunningCourse>[]);
+    await _partnersFuture.catchError((_) => <CoursePartner>[]);
   }
 
   /// [section]은 홈의 어느 구역(recommended/curation)에서 눌렀는지 — 로그용.
   void _openCourse(
-    RunningCourse course, {
+    String courseId, {
     required String section,
     int? position,
   }) {
     writeLog(
       LogName.homeCourseClick,
       detail: {
-        LogKeys.courseId: course.id,
+        LogKeys.courseId: courseId,
         LogKeys.section: section,
         LogKeys.position: ?position,
       },
     );
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CourseDetailScreen(courseId: course.id),
+        builder: (_) => CourseDetailScreen(courseId: courseId),
       ),
     );
   }
@@ -170,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             return CourseRecommendCard(
                               course: course,
                               onTap: () => _openCourse(
-                                course,
+                                course.id,
                                 section: 'recommended',
                                 position: index,
                               ),
@@ -185,13 +192,18 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
 
-            // ── 러닝 코스 큐레이션 (코스 × 제휴처) ──
-            FutureBuilder<List<RunningCourse>>(
-              future: _coursesFuture,
+            // ── 러닝 코스 큐레이션 (협력업체 × 연결 코스) ──
+            FutureBuilder<List<CoursePartner>>(
+              future: _partnersFuture,
               builder: (context, snapshot) {
-                final courses = snapshot.data ?? const <RunningCourse>[];
-                if (courses.isEmpty) return const SizedBox.shrink();
-                final picks = courses.take(kCuratedPartners.length).toList();
+                // 코스에 연결된 업체만 싣는다 — 한 줄이 "이 코스를 달리고 이
+                // 업체에서 혜택"이라, 코스가 없는 업체는 줄을 만들 수 없다.
+                final picks = [
+                  for (final partner in snapshot.data ?? const <CoursePartner>[])
+                    if (partner.courses.isNotEmpty) partner,
+                ].take(_curationLimit).toList();
+                // 업체가 없거나 로드 실패면 섹션을 조용히 접는다.
+                if (picks.isEmpty) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -213,13 +225,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                    for (final (index, course) in picks.indexed)
+                    for (final (index, partner) in picks.indexed)
                       _CurationItem(
-                        course: course,
-                        partner: partnerForIndex(index),
+                        partner: partner,
+                        course: partner.courses.first,
                         isLast: index == picks.length - 1,
                         onTap: () => _openCourse(
-                          course,
+                          partner.courses.first.id,
                           section: 'curation',
                           position: index,
                         ),
@@ -308,17 +320,18 @@ class _BellButton extends StatelessWidget {
   }
 }
 
-/// 러닝 코스 큐레이션 한 줄: 실제 코스(DB)에 더미 제휴처를 묶어 보여준다.
+/// 러닝 코스 큐레이션 한 줄: 협력업체와 그 업체가 연결된 코스(운영 웹에서 연결).
+/// 누르면 그 코스 상세로 간다. 업체가 여러 코스에 걸려 있으면 첫 코스(이름순)를 쓴다.
 class _CurationItem extends StatelessWidget {
   const _CurationItem({
-    required this.course,
     required this.partner,
+    required this.course,
     required this.isLast,
     this.onTap,
   });
 
-  final RunningCourse course;
-  final CuratedPartner partner;
+  final CoursePartner partner;
+  final PartnerCourseRef course;
 
   /// 마지막 줄은 아래 구분선을 긋지 않는다.
   final bool isLast;
@@ -339,21 +352,7 @@ class _CurationItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: partner.tint.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: SvgPicture.asset(
-                partner.iconAsset,
-                width: 22,
-                height: 22,
-                colorFilter: ColorFilter.mode(partner.tint, BlendMode.srcIn),
-              ),
-            ),
+            PartnerCategoryTile(category: partner.category),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -378,7 +377,7 @@ class _CurationItem extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        partner.category,
+                        partner.category.label,
                         style: const TextStyle(
                           fontSize: 10,
                           color: AppColors.muted,
@@ -386,17 +385,19 @@ class _CurationItem extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    partner.benefit,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.ink,
-                      height: 1.4,
+                  if (partner.benefit != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      partner.benefit!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.ink,
+                        height: 1.4,
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     children: [

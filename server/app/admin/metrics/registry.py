@@ -63,6 +63,9 @@ GROUP_BY_PREFIX = (
 LOG_GROUPS = {
     "home_course_click": "코스",
     "navigate_click": "코스",
+    # 협력업체는 러닝 탭 지도(코스 탐색)에서 여는 기능이라 코스 탭에 둔다.
+    "partner_list_open": "코스",
+    "partner_preview_open": "코스",
     "logout": "계정",
     "withdraw": "계정",
     # 홈 배너·알림·외부 링크·앱 실행은 특정 도메인이 아니라 기타.
@@ -91,6 +94,8 @@ LOG_LABELS = {
     "favorite_add": "즐겨찾기 추가",
     "favorite_remove": "즐겨찾기 해제",
     "navigate_click": "길찾기 클릭",
+    "partner_list_open": "협력업체 목록 열기",
+    "partner_preview_open": "협력업체 상세",
     "run_start": "러닝 시작",
     "run_pause": "러닝 일시정지",
     "run_resume": "러닝 재개",

@@ -4,20 +4,18 @@ import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 
 import 'marker_canvas.dart';
 
-/// 코스 주차장/화장실/협력업체를 지도에 찍는 원형 배지.
+/// 코스 주차장/화장실을 지도에 찍는 원형 배지. 협력업체는 핀 모양(partner_marker.dart)이다.
 ///
 /// 러닝 탭 지도(CourseMapView)와 달리기 지도(RunMapView)가 같은 모양을 써야 해서
 /// 여기로 뺐다. 배지는 좌표 정중앙에 놓으므로 PoiStyle의 anchor를 (0.5, 0.5)로 준다.
 
-/// 주차장(파랑) / 화장실(초록) / 협력업체(주황) 배지 색.
+/// 주차장(파랑) / 화장실(초록) 배지 색.
 const Color parkingBadgeColor = Color(0xFF2F6BFF);
 const Color restroomBadgeColor = Color(0xFF12B886);
-const Color partnerBadgeColor = Color(0xFFFF8A00);
 
 /// 배지에 새길 짧은 글자.
 const String parkingBadgeLabel = 'P';
 const String restroomBadgeLabel = 'WC';
-const String partnerBadgeLabel = '★';
 
 const double _badgeSize = 22;
 const double _badgeBorder = 2;
