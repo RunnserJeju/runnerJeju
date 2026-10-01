@@ -826,7 +826,8 @@ class TestCourseStampImage:
         # 스탬프 전용 버킷에 올린다(썸네일·배너와 분리).
         assert buckets == [storage.SUPABASE_STAMP_BUCKET]
 
-    def test_replaces_and_deletes_old(self, monkeypatch):
+    def test_replaces_url_but_keeps_old_file(self, monkeypatch):
+        # 도안은 여러 코스가 공유할 수 있어 옛 파일을 지우지 않는다.
         deleted, _ = self._patch_storage(monkeypatch)
         course = _course(stamp_image_url="https://cdn/stamp-old.png")
         db = UpdateFakeSession(course)
@@ -834,7 +835,7 @@ class TestCourseStampImage:
         admin_courses_router.set_course_stamp_image(course.id, FakeUpload(), db)
 
         assert course.stamp_image_url == "https://cdn/stamp-new.png"
-        assert deleted == ["https://cdn/stamp-old.png"]
+        assert deleted == []
 
     def test_rejects_non_image_type(self, monkeypatch):
         self._patch_storage(monkeypatch)
@@ -858,7 +859,7 @@ class TestCourseStampImage:
 
         assert exc_info.value.status_code == 404
 
-    def test_delete_clears_and_removes_object(self, monkeypatch):
+    def test_delete_clears_url_but_keeps_file(self, monkeypatch):
         deleted, _ = self._patch_storage(monkeypatch)
         course = _course(stamp_image_url="https://cdn/stamp-old.png")
         db = UpdateFakeSession(course)
@@ -867,7 +868,7 @@ class TestCourseStampImage:
 
         assert course.stamp_image_url is None
         assert result["stamp_image_url"] is None
-        assert deleted == ["https://cdn/stamp-old.png"]
+        assert deleted == []
 
     def test_delete_is_noop_when_already_none(self, monkeypatch):
         deleted, _ = self._patch_storage(monkeypatch)
