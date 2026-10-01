@@ -6,8 +6,9 @@ import '../utils/formatters.dart';
 
 /// 완주 스탬프 도안. 획득/미획득 두 상태를 그린다.
 ///
-/// 획득이면 색상 도안 + 코스명 + (기본 도안 한정) 획득일, 미획득이면 grayscale로
-/// 흐릿하게. [stamp]가 있으면 도안/획득일 출처로 쓰고, 미획득처럼
+/// 획득이면 색상 도안 + 코스명 + (기본 도안 한정) 획득일, 미획득이면 회색 도안을
+/// 흐릿하게(난이도별 색 도안을 흑백 처리하면 진하기가 제각각이라 회색 도안을
+/// 따로 쓴다). [stamp]가 있으면 도안/획득일 출처로 쓰고, 미획득처럼
 /// 스탬프가 없을 땐 [courseName]/[acquired]만으로 그린다.
 class StampBadge extends StatelessWidget {
   const StampBadge({
@@ -15,7 +16,6 @@ class StampBadge extends StatelessWidget {
     this.stamp,
     this.courseName,
     this.acquired,
-    this.lockedImageUrl,
     this.size = 104,
     this.onTap,
   }) : assert(
@@ -32,9 +32,8 @@ class StampBadge extends StatelessWidget {
   /// 획득 여부. 없으면 [stamp] 유무로 판단한다.
   final bool? acquired;
 
-  /// 미획득일 때 보여줄 "목표 도안"(코스의 스탬프 이미지). 있으면 grayscale로
-  /// 흐리게 깔아 "이걸 모으면 된다"를 보여준다. 없으면 기본 잠금 도안.
-  final String? lockedImageUrl;
+  /// 미획득일 때의 회색 도안. 코스 도안 대신 늘 이걸 쓴다.
+  static const String _lockedAsset = 'assets/images/stamp_locked.png';
 
   final double size;
   final VoidCallback? onTap;
@@ -42,28 +41,17 @@ class StampBadge extends StatelessWidget {
   String get _name => courseName ?? stamp!.courseName;
   bool get _isAcquired => acquired ?? (stamp != null);
 
-  /// 원 안에 그릴 도안 URL. 획득이면 딴 스탬프 도안, 미획득이면 목표 도안.
-  /// (미획득 도안은 build()의 grayscale 필터로 자동으로 흐려진다.)
-  String? get _designUrl => _isAcquired ? stamp?.imageUrl : lockedImageUrl;
-
-  /// 휘도 기반 grayscale 매트릭스.
-  static const ColorFilter _grayscale = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0, 0, 0, 1, 0,
-  ]);
+  /// 원 안에 그릴 도안 URL. 획득한 스탬프의 도안.
+  String? get _designUrl => stamp?.imageUrl;
 
   @override
   Widget build(BuildContext context) {
-    Widget circle = _circle();
-    if (!_isAcquired) {
-      // 흑백 + 흐릿하게
-      circle = Opacity(
-        opacity: 0.5,
-        child: ColorFiltered(colorFilter: _grayscale, child: circle),
-      );
-    }
+    final circle = _isAcquired
+        ? _circle()
+        : Opacity(
+            opacity: 0.5,
+            child: Image.asset(_lockedAsset, width: size, height: size),
+          );
 
     return Column(
       mainAxisSize: MainAxisSize.min,

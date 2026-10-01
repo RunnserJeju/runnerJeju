@@ -11,13 +11,15 @@ import '../../widgets/async_view.dart';
 import '../../widgets/course_card.dart';
 import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
-import '../course/course_detail_screen.dart';
 import '../run/run_detail_screen.dart';
 import '../../widgets/section_title.dart';
 
 /// 프로필: 최근 한 달 러닝 요약 + 찜한 코스 + 참여한 프로그램.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, required this.onOpenCourse});
+
+  /// 찜한 코스 카드를 눌렀을 때. 러닝 탭으로 옮겨 그 코스를 고른 상태로 연다.
+  final ValueChanged<String> onOpenCourse;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -114,7 +116,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             snapshot: snapshot,
             onRetry: _refresh,
             builder: (context, data) =>
-                _ProfileBody(data: data, onWithdraw: _withdraw),
+                _ProfileBody(
+                  data: data,
+                  onWithdraw: _withdraw,
+                  onOpenCourse: widget.onOpenCourse,
+                ),
           ),
         ),
       ),
@@ -162,10 +168,15 @@ class _ProfileData {
 }
 
 class _ProfileBody extends StatefulWidget {
-  const _ProfileBody({required this.data, required this.onWithdraw});
+  const _ProfileBody({
+    required this.data,
+    required this.onWithdraw,
+    required this.onOpenCourse,
+  });
 
   final _ProfileData data;
   final VoidCallback onWithdraw;
+  final ValueChanged<String> onOpenCourse;
 
   @override
   State<_ProfileBody> createState() => _ProfileBodyState();
@@ -258,11 +269,7 @@ class _ProfileBodyState extends State<_ProfileBody> {
           for (final course in data.favorites) ...[
             CourseCard(
               course: course,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => CourseDetailScreen(courseId: course.id),
-                ),
-              ),
+              onTap: () => widget.onOpenCourse(course.id),
             ),
             const SizedBox(height: 12),
           ],

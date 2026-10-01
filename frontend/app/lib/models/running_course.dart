@@ -125,6 +125,32 @@ class RunningCourse {
       .where((e) => e.isNotEmpty)
       .toList();
 
+  /// 출발과 도착을 맞바꾼 코스. [path]를 거꾸로 뒤집고 [startPoint]를 새 첫 점으로
+  /// 옮긴다. 지도의 출발/도착 배지·방향 화살표·고도 그래프·시작점 길찾기가 모두
+  /// 경로 순서를 따르므로 이 사본을 넘기면 그대로 반대 방향이 된다.
+  ///
+  /// 서버 완주 판정은 방향을 보지 않아서(verification.coverage_ratio) 서버에는
+  /// 알릴 것이 없다. 앱 안에서만 쓰는 값이다.
+  RunningCourse reversed() => RunningCourse(
+    id: id,
+    name: name,
+    distanceKm: distanceKm,
+    address: address,
+    path: path.reversed.toList(growable: false),
+    difficulty: difficulty,
+    tags: tags,
+    parkings: parkings,
+    restrooms: restrooms,
+    partners: partners,
+    description: description,
+    estimatedTimeMin: estimatedTimeMin,
+    thumbnailUrl: thumbnailUrl,
+    stampImageUrl: stampImageUrl,
+    completedCount: completedCount,
+    isCompletedByMe: isCompletedByMe,
+    startPoint: path.isEmpty ? startPoint : path.last,
+  );
+
   factory RunningCourse.fromJson(Map<String, dynamic> json) => RunningCourse(
     id: json['id'].toString(),
     name: json['name'] as String,

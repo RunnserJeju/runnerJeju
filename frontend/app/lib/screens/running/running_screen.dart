@@ -34,14 +34,17 @@ import 'partner_preview_sheet.dart';
 /// 코스 없이 달리는 자유 러닝은 진입점을 뺐다([_startRun]은 아직 코스 없이도
 /// 돌아간다). 러닝 화면([RunScreen])과 기록 로직은 그대로 두고,
 /// 거기까지 가는 길만 이 화면이 대신한다.
+///
+/// 다른 탭(홈 카드·마이페이지 찜한 코스)에서 코스를 열 때는 [RunningScreenState.openCourse]로
+/// 이 화면의 코스 선택을 그대로 탄다 — 코스 상세를 따로 띄우는 전체 화면은 두지 않는다.
 class RunningScreen extends StatefulWidget {
   const RunningScreen({super.key});
 
   @override
-  State<RunningScreen> createState() => _RunningScreenState();
+  State<RunningScreen> createState() => RunningScreenState();
 }
 
-class _RunningScreenState extends State<RunningScreen> {
+class RunningScreenState extends State<RunningScreen> {
   final CourseMapController _mapController = CourseMapController();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
@@ -73,6 +76,28 @@ class _RunningScreenState extends State<RunningScreen> {
   /// [_selected]의 상세. 경로가 들어 있어야 지도에 선을 그리고 러닝을 시작할 수 있다.
   RunningCourse? _selectedDetail;
   Object? _detailError;
+
+  /// 출발·도착을 바꿔 보는 중인지. 저장하지 않는다 — 다른 코스를 고르거나 시트를
+  /// 걷으면 원래 방향으로 돌아간다. 같은 코스를 다시 받는 경우(러닝 후 새로고침,
+  /// 상세 재시도)에는 유지한다.
+  bool _isReversed = false;
+
+  /// [_selectedDetail]을 뒤집은 사본. 지도는 경로를 identical로 비교해 다시
+  /// 그릴지 정하므로, 빌드마다 새로 뒤집지 않고 원본이 바뀔 때만 만든다.
+  RunningCourse? _reversedDetail;
+
+  /// 시트·지도·러닝 화면에 넘기는 상세. 방향을 바꿨으면 뒤집힌 사본이다.
+  RunningCourse? get _activeDetail {
+    final detail = _selectedDetail;
+    if (detail == null || !_isReversed) return detail;
+    if (!identical(_reversedSource, detail)) {
+      _reversedSource = detail;
+      _reversedDetail = detail.reversed();
+    }
+    return _reversedDetail;
+  }
+
+  RunningCourse? _reversedSource;
 
   /// 고른 코스의 찜 여부. 프리뷰 시트의 하트가 이 값을 따른다.
   bool _selectedIsFavorite = false;
@@ -262,6 +287,7 @@ class _RunningScreenState extends State<RunningScreen> {
       );
     }
     setState(() {
+      if (_selected?.id != course.id) _isReversed = false;
       _selected = course;
       _selectedDetail = null;
       _detailError = null;
@@ -272,7 +298,7 @@ class _RunningScreenState extends State<RunningScreen> {
       _selectedPartner = null;
     });
 
-    final start = course.startPoint;
+    final start = _isReversed ? null : course.startPoint;
     if (start != null) _mapController.moveTo(start);
 
     // 찜 여부는 서버 조회다(첫 조회 뒤엔 캐시). 다른 코스로 옮겨 눌렀으면 버린다.
@@ -339,6 +365,46 @@ class _RunningScreenState extends State<RunningScreen> {
     }
   }
 
+  /// 시트 맨 아래 '코스 방향 바꾸기'. 출발·도착을 맞바꿔 지도·고도·러닝이 반대
+  /// 방향을 따르게 한다. 카메라는 새 출발점으로 옮긴다.
+  void _toggleReverse() {
+    final detail = _selectedDetail;
+    if (detail == null || detail.path.length < 2) return;
+
+    setState(() => _isReversed = !_isReversed);
+    writeLog(
+      LogName.courseReverse,
+      detail: {LogKeys.courseId: detail.id, LogKeys.reversed: _isReversed},
+    );
+    final start = _activeDetail?.startPoint;
+    if (start != null) unawaited(_mapController.moveTo(start));
+  }
+
+  /// 다른 탭에서 코스를 열 때(홈 추천·큐레이션 카드, 마이페이지 찜한 코스).
+  /// 지도에서 라벨을 누른 것과 같은 선택 상태로 만든다. 방향은 원래대로 시작한다.
+  ///
+  /// 목록을 아직 못 받았거나 목록에 없는 코스(숨김 전환 등)면 상세를 직접 받아
+  /// 고른다 — 상세에도 [RunningCourse.startPoint]가 실려 온다.
+  Future<void> openCourse(String courseId, {required LogSource source}) async {
+    _closeSearch();
+    setState(() => _isReversed = false);
+
+    var course = _courses.where((c) => c.id == courseId).firstOrNull;
+    if (course == null) {
+      try {
+        course = await Services.instance.course.loadCourse(courseId);
+      } on AppException catch (e) {
+        if (mounted) _showMessage(e.message);
+        return;
+      } catch (_) {
+        if (mounted) _showMessage('코스를 불러오지 못했어요.');
+        return;
+      }
+      if (!mounted) return;
+    }
+    await _selectCourse(course, source: source);
+  }
+
   /// 지도 바닥을 눌렀을 때. 코스 상세는 걷고, 탐색 시트는 접는다.
   void _clearSelection() {
     _closeSearch();
@@ -362,6 +428,7 @@ class _RunningScreenState extends State<RunningScreen> {
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
+      _isReversed = false;
     });
   }
 
@@ -372,6 +439,7 @@ class _RunningScreenState extends State<RunningScreen> {
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
+      _isReversed = false;
       _isPartnerMode = false;
       _selectedPartner = null;
     });
@@ -424,6 +492,7 @@ class _RunningScreenState extends State<RunningScreen> {
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
+      _isReversed = false;
     });
     writeLog(LogName.partnerListOpen);
 
@@ -680,6 +749,7 @@ class _RunningScreenState extends State<RunningScreen> {
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
+    final detail = _activeDetail;
 
     return Scaffold(
       backgroundColor: AppColors.paper,
@@ -705,21 +775,21 @@ class _RunningScreenState extends State<RunningScreen> {
                       controller: _mapController,
                       courses: _courses,
                       selectedCourseId: selected?.id,
-                      selectedPath: _selectedDetail?.path ?? const [],
+                      selectedPath: detail?.path ?? const [],
                       // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
                       // 좌표 포함)을 쓰고, 오면 상세 값으로 바뀐다.
                       selectedParkings: selected == null
                           ? const []
-                          : (_selectedDetail ?? selected).parkings,
+                          : (detail ?? selected).parkings,
                       selectedRestrooms: selected == null
                           ? const []
-                          : (_selectedDetail ?? selected).restrooms,
+                          : (detail ?? selected).restrooms,
                       // 협력업체 모드면 전체를, 코스를 골랐으면 그 코스의 업체만.
                       partners: _isPartnerMode
                           ? _partners
                           : selected == null
                           ? const []
-                          : (_selectedDetail ?? selected).partners,
+                          : (detail ?? selected).partners,
                       selectedPartnerId: _selectedPartner?.id,
                       onPartnerTap: _onPartnerMarkerTap,
                       myPosition: _currentLocation.latest,
@@ -728,7 +798,7 @@ class _RunningScreenState extends State<RunningScreen> {
                       onMapTap: _clearSelection,
                       // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
                       // 코스가 있으면 그 자리에서 다시 시작한다.
-                      initialCenter: selected?.startPoint,
+                      initialCenter: (detail ?? selected)?.startPoint,
                     ),
                   ),
           ),
@@ -813,15 +883,17 @@ class _RunningScreenState extends State<RunningScreen> {
               // 코스를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
               key: ValueKey(selected.id),
               course: selected,
-              detail: _selectedDetail,
+              detail: detail,
               detailError: _detailError,
               isFavorite: _selectedIsFavorite,
               onToggleFavorite: _toggleSelectedFavorite,
               onClose: _clearSelection,
               onRetryDetail: () => _selectCourse(selected),
-              onStart: () => _startRun(course: _selectedDetail),
+              onStart: () => _startRun(course: detail),
               isDownloadingGpx: _downloadingGpx,
               onDownloadGpx: _downloadSelectedGpx,
+              isReversed: _isReversed,
+              onReverse: _toggleReverse,
             ),
         ],
       ),

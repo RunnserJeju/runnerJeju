@@ -16,6 +16,12 @@ const PLATFORM_LABEL: Record<string, string> = {
   android: 'Android',
 }
 
+/** 기기 칸 표기: 'Android · samsung SM-S918N'. 모델이 없으면 종류만. */
+function deviceLabel(u: { platform: string | null; device: string | null }): string | null {
+  const platform = u.platform ? (PLATFORM_LABEL[u.platform] ?? u.platform) : null
+  return [platform, u.device].filter(Boolean).join(' · ') || null
+}
+
 interface Props {
   onUnauthorized: () => void
 }
@@ -118,7 +124,7 @@ export default function UsersPage({ onUnauthorized }: Props) {
                 </td>
                 <td className="muted">{u.email ?? '—'}</td>
                 <td>{u.providers.map((p) => PROVIDER_LABEL[p] ?? p).join(', ') || '—'}</td>
-                <td>{u.platform ? (PLATFORM_LABEL[u.platform] ?? u.platform) : <span className="muted">—</span>}</td>
+                <td>{deviceLabel(u) ?? <span className="muted">—</span>}</td>
                 <td className="nowrap">{formatDate(u.created_at)}</td>
                 <td className="nowrap muted">{u.last_login_at ? formatDate(u.last_login_at) : '—'}</td>
                 <td>{u.completed_count}</td>
@@ -160,7 +166,7 @@ export default function UsersPage({ onUnauthorized }: Props) {
               </tr>
               <tr>
                 <th>기기</th>
-                <td>{detail.platform ? (PLATFORM_LABEL[detail.platform] ?? detail.platform) : '—'}</td>
+                <td>{deviceLabel(detail) ?? '—'}</td>
               </tr>
               <tr>
                 <th>가입일</th>

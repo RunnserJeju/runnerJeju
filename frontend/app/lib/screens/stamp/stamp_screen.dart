@@ -355,7 +355,10 @@ class _StampCard extends StatelessWidget {
   }
 }
 
-/// 원형 스탬프 도안. DB 이미지를 불러오고, 미완주면 흑백·반투명.
+/// 원형 스탬프 도안. 완주면 DB 이미지, 미완주면 회색 도안을 반투명으로.
+///
+/// 미완주를 DB 이미지의 흑백 처리로 그리지 않는 이유: 난이도별 도안 색이 달라
+/// 흑백으로 바꾸면 진하기가 제각각이다(빨강이 제일 진함).
 class _StampImage extends StatelessWidget {
   const _StampImage({required this.url, required this.acquired});
 
@@ -364,17 +367,17 @@ class _StampImage extends StatelessWidget {
 
   static const double _size = 64;
 
-  /// 휘도 기반 grayscale 매트릭스.
-  static const ColorFilter _grayscale = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0, 0, 0, 1, 0,
-  ]);
+  static const String _lockedAsset = 'assets/images/stamp_locked.png';
 
   @override
   Widget build(BuildContext context) {
-    Widget image = SizedBox(
+    if (!acquired) {
+      return Opacity(
+        opacity: 0.55,
+        child: Image.asset(_lockedAsset, width: _size, height: _size),
+      );
+    }
+    return SizedBox(
       width: _size,
       height: _size,
       child: ClipOval(
@@ -388,13 +391,6 @@ class _StampImage extends StatelessWidget {
             : const _Fallback(),
       ),
     );
-    if (!acquired) {
-      image = Opacity(
-        opacity: 0.55,
-        child: ColorFiltered(colorFilter: _grayscale, child: image),
-      );
-    }
-    return image;
   }
 }
 

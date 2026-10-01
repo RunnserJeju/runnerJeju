@@ -391,10 +391,11 @@ def set_course_stamp_image(
     """이 코스 완주 시 주는 스탬프 도안을 올린다(교체 포함). (관리자 전용)
 
     썸네일과 같은 패턴이지만 스탬프 전용 버킷(SUPABASE_STAMP_BUCKET)에 넣는다 —
-    배너·썸네일과 섞이지 않게. 도안은 코스에 1:1로 붙고, 발급된 스탬프는 조회 때
-    이 값을 참조하므로 나중에 넣거나 바꿔도 기존 완주자까지 반영된다.
+    배너·썸네일과 섞이지 않게. 발급된 스탬프는 조회 때 이 값을 참조하므로 나중에
+    넣거나 바꿔도 기존 완주자까지 반영된다.
 
-    교체면 옛 오브젝트는 새로 올린 뒤 지운다(삭제 실패는 무시).
+    교체해도 옛 오브젝트는 Storage에 남긴다 — 도안 하나를 여러 코스가 공유하므로
+    (난이도별 도안) 지우면 다른 코스까지 깨진다. URL만 바꾸고 파일은 누적한다.
     """
     course = _load_course_or_404(db, course_id)
 
@@ -421,14 +422,9 @@ def set_course_stamp_image(
     except storage.StorageUploadError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # 업로드가 성공한 뒤에야 옛 것을 지운다 — 실패하면 옛 도안이 그대로 살아 있게.
-    old_url = course.stamp_image_url
     course.stamp_image_url = new_url
     db.commit()
     db.refresh(course)
-
-    if old_url:
-        storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
 
     counts = _completed_counts(db, [course.id])
     return _to_summary(course, counts.get(course.id, 0), False)
@@ -439,18 +435,17 @@ def delete_course_stamp_image(
     course_id: uuid.UUID,
     db: Session = Depends(get_db),
 ):
-    """코스 스탬프 도안을 지운다(컬럼을 NULL로). (관리자 전용)
+    """코스 스탬프 도안을 뗀다(컬럼을 NULL로). (관리자 전용)
 
-    이미 없으면 아무 일도 안 한다. Storage 파일도 지우되 실패는 무시한다.
+    이미 없으면 아무 일도 안 한다. Storage 파일은 지우지 않는다 — 다른 코스가
+    같은 도안을 쓰고 있을 수 있다.
     """
     course = _load_course_or_404(db, course_id)
 
-    old_url = course.stamp_image_url
-    if old_url:
+    if course.stamp_image_url:
         course.stamp_image_url = None
         db.commit()
         db.refresh(course)
-        storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
 
     counts = _completed_counts(db, [course.id])
     return _to_summary(course, counts.get(course.id, 0), False)

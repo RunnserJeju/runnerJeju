@@ -302,10 +302,10 @@ class PartnerListTile extends StatelessWidget {
                       partner.benefit!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: partner.category.tint,
+                        color: AppColors.ink,
                       ),
                     ),
                   ],

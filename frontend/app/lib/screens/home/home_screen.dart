@@ -13,7 +13,6 @@ import '../../utils/formatters.dart';
 import '../../widgets/banner_carousel.dart';
 import '../../widgets/course_recommend_card.dart';
 import '../../widgets/partner_category_tile.dart';
-import '../course/course_detail_screen.dart';
 import '../notification/notification_screen.dart';
 import '../../widgets/section_title.dart';
 
@@ -22,10 +21,17 @@ import '../../widgets/section_title.dart';
 /// 공지 목록은 홈에 따로 펼치지 않는다 — 배너와 겹쳐서다. 헤더의 벨은 공지가
 /// 아니라 알림 화면([NotificationScreen])을 연다.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.onShowMap});
+  const HomeScreen({
+    super.key,
+    required this.onShowMap,
+    required this.onOpenCourse,
+  });
 
   /// '지도로 보기'를 눌렀을 때. 러닝 탭으로 옮겨 준다.
   final VoidCallback onShowMap;
+
+  /// 코스 카드를 눌렀을 때. 러닝 탭으로 옮겨 그 코스를 고른 상태로 연다.
+  final ValueChanged<String> onOpenCourse;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -72,11 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
         LogKeys.position: ?position,
       },
     );
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CourseDetailScreen(courseId: courseId),
-      ),
-    );
+    widget.onOpenCourse(courseId);
   }
 
   @override

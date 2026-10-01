@@ -39,6 +39,7 @@ enum LogName {
   coursePreviewOpen('course_preview_open'),
   courseSearch('course_search'),
   courseListSort('course_list_sort'),
+  courseReverse('course_reverse'),
   favoriteAdd('favorite_add'),
   favoriteRemove('favorite_remove'),
   navigateClick('navigate_click'),
@@ -86,6 +87,10 @@ abstract final class LogKeys {
   static const elapsedSec = 'elapsed_sec';
   static const distanceM = 'distance_m';
   static const error = 'error';
+  static const device = 'device';
+
+  /// 코스 방향 바꾸기를 누른 뒤 역방향인지(true) 원래 방향인지(false).
+  static const reversed = 'reversed';
 
   /// 공유 카드 배색(dark/light)과 공유 시트 결과(success/dismissed/unavailable).
   static const cardTheme = 'card_theme';
