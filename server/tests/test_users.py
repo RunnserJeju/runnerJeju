@@ -23,6 +23,7 @@ def _no_platform_lookup(monkeypatch):
     """기기 종류 조회(_latest_platforms)는 user_log 쿼리라 fake 세션이 못 받는다.
     기본은 빈 결과로 막고, 필요한 테스트만 다시 patch한다."""
     monkeypatch.setattr(users_router, "_latest_platforms", lambda db, ids: {})
+    monkeypatch.setattr(users_router, "_latest_devices", lambda db, ids: {})
 
 
 def _user(**over) -> User:

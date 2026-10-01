@@ -72,6 +72,26 @@ def _latest_platforms(db: Session, user_id_strs: list[str]) -> dict[str, str]:
     return {user_id: platform for user_id, platform in rows}
 
 
+def _latest_devices(db: Session, user_id_strs: list[str]) -> dict[str, str]:
+    """유저별 최근 기기 모델. 앱이 app_open·login 로그 detail.device에 싣는다."""
+    if not user_id_strs:
+        return {}
+
+    device = UserLog.detail["device"].astext
+    rows = db.execute(
+        select(UserLog.user_id, device)
+        .distinct(UserLog.user_id)
+        .where(
+            UserLog.user_id.in_(user_id_strs),
+            UserLog.log_name.in_(("app_open", "login")),
+            device.is_not(None),
+        )
+        .order_by(UserLog.user_id, UserLog.created_at.desc())
+    ).all()
+
+    return {user_id: model for user_id, model in rows}
+
+
 def _completed_courses(db: Session, user: User) -> list[dict]:
     """이 유저가 완주한 코스 목록(코스명 포함, 최신순).
 
@@ -91,13 +111,16 @@ def _completed_courses(db: Session, user: User) -> list[dict]:
     ]
 
 
-def _to_summary(user: User, completed_count: int, platform: str | None) -> dict:
+def _to_summary(
+    user: User, completed_count: int, platform: str | None, device: str | None
+) -> dict:
     return {
         "id": user.id,
         "nickname": user.nickname,
         "providers": _providers(user),
         "email": user.email,
         "platform": platform,
+        "device": device,
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "completed_count": completed_count,
@@ -143,11 +166,17 @@ def list_users(
     ids = [str(u.id) for u in users]
     counts = _completed_counts(db, ids)
     platforms = _latest_platforms(db, ids)
+    devices = _latest_devices(db, ids)
 
     return {
         "total": total,
         "items": [
-            _to_summary(u, counts.get(str(u.id), 0), platforms.get(str(u.id)))
+            _to_summary(
+                u,
+                counts.get(str(u.id), 0),
+                platforms.get(str(u.id)),
+                devices.get(str(u.id)),
+            )
             for u in users
         ],
     }
@@ -171,6 +200,7 @@ def get_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
         "providers": _providers(user),
         "email": user.email,
         "platform": _latest_platforms(db, [str(user.id)]).get(str(user.id)),
+        "device": _latest_devices(db, [str(user.id)]).get(str(user.id)),
         "profile_image_url": user.profile_image_url,
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,

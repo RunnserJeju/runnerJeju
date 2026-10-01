@@ -378,6 +378,8 @@ export interface UserSummary {
   email: string | null
   /** 최근 로그에 찍힌 기기(ios/android). 로그가 없으면 null. */
   platform: string | null
+  /** 최근 로그에 찍힌 기기 모델(예: samsung SM-S918N, iPhone15,2). 없으면 null. */
+  device: string | null
   created_at: string
   last_login_at: string | null
   completed_count: number

@@ -87,6 +87,7 @@ abstract final class LogKeys {
   static const elapsedSec = 'elapsed_sec';
   static const distanceM = 'distance_m';
   static const error = 'error';
+  static const device = 'device';
 
   /// 코스 방향 바꾸기를 누른 뒤 역방향인지(true) 원래 방향인지(false).
   static const reversed = 'reversed';

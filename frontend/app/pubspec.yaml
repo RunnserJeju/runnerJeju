@@ -45,6 +45,7 @@ dependencies:
   cached_network_image: ^3.4.1
   sensors_plus: ^7.1.0
   package_info_plus: ^10.2.1
+  device_info_plus: ^13.2.0
 
   # 공유 카드 이미지를 임시 파일로 떨어뜨려 시스템 공유 시트로 넘긴다.
   share_plus: ^13.3.0

@@ -489,6 +489,8 @@ class UserSummaryOut(BaseModel):
     email: str | None
     # 최근 행동 로그에 찍힌 기기 종류('ios'/'android'). 로그가 없으면 None.
     platform: str | None
+    # 최근 app_open·login 로그의 기기 모델. 없으면 None.
+    device: str | None
     created_at: datetime
     last_login_at: datetime | None
     # 완주 코스 수 = 획득 스탬프 수.
@@ -503,6 +505,7 @@ class UserDetailOut(BaseModel):
     providers: list[str]
     email: str | None
     platform: str | None
+    device: str | None
     profile_image_url: str | None
     created_at: datetime
     last_login_at: datetime | None

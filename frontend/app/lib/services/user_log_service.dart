@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -52,6 +53,9 @@ class UserLogService with WidgetsBindingObserver {
   DateTime? _backgroundedAt;
   String _appVersion = '';
 
+  /// 기기 모델(예: 'samsung SM-S918N', 'iPhone15,2'). 못 읽으면 빈 문자열.
+  String _device = '';
+
   /// 러닝 중인지. 세션을 끊을지 판단할 때 본다(러닝 화면이 시작/종료 때 알려 준다).
   bool _runActive = false;
 
@@ -68,6 +72,9 @@ class UserLogService with WidgetsBindingObserver {
     } catch (_) {
       // 버전을 못 읽어도 로그는 남긴다(빈 문자열).
     }
+    try {
+      _device = await _readDevice();
+    } catch (_) {}
     WidgetsBinding.instance.addObserver(this);
 
     final abandoned = await _readActiveRun();
@@ -86,6 +93,11 @@ class UserLogService with WidgetsBindingObserver {
 
   /// 로그 한 건을 큐에 넣는다. 즉시 반환하고 throw하지 않는다.
   void writeLog(LogName name, {Map<String, dynamic> detail = const {}}) {
+    // app_open은 로그인 전이면 user_id가 비므로 login에도 기기를 싣는다.
+    if (_device.isNotEmpty &&
+        (name == LogName.appOpen || name == LogName.login)) {
+      detail = {...detail, LogKeys.device: _device};
+    }
     _queue.add(
       UserLog(
         name: name,
@@ -126,6 +138,15 @@ class UserLogService with WidgetsBindingObserver {
     if (_queue.isNotEmpty) {
       _flushTimer ??= Timer(_flushEvery, () => unawaited(flush()));
     }
+  }
+
+  static Future<String> _readDevice() async {
+    final plugin = DeviceInfoPlugin();
+    if (Platform.isIOS) {
+      return (await plugin.iosInfo).utsname.machine;
+    }
+    final info = await plugin.androidInfo;
+    return '${info.manufacturer} ${info.model}';
   }
 
   // --- 러닝 이탈 감지 ------------------------------------------------------
