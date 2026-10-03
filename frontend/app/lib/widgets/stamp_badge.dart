@@ -18,6 +18,7 @@ class StampBadge extends StatelessWidget {
     this.acquired,
     this.size = 104,
     this.onTap,
+    this.showLabel = true,
   }) : assert(
          stamp != null || courseName != null,
          'stamp 또는 courseName 중 하나는 있어야 한다',
@@ -37,6 +38,9 @@ class StampBadge extends StatelessWidget {
 
   final double size;
   final VoidCallback? onTap;
+
+  /// 코스명 라벨을 그릴지. 팝업처럼 문구를 따로 두는 곳에서 끈다.
+  final bool showLabel;
 
   String get _name => courseName ?? stamp!.courseName;
   bool get _isAcquired => acquired ?? (stamp != null);
@@ -61,8 +65,10 @@ class StampBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(size),
           child: circle,
         ),
-        const SizedBox(height: 8),
-        SizedBox(width: size + 8, child: _label()),
+        if (showLabel) ...[
+          const SizedBox(height: 8),
+          SizedBox(width: size + 8, child: _label()),
+        ],
       ],
     );
   }
@@ -80,8 +86,9 @@ class StampBadge extends StatelessWidget {
           ? Image.network(
               _designUrl!,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
-                  _DefaultFace(acquiredAt: _isAcquired ? stamp?.acquiredAt : null),
+              errorBuilder: (_, _, _) => _DefaultFace(
+                acquiredAt: _isAcquired ? stamp?.acquiredAt : null,
+              ),
             )
           : _DefaultFace(acquiredAt: _isAcquired ? stamp?.acquiredAt : null),
     );

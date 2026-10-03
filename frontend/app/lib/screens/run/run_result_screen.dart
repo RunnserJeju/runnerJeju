@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/run_metrics_card.dart';
 import '../../widgets/run_map_view.dart';
 import '../../widgets/stamp_badge.dart';
+import '../../widgets/stamp_celebration.dart';
 import 'run_share_screen.dart';
 
 /// 러닝 결과: 기록을 서버에 저장하고, 완주 스탬프를 받았으면 함께 보여준다.
@@ -26,6 +27,9 @@ class _RunResultScreenState extends State<RunResultScreen> {
   /// 기록 저장은 화면 진입 시 자동으로 1회 실행하고, 실패하면 재시도 버튼을 준다.
   RunUploadResult? _uploadResult;
   RunStamp? _earnedStamp;
+
+  /// 획득 팝업은 한 번만. 스탬프가 업로드·검증 양쪽에서 올 수 있어서 막는다.
+  bool _celebrated = false;
   String? _saveError;
   bool _saving = true;
 
@@ -129,7 +133,12 @@ class _RunResultScreenState extends State<RunResultScreen> {
   Future<void> _loadStamp(String stampId) async {
     try {
       final stamp = await Services.instance.stamp.loadStamp(stampId);
-      if (mounted) setState(() => _earnedStamp = stamp);
+      if (!mounted) return;
+      setState(() => _earnedStamp = stamp);
+      if (!_celebrated) {
+        _celebrated = true;
+        await showStampCelebration(context, stamp);
+      }
     } catch (_) {
       // 무시: 스탬프 획득 사실은 이미 업로드 결과로 알고 있다.
     }

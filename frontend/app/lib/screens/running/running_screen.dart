@@ -576,8 +576,15 @@ class RunningScreenState extends State<RunningScreen> {
 
   /// 협력업체까지 길찾기. 현위치를 알면 도보 길찾기를, 모르면 카카오맵에 업체를
   /// 띄운다(거기서 길찾기를 누르면 카카오맵이 현위치를 잡는다).
+  ///
+  /// 먼저 우리 팝업으로 묻는다. 바로 스킴을 열면 iOS 시스템 팝업("카카오맵에서
+  /// 열까요?")만 뜨는데, 거기서 취소해도 웹 폴백 때문에 카카오맵으로 가 버려
+  /// 사용자가 헷갈렸다(#64).
   Future<void> _navigateToPartner(CoursePartner partner) async {
     writeLog(LogName.navigateClick, detail: {LogKeys.partnerId: partner.id});
+    final confirmed = await _confirmPartnerRoute(partner);
+    if (confirmed != true || !mounted) return;
+
     final me = _currentLocation.latest;
     final launcher = Services.instance.kakaoMapLauncher;
     final opened = me != null
@@ -679,6 +686,44 @@ class RunningScreenState extends State<RunningScreen> {
     fontWeight: FontWeight.w700,
   );
   static const _dialogButtonPadding = EdgeInsets.symmetric(horizontal: 8);
+
+  /// 협력업체 길찾기 전에 묻는다. '아니오'나 바깥 탭이면 아무 일도 안 한다.
+  Future<bool?> _confirmPartnerRoute(CoursePartner partner) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('길찾기'),
+        content: Text('${partner.name}까지\n카카오맵에서 길찾기를 실행할게요.'),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  style: OutlinedButton.styleFrom(
+                    textStyle: _dialogButtonText,
+                    padding: _dialogButtonPadding,
+                  ),
+                  child: const Text('아니오', maxLines: 1),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  style: FilledButton.styleFrom(
+                    textStyle: _dialogButtonText,
+                    padding: _dialogButtonPadding,
+                  ),
+                  child: const Text('예', maxLines: 1),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
   /// 러닝도 길찾기도 시작하지 않는다.

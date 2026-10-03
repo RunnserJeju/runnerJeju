@@ -28,7 +28,11 @@ class KakaoMapLauncher {
 
     final app = Uri.parse('$_appScheme$query');
     if (await canLaunchUrl(app)) {
-      if (await launchUrl(app)) return true;
+      // 앱이 있는데 실패했다면 iOS 시스템 팝업에서 취소한 것이다. 웹으로
+      // 넘기면 웹이 다시 앱을 띄워 취소가 무시된 것처럼 보인다(#64).
+      // 사용자가 거절한 것이므로 '열지 못함' 메시지도 내지 않게 true.
+      await launchUrl(app);
+      return true;
     }
 
     // 웹은 반드시 외부 브라우저로 띄운다. 인앱 웹뷰로 열면 카카오맵 웹이
