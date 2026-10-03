@@ -114,10 +114,12 @@ class RunningScreenState extends State<RunningScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  /// '협력업체' 칩으로 켜는 모드. 켜져 있으면 지도에 협력업체 전체를 핀으로 찍고,
-  /// 아래 시트 자리에 코스 목록 대신 협력업체 목록([PartnerListSheet])이 온다.
-  /// 코스 라벨은 그대로 둔다 — 업체와 코스의 위치 관계가 보여야 해서다.
-  bool _isPartnerMode = false;
+  /// 지도에 무엇을 찍을지. '협력업체' 칩이면 업체만(코스 라벨은 숨기고 아래 시트는
+  /// [PartnerListSheet]), '전체' 칩이면 코스와 업체를 함께. 코스를 고르면 courses로
+  /// 돌아가 그 코스만 남는다.
+  _MapLayer _layer = _MapLayer.courses;
+
+  bool get _isPartnerMode => _layer == _MapLayer.partners;
 
   /// 협력업체 전체. 처음 모드를 켤 때 한 번 받고, 실패했을 때만 다시 받는다.
   List<CoursePartner> _partners = const [];
@@ -292,9 +294,9 @@ class RunningScreenState extends State<RunningScreen> {
       _selectedDetail = null;
       _detailError = null;
       _selectedIsFavorite = false;
-      // 코스를 고르면(협력업체 시트의 연결 코스, 지도의 코스 라벨) 협력업체 모드를
-      // 끝낸다. 지도에는 그 코스에 연결된 업체만 남는다.
-      _isPartnerMode = false;
+      // 코스를 고르면(협력업체 시트의 연결 코스, 지도의 코스 라벨) 업체 레이어를
+      // 끈다. 지도에는 코스만 남는다.
+      _layer = _MapLayer.courses;
       _selectedPartner = null;
     });
 
@@ -440,7 +442,7 @@ class RunningScreenState extends State<RunningScreen> {
       _selectedDetail = null;
       _detailError = null;
       _isReversed = false;
-      _isPartnerMode = false;
+      _layer = _MapLayer.courses;
       _selectedPartner = null;
     });
     // 상세를 걷은 프레임에서 시트가 다시 트리에 붙는다. 붙은 뒤에 움직인다.
@@ -474,11 +476,18 @@ class RunningScreenState extends State<RunningScreen> {
   // 협력업체
   // ---------------------------------------------------------------------------
 
-  /// '협력업체' 칩. 켜면 코스 선택을 걷고 협력업체 전체를 지도·목록에 펼친다.
-  void _togglePartnerMode() {
-    if (_isPartnerMode) {
+  /// '협력업체' 칩. 켜면 코스 선택을 걷고 업체만 지도·목록에 펼친다.
+  void _togglePartnerMode() => _toggleLayer(_MapLayer.partners);
+
+  /// '전체' 칩. 코스와 업체를 함께 찍는다. 시트는 코스 목록 그대로.
+  void _toggleAllMode() => _toggleLayer(_MapLayer.all);
+
+  /// 같은 칩을 다시 누르면 코스만 보기로 돌아간다. 카메라는 건드리지 않는다 —
+  /// 보던 자리에서 마커만 바뀌어야 어디를 보고 있었는지 잃지 않는다.
+  void _toggleLayer(_MapLayer layer) {
+    if (_layer == layer) {
       setState(() {
-        _isPartnerMode = false;
+        _layer = _MapLayer.courses;
         _selectedPartner = null;
       });
       return;
@@ -487,19 +496,17 @@ class RunningScreenState extends State<RunningScreen> {
     _closeSearch();
     _detailRequestId++;
     setState(() {
-      _isPartnerMode = true;
+      _layer = layer;
       _selectedPartner = null;
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
       _isReversed = false;
     });
-    writeLog(LogName.partnerListOpen);
+    if (layer == _MapLayer.partners) writeLog(LogName.partnerListOpen);
 
     if (_partners.isEmpty || _partnersError != null) {
       unawaited(_loadPartners());
-    } else {
-      _fitPartners();
     }
   }
 
@@ -516,7 +523,6 @@ class RunningScreenState extends State<RunningScreen> {
         _partners = partners;
         _isLoadingPartners = false;
       });
-      if (_isPartnerMode && _selectedPartner == null) _fitPartners();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -524,13 +530,6 @@ class RunningScreenState extends State<RunningScreen> {
         _isLoadingPartners = false;
       });
     }
-  }
-
-  /// 협력업체가 모두 보이게 카메라를 맞춘다.
-  void _fitPartners() {
-    unawaited(
-      _mapController.fitPoints([for (final partner in _partners) partner.point]),
-    );
   }
 
   void _selectPartner(CoursePartner partner, {required LogSource source}) {
@@ -818,7 +817,8 @@ class RunningScreenState extends State<RunningScreen> {
                     listenable: _currentLocation,
                     builder: (context, _) => CourseMapView(
                       controller: _mapController,
-                      courses: _courses,
+                      // 협력업체 모드면 코스 라벨을 치워 업체만 보이게 한다.
+                      courses: _isPartnerMode ? const [] : _courses,
                       selectedCourseId: selected?.id,
                       selectedPath: detail?.path ?? const [],
                       // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
@@ -829,12 +829,11 @@ class RunningScreenState extends State<RunningScreen> {
                       selectedRestrooms: selected == null
                           ? const []
                           : (detail ?? selected).restrooms,
-                      // 협력업체 모드면 전체를, 코스를 골랐으면 그 코스의 업체만.
-                      partners: _isPartnerMode
-                          ? _partners
-                          : selected == null
+                      // 업체는 협력업체·전체 레이어에서만. 코스를 고르면 레이어가
+                      // courses로 돌아가므로 코스만 남는다.
+                      partners: _layer == _MapLayer.courses
                           ? const []
-                          : (detail ?? selected).partners,
+                          : _partners,
                       selectedPartnerId: _selectedPartner?.id,
                       onPartnerTap: _onPartnerMarkerTap,
                       myPosition: _currentLocation.latest,
@@ -883,7 +882,8 @@ class RunningScreenState extends State<RunningScreen> {
                       onTapFavorite: () => _showComingSoon('찜'),
                       onTapExplore: _openExplore,
                       onTapPartner: _togglePartnerMode,
-                      isPartnerMode: _isPartnerMode,
+                      onTapAll: _toggleAllMode,
+                      layer: _layer,
                     ),
                     const SizedBox(height: 10),
                     Padding(
@@ -1052,19 +1052,24 @@ class _SearchField extends StatelessWidget {
   }
 }
 
+/// 지도에 찍는 마커 레이어.
+enum _MapLayer { courses, partners, all }
+
 /// 검색창 아래 가로로 늘어서는 기능 칩들. 화면보다 길어지면 좌우로 스크롤한다.
 class _ActionChips extends StatelessWidget {
   const _ActionChips({
     required this.onTapFavorite,
     required this.onTapExplore,
     required this.onTapPartner,
-    required this.isPartnerMode,
+    required this.onTapAll,
+    required this.layer,
   });
 
   final VoidCallback onTapFavorite;
   final VoidCallback onTapExplore;
   final VoidCallback onTapPartner;
-  final bool isPartnerMode;
+  final VoidCallback onTapAll;
+  final _MapLayer layer;
 
   @override
   Widget build(BuildContext context) {
@@ -1083,7 +1088,13 @@ class _ActionChips extends StatelessWidget {
         icon: Icons.storefront_rounded,
         label: '협력업체',
         onTap: onTapPartner,
-        active: isPartnerMode,
+        active: layer == _MapLayer.partners,
+      ),
+      _ActionChip(
+        icon: Icons.layers_rounded,
+        label: '전체',
+        onTap: onTapAll,
+        active: layer == _MapLayer.all,
       ),
     ];
 

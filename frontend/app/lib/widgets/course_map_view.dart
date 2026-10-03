@@ -57,8 +57,8 @@ class CourseMapView extends StatefulWidget {
   final List<CourseFacility> selectedParkings;
   final List<CourseFacility> selectedRestrooms;
 
-  /// 지도에 핀으로 찍을 협력업체. 화면이 상황에 맞게 넘긴다 — 협력업체 모드면 전체,
-  /// 코스를 골랐으면 그 코스에 연결된 업체. 업체 이름을 핀 아래 글씨로 붙인다.
+  /// 지도에 핀으로 찍을 협력업체. 화면이 상황에 맞게 넘긴다 — 협력업체·전체
+  /// 레이어면 전체, 코스만 보는 중이면 비움. 업체 이름을 핀 아래 글씨로 붙인다.
   final List<CoursePartner> partners;
 
   /// 강조할 업체(목록·지도에서 고른 것). 큰 핀으로 그린다.

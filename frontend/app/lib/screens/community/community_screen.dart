@@ -48,6 +48,8 @@ class _CommunityScreenState extends State<CommunityScreen> {
             emptyTitle: '아직 열린 러닝 프로그램이 없어요',
             emptyMessage: '곧 다양한 프로그램이 열릴 예정이에요',
             emptyIcon: Icons.groups_rounded,
+            // 당겨서 새로고침으로 대신한다.
+            emptyActionLabel: null,
             builder: (context, programs) => _ProgramList(programs: programs),
           ),
         ),
