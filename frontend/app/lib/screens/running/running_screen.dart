@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -334,16 +335,28 @@ class RunningScreenState extends State<RunningScreen> {
     _showMessage(nowFavorite ? '찜한 코스에 담았어요.' : '찜을 해제했어요.');
   }
 
-  /// 고른 코스의 GPX 원본을 받아 공유 시트로 넘긴다. '파일에 저장'이나 다른 러닝
-  /// 앱으로 열기는 사용자가 시트에서 고른다 — 저장 위치를 앱이 정하면 플랫폼마다
-  /// 저장소 권한·폴더 노출 설정이 따로 필요하다.
+  /// 고른 코스의 GPX 원본을 받는다. 안드로이드 공유 시트에는 '기기에 저장'이 없어
+  /// 먼저 저장·보내기를 고르게 한다. iOS는 시트의 '파일에 저장'으로 충분하다.
+  /// 저장이 안 되는 구형 안드로이드는 공유 시트로 넘어간다.
   Future<void> _downloadSelectedGpx() async {
     final course = _selected;
     if (course == null || _downloadingGpx) return;
+
+    var saveToDevice = false;
+    if (Platform.isAndroid) {
+      final choice = await _askGpxDestination();
+      if (choice == null || !mounted) return;
+      saveToDevice = choice;
+    }
     setState(() => _downloadingGpx = true);
 
     try {
       final file = await Services.instance.course.downloadGpx(course);
+      if (saveToDevice &&
+          await Services.instance.course.saveGpxToDownloads(file)) {
+        if (mounted) _showMessage('다운로드 폴더에 저장했어요.');
+        return;
+      }
       if (!mounted) return;
 
       final size = MediaQuery.sizeOf(context);
@@ -365,6 +378,31 @@ class RunningScreenState extends State<RunningScreen> {
     } finally {
       if (mounted) setState(() => _downloadingGpx = false);
     }
+  }
+
+  /// GPX를 기기에 저장할지(true) 다른 앱으로 보낼지(false). 닫으면 null.
+  Future<bool?> _askGpxDestination() {
+    return showModalBottomSheet<bool>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.download_rounded),
+              title: const Text('기기에 저장'),
+              subtitle: const Text('다운로드 폴더에 저장해요'),
+              onTap: () => Navigator.of(sheetContext).pop(true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_rounded),
+              title: const Text('다른 앱으로 보내기'),
+              onTap: () => Navigator.of(sheetContext).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 시트 맨 아래 '코스 방향 바꾸기'. 출발·도착을 맞바꿔 지도·고도·러닝이 반대

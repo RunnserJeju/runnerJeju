@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../api/course_api.dart';
@@ -12,6 +13,10 @@ class CourseService {
   CourseService(this._courseApi);
 
   final CourseApi _courseApi;
+
+  static const MethodChannel _downloadsChannel = MethodChannel(
+    'runners_jeju/downloads',
+  );
 
   /// 파일명에 쓸 수 없는 문자(Windows 기준이 가장 엄격하다)와 제어 문자.
   /// 서버의 다운로드 파일명 규칙(routers/courses.py `_gpx_filename`)과 같다.
@@ -33,9 +38,10 @@ class CourseService {
     }
   }
 
-  /// 코스 GPX 원본을 받아 임시 파일로 저장한다. 공유 시트로 넘길 파일이다.
+  /// 코스 GPX 원본을 받아 임시 파일로 저장한다. 다운로드 폴더로 복사하거나
+  /// 공유 시트로 넘길 파일이다.
   ///
-  /// 공유가 끝나면 쓸 일이 없어 캐시 디렉터리에 두고 OS가 비우게 한다. 같은
+  /// 넘기고 나면 쓸 일이 없어 캐시 디렉터리에 두고 OS가 비우게 한다. 같은
   /// 코스는 같은 이름으로 덮어써서 누를 때마다 파일이 쌓이지 않는다.
   Future<File> downloadGpx(RunningCourse course) async {
     try {
@@ -51,6 +57,25 @@ class CourseService {
       throw AppException('GPX 파일을 받지 못했어요.', e);
     } catch (e) {
       throw AppException('GPX 파일을 받지 못했어요.', e);
+    }
+  }
+
+  /// 받은 GPX를 기기의 다운로드 폴더에 넣는다. 안드로이드 10+에서만 되고, 그 밖
+  /// (iOS·구형 안드로이드)에는 false를 돌려 호출부가 공유 시트를 쓰게 한다.
+  Future<bool> saveGpxToDownloads(File file) async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final saved = await _downloadsChannel.invokeMethod<bool>(
+        'saveToDownloads',
+        {
+          'path': file.path,
+          'name': file.uri.pathSegments.last,
+          'mimeType': 'application/gpx+xml',
+        },
+      );
+      return saved ?? false;
+    } catch (e) {
+      throw AppException('GPX 파일을 저장하지 못했어요.', e);
     }
   }
 
