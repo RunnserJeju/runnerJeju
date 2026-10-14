@@ -21,5 +21,7 @@ import UIKit
     RunLiveActivityChannel.register(with: engineBridge.applicationRegistrar.messenger())
     // 러닝 지도 현위치 마커의 방향 삼각형. Flutter의 HeadingService와 짝.
     HeadingStreamHandler.register(with: engineBridge.applicationRegistrar.messenger())
+    // 코스 GPX를 GPX 앱·공유 시트로 넘긴다. Flutter의 CourseService와 짝.
+    GpxShareChannel.register(with: engineBridge.applicationRegistrar.messenger())
   }
 }

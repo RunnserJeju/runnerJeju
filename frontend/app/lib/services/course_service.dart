@@ -79,9 +79,83 @@ class CourseService {
     }
   }
 
+  /// 이 기기에 깔린 GPX 받는 워치 앱(안드로이드만).
+  Future<List<GpxApp>> installedGpxApps() async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final installed = await _downloadsChannel.invokeListMethod<String>(
+        'installedPackages',
+        {'packages': GpxApp.values.map((app) => app.package).toList()},
+      );
+      return GpxApp.values
+          .where((app) => installed?.contains(app.package) ?? false)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// [app]에 GPX를 연다. 그 앱이 파일을 직접 받지 않으면 다운로드 폴더에 저장하고
+  /// 앱만 띄운 뒤 false를 돌린다 — 사용자가 앱 안에서 가져오기로 골라야 한다.
+  Future<bool> openGpxInApp(File file, GpxApp app) async {
+    try {
+      final opened = await _downloadsChannel.invokeMethod<bool>('openInApp', {
+        'path': file.path,
+        'mimeType': 'application/gpx+xml',
+        'package': app.package,
+      });
+      if (opened ?? false) return true;
+      if (!await saveGpxToDownloads(file)) {
+        throw AppException('GPX 파일을 저장하지 못했어요.');
+      }
+      await _downloadsChannel.invokeMethod<bool>('launchApp', {
+        'package': app.package,
+      });
+      return false;
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw AppException('${app.label} 앱을 열지 못했어요.', e);
+    }
+  }
+
+  /// iOS: GPX를 받는다고 선언한 앱(가민·순토 등) 목록을 띄운다. 그런 앱이 없으면 false.
+  Future<bool> openInGpxApps(File file) async {
+    try {
+      final shown = await _downloadsChannel.invokeMethod<bool>('openInGpxApp', {
+        'path': file.path,
+      });
+      return shown ?? false;
+    } catch (e) {
+      throw AppException('GPX 파일을 열지 못했어요.', e);
+    }
+  }
+
+  /// iOS: 공유 시트. share_plus와 달리 GPX 형식 두 가지를 함께 붙여 넘긴다.
+  Future<void> shareGpxOnIOS(File file) async {
+    try {
+      await _downloadsChannel.invokeMethod<bool>('share', {'path': file.path});
+    } catch (e) {
+      throw AppException('GPX 파일을 열지 못했어요.', e);
+    }
+  }
+
   static String gpxFileName(String courseName) {
     var name = courseName.replaceAll(_unsafeFilename, '_').trim();
     name = name.replaceAll(RegExp(r'^[ .]+|[ .]+$'), '');
     return '${name.isEmpty ? 'course' : name}.gpx';
   }
+}
+
+/// GPX 다운로드에서 바로 여는 워치 앱. 패키지를 바꾸면 AndroidManifest의
+/// `<queries>`도 함께 바꾼다.
+enum GpxApp {
+  garmin('Garmin Connect', 'com.garmin.android.apps.connectmobile', '코스로 가져와요'),
+  suunto('Suunto', 'com.stt.android.suunto', '경로로 가져와요');
+
+  const GpxApp(this.label, this.package, this.description);
+
+  final String label;
+  final String package;
+  final String description;
 }
