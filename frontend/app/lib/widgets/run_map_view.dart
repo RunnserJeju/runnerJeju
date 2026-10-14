@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 // 카카오맵 SDK는 Route, Polygon 등 머티리얼과 겹치는 이름을 내보내므로 접두사를 붙인다.
@@ -39,6 +41,7 @@ class RunMapView extends StatefulWidget {
     this.onUserMovedCamera,
     this.showCourseDirection = false,
     this.isAwaitingLocation = false,
+    this.heading,
   });
 
   /// 따라 달릴 코스 경로. 강조색 실선으로 그린다.
@@ -87,6 +90,11 @@ class RunMapView extends StatefulWidget {
   /// 지금 현위치를 조회하는 중인지. 그릴 좌표가 하나도 없을 때, 곧 들어올
   /// 것인지(러닝 화면) 애초에 없는 것인지(빈 기록)를 이 값으로 가른다.
   final bool isAwaitingLocation;
+
+  /// 폰이 향한 방향(진북 기준, 도). 값이 있으면 현위치 원에 삼각형을 붙여 그
+  /// 방향으로 돌리고, null이면 원만 그린다. 초당 수십 번 바뀌므로 위젯을 다시
+  /// 만들지 않고 이 위젯이 직접 듣는다.
+  final ValueListenable<double?>? heading;
 
   @override
   State<RunMapView> createState() => _RunMapViewState();
@@ -258,12 +266,131 @@ class _RunMapViewState extends State<RunMapView>
       _currentPositionStyle ??= kakao.PoiStyle(
         // 기본 앵커는 아래쪽 끝(핀 모양 기준)이라, 마커를 좌표 중심에 놓으려면 옮겨야 한다.
         anchor: const kakao.KPoint(0.5, 0.5),
-        icon: await buildMyPositionMarker(),
+        icon: await buildRunPositionMarker(),
       );
+
+  /// 원 + 방향 삼각형. 판 중심이 원 중심이라 앵커도 가운데다.
+  kakao.PoiStyle? _headingPositionStyle;
+
+  Future<kakao.PoiStyle> _ensureHeadingPositionStyle() async =>
+      _headingPositionStyle ??= kakao.PoiStyle(
+        anchor: const kakao.KPoint(0.5, 0.5),
+        icon: await buildRunHeadingMarker(),
+      );
+
+  // ---------------------------------------------------------------------------
+  // 방향 삼각형
+  // ---------------------------------------------------------------------------
+
+  /// 지금 마커가 삼각형 판을 쓰고 있는지.
+  bool _markerShowsHeading = false;
+
+  /// 마지막으로 보낸 회전각(도). 0~360으로 접지 않고 누적한다 — 350°에서 10°로
+  /// 갈 때 +20°로 보내야 네이티브 애니메이션이 반대로 340° 돌지 않는다.
+  double? _sentHeadingAngle;
+
+  bool _isSyncingHeading = false;
+  bool _needsHeadingSync = false;
+  Timer? _headingThrottle;
+  final Stopwatch _headingClock = Stopwatch()..start();
+  Duration? _lastHeadingSyncAt;
+
+  /// 이보다 작은 변화는 보내지 않는다. 눈에 안 보이는 떨림에 플랫폼 호출을 쓰지 않게.
+  static const double _minHeadingStep = 2;
+
+  /// 회전 호출 최소 간격(≈10Hz). 회전도 플랫폼 왕복이라 센서 속도(≈16Hz+)를 다
+  /// 따라가지 않는다. 사이는 네이티브 애니메이션([_headingAnimationMillis])이 메운다.
+  static const Duration _headingInterval = Duration(milliseconds: 100);
+  static const double _headingAnimationMillis = 100;
+
+  /// SDK 회전각의 부호. 시계방향이 +라고 보고 1로 둔다. 실기기에서 삼각형이 좌우
+  /// 반대로 돌면 -1로 바꾼다.
+  static const double _headingRotationSign = 1;
+
+  void _onHeadingChanged() {
+    if (_disposed || _currentPositionMarker == null) return;
+    final last = _lastHeadingSyncAt;
+    final now = _headingClock.elapsed;
+    if (last == null || now - last >= _headingInterval) {
+      _headingThrottle?.cancel();
+      _headingThrottle = null;
+      _lastHeadingSyncAt = now;
+      unawaited(_syncHeading());
+      return;
+    }
+    // 간격 안에 들어온 값은 버리지 않고 간격 끝에 한 번 반영한다. 몸을 돌리다 멈췄을 때 마지막 방향이 남아야 한다.
+    _headingThrottle ??= Timer(_headingInterval - (now - last), () {
+      _headingThrottle = null;
+      _onHeadingChanged();
+    });
+  }
+
+  /// 마커 판(원/원+삼각형)을 방향 유무에 맞추고, 북쪽을 향하는 각도로 돌린다.
+  Future<void> _syncHeading() async {
+    if (_isSyncingHeading) {
+      _needsHeadingSync = true;
+      return;
+    }
+    _isSyncingHeading = true;
+    try {
+      do {
+        _needsHeadingSync = false;
+        final marker = _currentPositionMarker;
+        if (marker == null || _disposed) return;
+
+        final heading = widget.heading?.value;
+        final wantsHeading = heading != null;
+        if (wantsHeading != _markerShowsHeading) {
+          final style = wantsHeading
+              ? await _ensureHeadingPositionStyle()
+              : await _ensureCurrentPositionStyle();
+          if (_disposed || !identical(_currentPositionMarker, marker)) return;
+          await marker.changeStyles(style);
+          _markerShowsHeading = wantsHeading;
+          // 판을 바꾼 뒤에는 회전이 남아 있다고 믿지 않고 다시 보낸다.
+          _sentHeadingAngle = null;
+        }
+        if (heading == null) continue;
+
+        final previous = _sentHeadingAngle;
+        final next = previous == null
+            ? heading
+            : previous + _shortestTurn(previous, heading);
+        if (previous != null && (next - previous).abs() < _minHeadingStep) {
+          continue;
+        }
+        _sentHeadingAngle = next;
+        await marker.rotate(
+          _headingRotationSign * next * math.pi / 180,
+          // 처음 붙일 때는 북쪽에서 돌아가는 모습 없이 바로 그 방향에 둔다.
+          previous == null ? null : _headingAnimationMillis,
+        );
+      } while (_needsHeadingSync && !_disposed);
+    } finally {
+      _isSyncingHeading = false;
+    }
+  }
+
+  /// [from]에서 [to]로 가는 가장 짧은 회전(-180~180도).
+  static double _shortestTurn(double from, double to) {
+    final delta = (to - from) % 360;
+    return delta > 180 ? delta - 360 : delta;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.heading?.addListener(_onHeadingChanged);
+  }
 
   @override
   void didUpdateWidget(covariant RunMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.heading, widget.heading)) {
+      oldWidget.heading?.removeListener(_onHeadingChanged);
+      widget.heading?.addListener(_onHeadingChanged);
+      _onHeadingChanged();
+    }
     // 러닝 화면은 경과 시간 때문에 1초마다 rebuild된다. 지도에 넣을 값이 그대로면
     // 다시 그리지 않는다 — 그리기는 전부 플랫폼 왕복이라, 변화 없이 매초 돌리면
     // 뒤따르는 카메라 이동까지 밀려서 현위치 추적이 끊긴다.
@@ -292,6 +419,8 @@ class _RunMapViewState extends State<RunMapView>
   @override
   void dispose() {
     _disposed = true;
+    widget.heading?.removeListener(_onHeadingChanged);
+    _headingThrottle?.cancel();
     _ticker?.dispose();
     super.dispose();
   }
@@ -448,8 +577,13 @@ class _RunMapViewState extends State<RunMapView>
       _currentPositionMarker = await controller.labelLayer.addPoi(
         position.toLatLng(),
         style: style,
+        transform: kakao.TransformMethod.absoluteRoatation,
       );
       _renderedPosition = position;
+      // 원만 단 채로 만들었다. 방향을 이미 알면 바로 삼각형 판으로 바꾼다.
+      _markerShowsHeading = false;
+      _sentHeadingAngle = null;
+      _onHeadingChanged();
     }
 
     _liveRoute ??= _GrowingRoute(controller.routeLayer, _runStyle, _runZOrder);
@@ -556,8 +690,12 @@ class _RunMapViewState extends State<RunMapView>
     final marker = _currentPositionMarker;
     if (marker != null) {
       _stopTracking(controller);
+      _headingThrottle?.cancel();
+      _headingThrottle = null;
       await marker.remove();
       _currentPositionMarker = null;
+      _markerShowsHeading = false;
+      _sentHeadingAngle = null;
     }
 
     await _liveRoute?.clear();
@@ -909,8 +1047,8 @@ class _RunMapViewState extends State<RunMapView>
   ///
   /// 우리가 프레임마다 moveCamera를 부르는 것과 결과는 같아 보이지만, 이동을
   /// 네이티브가 마커와 같은 타임라인으로 처리해서 카메라와 마커가 따로 놀지
-  /// 않는다. 회전 추적(setTrackingRotate)은 켜지 않는다 — 마커가 원형이라 방향이
-  /// 없고, 지도가 돌면 코스 폴리라인만 읽기 어려워진다.
+  /// 않는다. 회전 추적(setTrackingRotate)은 켜지 않는다 — 마커가 방향 삼각형으로
+  /// 돌 때마다 지도까지 돌면 코스 폴리라인을 읽기 어려워진다.
   ///
   /// 시작·정지를 **기다리지 않는다.** 두 호출이 돌려주는 값은 늘 null이라
   /// 기다려서 얻는 정보가 없고(추적이 실제로 걸렸는지는 알려주지 않는다),

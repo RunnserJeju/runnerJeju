@@ -19,5 +19,7 @@ import UIKit
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     // 러닝 잠금화면 위젯(Live Activity) 채널. Flutter의 RunLiveWidget과 짝.
     RunLiveActivityChannel.register(with: engineBridge.applicationRegistrar.messenger())
+    // 러닝 지도 현위치 마커의 방향 삼각형. Flutter의 HeadingService와 짝.
+    HeadingStreamHandler.register(with: engineBridge.applicationRegistrar.messenger())
   }
 }

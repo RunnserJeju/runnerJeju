@@ -14,6 +14,7 @@ import 'auth_service.dart';
 import 'course_service.dart';
 import 'current_location.dart';
 import 'favorite_service.dart';
+import 'heading_service.dart';
 import 'kakao_map_launcher.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
@@ -100,6 +101,9 @@ class Services {
 
   /// 기기 정지 감지(가속도계). 러닝 중 정지 상태의 GPS 지터를 거르는 데 쓴다.
   late final MotionService motion = MotionService();
+
+  /// 폰이 향한 방향(나침반). 러닝 화면에 있는 동안만 켠다.
+  late final HeadingService heading = HeadingService(currentLocation);
 
   /// 진행 중인 러닝은 화면 전환과 무관하게 유지되어야 하므로 전역에 하나만 둔다.
   late final RunTracker runTracker = RunTracker(
