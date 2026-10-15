@@ -84,7 +84,7 @@ class CourseMapView extends StatefulWidget {
   /// 지도가 만들어질 때 한 번만 읽는다.
   final GeoPoint? initialCenter;
 
-  /// 코스를 아직 하나도 못 받았을 때 보여줄 중심(제주도 한가운데).
+  /// 현위치를 모를 때(권한 거부, 첫 위치 전) 보여줄 중심(제주도 한가운데).
   static const GeoPoint jejuCenter = GeoPoint(
     latitude: 33.3846,
     longitude: 126.5535,
@@ -159,6 +159,17 @@ class _CourseMapViewState extends State<CourseMapView> {
   /// 옮긴 화면을 목록이 갱신될 때마다 되돌리지 않는다.
   bool _hasFittedCourses = false;
 
+  /// 첫 화면 위치가 정해졌는지. [CourseMapView.initialCenter]나 현위치로 시작했거나,
+  /// 늦게 잡힌 첫 위치로 한 번 옮겼으면 true. 그 뒤로는 현위치로 자동 이동하지
+  /// 않고 코스 전체 맞추기도 하지 않는다.
+  late bool _isStartSettled;
+
+  /// 사용자가 손으로 지도를 움직였는지. 그 뒤에 첫 위치가 와도 옮기지 않는다.
+  bool _userMovedCamera = false;
+
+  /// 지도를 만들 때 한 번만 정한다. KakaoMapOption은 생성 때만 읽힌다.
+  late final GeoPoint? _startCenter = widget.initialCenter ?? widget.myPosition;
+
   bool _disposed = false;
 
   // 갱신은 전부 비동기 플랫폼 호출이라 이전 호출이 끝나기 전에 다음 호출이 들어올
@@ -181,10 +192,14 @@ class _CourseMapViewState extends State<CourseMapView> {
 
   static const int _routeZOrder = 9000;
 
+  /// 현위치로 시작할 때의 배율. 내 위치 버튼과 같다.
+  static const int _myPositionZoomLevel = 15;
+
   @override
   void initState() {
     super.initState();
     widget.controller?._state = this;
+    _isStartSettled = _startCenter != null;
   }
 
   @override
@@ -240,14 +255,20 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     return kakao.KakaoMap(
       option: kakao.KakaoMapOption(
-        position: (widget.initialCenter ?? CourseMapView.jejuCenter).toLatLng(),
-        zoomLevel: widget.initialCenter == null
-            ? _islandZoomLevel
-            : _focusZoomLevel,
+        position: (_startCenter ?? CourseMapView.jejuCenter).toLatLng(),
+        zoomLevel: widget.initialCenter != null
+            ? _focusZoomLevel
+            : _startCenter != null
+            ? _myPositionZoomLevel
+            : _islandZoomLevel,
       ),
       onMapReady: (controller) {
         _controller = controller;
         _redraw();
+      },
+      // 우리가 옮긴 이동은 unknown으로 온다.
+      onCameraMoveStart: (gestureType) {
+        if (gestureType != kakao.GestureType.unknown) _userMovedCamera = true;
       },
       // 라벨을 뺀 지도 바닥만 받는다. onMapClick은 라벨을 눌러도 함께 불려서
       // 방금 고른 코스를 곧바로 다시 지우게 된다.
@@ -366,6 +387,7 @@ class _CourseMapViewState extends State<CourseMapView> {
         await _syncFacilityMarkers(controller);
         await _syncPartnerMarkers(controller);
         await _syncMyPosition(controller);
+        await _centerOnFirstPosition();
         await _fitOnFirstLoad();
       } while (_needsRedraw && !_disposed);
     } finally {
@@ -669,12 +691,29 @@ class _CourseMapViewState extends State<CourseMapView> {
     await marker.move(position.toLatLng());
   }
 
+  /// 현위치를 모른 채 시작했으면, 첫 위치가 잡힐 때 한 번만 그리로 옮긴다.
+  /// 그 사이 사용자가 지도를 움직였거나 코스·업체를 골랐으면 그 화면을 둔다.
+  Future<void> _centerOnFirstPosition() async {
+    if (_isStartSettled) return;
+    if (_userMovedCamera ||
+        widget.selectedCourseId != null ||
+        widget.selectedPartnerId != null) {
+      _isStartSettled = true;
+      return;
+    }
+    final position = widget.myPosition;
+    if (position == null) return;
+
+    _isStartSettled = true;
+    await moveTo(position, zoomLevel: _myPositionZoomLevel);
+  }
+
   Future<void> _fitOnFirstLoad() async {
     if (_hasFittedCourses || _markers.isEmpty) return;
     _hasFittedCourses = true;
 
-    // 처음 볼 자리를 밖에서 정해 줬으면 그 자리를 그대로 둔다.
-    if (widget.initialCenter != null) return;
+    // 처음 볼 자리를 밖에서 정해 줬거나 현위치로 정해졌으면 그 자리를 그대로 둔다.
+    if (_isStartSettled) return;
 
     // 첫 화면이라 애니메이션 없이 바로 맞춘다. 맞춘 뒤 몇 단계 더 당기는데,
     // 애니메이션을 켜 두면 맞추는 중에 당겨져 결과가 들쭉날쭉하다.
