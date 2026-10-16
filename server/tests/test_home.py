@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from app.admin import home as admin_home
 from app.models import CourseCuration, PartnerCuration
 from app.routers import home
+from app.schemas import HomeCurationItem, HomeCurationPayload
 
 
 class _Result:
@@ -41,36 +42,59 @@ class FakeSession:
         self.committed = True
 
 
-def test_app_curation_returns_ids_in_sort_order():
+def _payload(*items) -> HomeCurationPayload:
+    return HomeCurationPayload(items=list(items))
+
+
+def test_app_curation_returns_items_in_sort_order():
     c1, c2, p1 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    db = FakeSession([c1, c2], [p1])
+    db = FakeSession(
+        [
+            CourseCuration(course_id=c1, sort_order=0, describe="노을 맛집", detail={"tag": "x"}),
+            CourseCuration(course_id=c2, sort_order=1, describe=None, detail=None),
+        ],
+        [PartnerCuration(partner_id=p1, sort_order=0, describe=None, detail={})],
+    )
 
     result = home.get_home_curation(db, "user-1")
 
-    assert result.course_ids == [c1, c2]
-    assert result.partner_ids == [p1]
+    assert [item.id for item in result.courses] == [c1, c2]
+    assert result.courses[0].describe == "노을 맛집"
+    assert result.courses[0].detail == {"tag": "x"}
+    # detail이 비어 있으면 빈 객체로 내린다.
+    assert result.courses[1].detail == {}
+    assert [item.id for item in result.partners] == [p1]
     assert "ORDER BY course_curations.sort_order" in str(db.statements[0])
     assert "ORDER BY partner_curations.sort_order" in str(db.statements[1])
 
 
-def test_replaces_courses_in_given_order():
+def test_replaces_courses_in_given_order_with_describe():
     a, b = uuid.uuid4(), uuid.uuid4()
     # 첫 execute(존재 확인)가 두 id를 모두 찾는다.
     db = FakeSession([a, b])
 
-    admin_home.set_curation_courses(admin_home.HomeCurationPayload(ids=[b, a]), db)
+    admin_home.set_curation_courses(
+        _payload(
+            HomeCurationItem(id=b, describe="  해안 따라 달리기  ", detail={"k": 1}),
+            HomeCurationItem(id=a, describe="   "),
+        ),
+        db,
+    )
 
     # 존재 확인 → 전부 지우기 → 고른 순서대로 다시 넣기.
     assert str(db.statements[1]).startswith("DELETE FROM course_curations")
     assert all(isinstance(row, CourseCuration) for row in db.added)
     assert [(row.course_id, row.sort_order) for row in db.added] == [(b, 0), (a, 1)]
+    # 설명은 앞뒤 공백을 걷고, 비면 None.
+    assert [row.describe for row in db.added] == ["해안 따라 달리기", None]
+    assert [row.detail for row in db.added] == [{"k": 1}, {}]
     assert db.committed
 
 
 def test_empty_list_clears_section():
     db = FakeSession()
 
-    admin_home.set_featured_partners(admin_home.HomeCurationPayload(ids=[]), db)
+    admin_home.set_featured_partners(_payload(), db)
 
     # 확인할 id가 없으니 select 없이 지우기만 한다.
     assert len(db.statements) == 1
@@ -83,7 +107,7 @@ def test_partner_rows_use_partner_table():
     p = uuid.uuid4()
     db = FakeSession([p])
 
-    admin_home.set_featured_partners(admin_home.HomeCurationPayload(ids=[p]), db)
+    admin_home.set_featured_partners(_payload(HomeCurationItem(id=p)), db)
 
     assert [type(row) for row in db.added] == [PartnerCuration]
     assert db.added[0].partner_id == p
@@ -95,7 +119,7 @@ def test_rejects_unknown_ids():
 
     with pytest.raises(HTTPException) as exc:
         admin_home.set_featured_partners(
-            admin_home.HomeCurationPayload(ids=[known, unknown]), db
+            _payload(HomeCurationItem(id=known), HomeCurationItem(id=unknown)), db
         )
 
     assert exc.value.status_code == 422
@@ -108,7 +132,9 @@ def test_rejects_duplicates():
     db = FakeSession([a])
 
     with pytest.raises(HTTPException) as exc:
-        admin_home.set_curation_courses(admin_home.HomeCurationPayload(ids=[a, a]), db)
+        admin_home.set_curation_courses(
+            _payload(HomeCurationItem(id=a), HomeCurationItem(id=a)), db
+        )
 
     assert exc.value.status_code == 422
     assert not db.committed

@@ -1,10 +1,8 @@
 """운영자 전용 홈 구성 API — 앱 홈 '러닝 코스 큐레이션'과 '추천 협력 업체'.
 
-각 섹션에 띄울 항목을 순서대로 담은 id 목록을 통째로 받아 교체한다
+각 섹션에 띄울 항목(id + 설명 + detail)을 순서대로 담은 목록을 통째로 받아 교체한다
 (course_curations / partner_curations). 조회는 앱과 같은 형태(HomeCurationOut)다.
 """
-
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
@@ -13,12 +11,15 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Course, CourseCuration, Partner, PartnerCuration
 from app.routers.home import load_curation
-from app.schemas import HomeCurationOut, HomeCurationPayload
+from app.schemas import HomeCurationItem, HomeCurationOut, HomeCurationPayload
 
 router = APIRouter(prefix="/home", tags=["home"])
 
 
-def _replace(db: Session, target, curation, key: str, ids: list[uuid.UUID], label: str) -> None:
+def _replace(
+    db: Session, target, curation, key: str, items: list[HomeCurationItem], label: str
+) -> None:
+    ids = [item.id for item in items]
     if len(set(ids)) != len(ids):
         raise HTTPException(status_code=422, detail=f"같은 {label}이 두 번 들어 있어요.")
 
@@ -32,7 +33,16 @@ def _replace(db: Session, target, curation, key: str, ids: list[uuid.UUID], labe
 
     # 전부 지우고 새로 넣는다 — 한 트랜잭션이라 중간 상태는 안 보인다.
     db.execute(delete(curation))
-    db.add_all(curation(**{key: id_, "sort_order": order}) for order, id_ in enumerate(ids))
+    db.add_all(
+        curation(
+            **{key: item.id},
+            sort_order=order,
+            # 빈 문자열은 "없음"으로 저장한다 — 폼에서 칸을 지우면 null로 돌아가게.
+            describe=(item.describe or "").strip() or None,
+            detail=item.detail,
+        )
+        for order, item in enumerate(items)
+    )
     db.commit()
 
 
@@ -49,10 +59,10 @@ def set_curation_courses(payload: HomeCurationPayload, db: Session = Depends(get
     공개 범위는 따지지 않는다 — 고른 코스가 비공개면 앱 코스 목록에 없으므로
     일반 사용자 홈에도 안 나온다.
     """
-    _replace(db, Course, CourseCuration, "course_id", payload.ids, "코스")
+    _replace(db, Course, CourseCuration, "course_id", payload.items, "코스")
 
 
 @router.put("/partners", status_code=204)
 def set_featured_partners(payload: HomeCurationPayload, db: Session = Depends(get_db)):
     """홈 '추천 협력 업체'를 교체한다. (관리자 전용 — 라우터 레벨에서 강제)"""
-    _replace(db, Partner, PartnerCuration, "partner_id", payload.ids, "협력업체")
+    _replace(db, Partner, PartnerCuration, "partner_id", payload.items, "협력업체")

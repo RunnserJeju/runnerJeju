@@ -264,6 +264,10 @@ class CourseCuration(Base):
     )
     # 홈에서 보여줄 순서(작을수록 앞).
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # 운영자가 쓰는 큐레이션 설명. 앱 노출 방식은 아직 정하지 않았다.
+    describe: Mapped[str | None] = mapped_column(Text, default=None)
+    # 형태 미정 부가 정보(Partner.detail과 같은 전략).
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 
 class PartnerCuration(Base):
@@ -281,6 +285,10 @@ class PartnerCuration(Base):
     )
     # 홈에서 보여줄 순서(작을수록 앞).
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # 운영자가 쓰는 큐레이션 설명. 앱 노출 방식은 아직 정하지 않았다.
+    describe: Mapped[str | None] = mapped_column(Text, default=None)
+    # 형태 미정 부가 정보(Partner.detail과 같은 전략).
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 
 class Run(Base):

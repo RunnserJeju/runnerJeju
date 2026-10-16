@@ -209,6 +209,16 @@ class PartnerOut(PartnerSummary):
     updated_at: datetime
 
 
+class HomeCurationItem(BaseModel):
+    """홈 섹션의 한 칸. id는 섹션에 따라 코스 id 또는 협력업체 id다."""
+
+    id: uuid.UUID
+    # 운영자가 쓰는 큐레이션 설명. 앱 노출 방식은 아직 정하지 않았다.
+    describe: str | None = None
+    # 형태 미정 부가 정보. 서버는 내용을 해석하지 않는다.
+    detail: dict = Field(default_factory=dict)
+
+
 class HomeCurationOut(BaseModel):
     """앱 홈 구성. GET /home/curation(앱), GET /admin/home(운영 웹).
 
@@ -216,15 +226,15 @@ class HomeCurationOut(BaseModel):
     """
 
     # '러닝 코스 큐레이션'에 띄울 코스.
-    course_ids: list[uuid.UUID]
+    courses: list[HomeCurationItem]
     # '추천 협력 업체'에 띄울 업체.
-    partner_ids: list[uuid.UUID]
+    partners: list[HomeCurationItem]
 
 
 class HomeCurationPayload(BaseModel):
     """홈 섹션 하나의 구성(전체 교체). PUT /admin/home/courses, /admin/home/partners."""
 
-    ids: list[uuid.UUID]
+    items: list[HomeCurationItem]
 
 
 class CourseListItem(BaseModel):

@@ -61,12 +61,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final curation = Services.instance.home.loadCuration();
     _curatedCoursesFuture = _pick(
       Services.instance.course.loadCourses(),
-      curation.then((c) => c.courseIds),
+      curation.then((c) => [for (final item in c.courses) item.id]),
       (course) => course.id,
     );
     _featuredPartnersFuture = _pick(
       Services.instance.partner.loadPartners(),
-      curation.then((c) => c.partnerIds),
+      curation.then((c) => [for (final item in c.partners) item.id]),
       (partner) => partner.id,
     );
   }

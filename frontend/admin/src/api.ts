@@ -313,12 +313,21 @@ export function deletePartner(id: string): Promise<void> {
 
 // --- 홈 구성 ------------------------------------------------------------
 
+/** 홈 섹션의 한 칸. 서버 HomeCurationItem과 1:1. id는 코스 또는 협력업체 id. */
+export interface HomeCurationItem {
+  id: string
+  /** 큐레이션 설명. 앱 노출 방식은 아직 미정. */
+  describe: string | null
+  /** 형태 미정 부가 정보. 편집 UI는 없고 저장 시 그대로 돌려보낸다. */
+  detail: Record<string, unknown>
+}
+
 /** 앱 홈 구성. 서버 HomeCurationOut과 1:1. 앞에 있을수록 먼저 나온다. */
 export interface HomeCuration {
   /** '러닝 코스 큐레이션'에 띄울 코스. */
-  course_ids: string[]
+  courses: HomeCurationItem[]
   /** '추천 협력 업체'에 띄울 업체. */
-  partner_ids: string[]
+  partners: HomeCurationItem[]
 }
 
 export function getHome(): Promise<HomeCuration> {
@@ -326,20 +335,20 @@ export function getHome(): Promise<HomeCuration> {
 }
 
 /** 앱 홈 '러닝 코스 큐레이션'을 교체한다. 앞에 있을수록 먼저 나온다. */
-export function setHomeCourses(ids: string[]): Promise<void> {
+export function setHomeCourses(items: HomeCurationItem[]): Promise<void> {
   return request('/admin/home/courses', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
+    body: JSON.stringify({ items }),
   })
 }
 
 /** 앱 홈 '추천 협력 업체'를 교체한다. 앞에 있을수록 먼저 나온다. */
-export function setHomePartners(ids: string[]): Promise<void> {
+export function setHomePartners(items: HomeCurationItem[]): Promise<void> {
   return request('/admin/home/partners', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
+    body: JSON.stringify({ items }),
   })
 }
 

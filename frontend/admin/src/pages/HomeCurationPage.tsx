@@ -9,6 +9,7 @@ import {
   setHomePartners,
   type Course,
   type HomeCuration,
+  type HomeCurationItem,
   type Partner,
 } from '../api'
 
@@ -65,18 +66,16 @@ export default function HomeCurationPage({ onUnauthorized }: Props) {
           title="러닝 코스 큐레이션"
           noun="코스"
           items={courses}
-          initialIds={home.course_ids}
+          initial={home.courses}
           optionLabel={(c) => `${c.name} (${c.distance_km}km)`}
           renderItem={(c) => (
             <>
-              <td style={{ width: 56 }}>
-                {c.thumbnail_url ? (
-                  <img className="thumb" src={c.thumbnail_url} alt="" />
-                ) : (
-                  <div className="thumb placeholder">없음</div>
-                )}
-              </td>
-              <td>
+              {c.thumbnail_url ? (
+                <img className="thumb" src={c.thumbnail_url} alt="" />
+              ) : (
+                <div className="thumb placeholder">없음</div>
+              )}
+              <div>
                 <strong>{c.name}</strong>
                 <div className="muted">
                   {c.distance_km}km · {c.address}
@@ -84,7 +83,7 @@ export default function HomeCurationPage({ onUnauthorized }: Props) {
                 {c.visibility !== 'public' && (
                   <div className="muted">비공개 코스라 일반 사용자 홈에는 안 보여요.</div>
                 )}
-              </td>
+              </div>
             </>
           )}
           save={setHomeCourses}
@@ -98,13 +97,13 @@ export default function HomeCurationPage({ onUnauthorized }: Props) {
           title="추천 협력 업체"
           noun="협력업체"
           items={partners}
-          initialIds={home.partner_ids}
+          initial={home.partners}
           optionLabel={(p) => (p.address ? `${p.name} · ${p.address}` : p.name)}
           renderItem={(p) => (
-            <td colSpan={2}>
+            <div>
               <strong>{p.name}</strong>
               <div className="muted">{p.benefit ?? '혜택 없음'}</div>
-            </td>
+            </div>
           )}
           save={setHomePartners}
           onSaved={reload}
@@ -121,51 +120,55 @@ interface SectionProps<T extends { id: string }> {
   noun: string
   items: T[]
   /** 서버에 저장된 현재 구성(순서대로). */
-  initialIds: string[]
+  initial: HomeCurationItem[]
   optionLabel: (item: T) => string
-  /** 한 줄의 내용 칸(<td> 두 칸 분량). 순서·조작 칸은 이 컴포넌트가 붙인다. */
+  /** 한 줄의 항목 정보. 순서·설명·조작 칸은 이 컴포넌트가 붙인다. */
   renderItem: (item: T) => ReactNode
-  save: (ids: string[]) => Promise<void>
+  save: (items: HomeCurationItem[]) => Promise<void>
   onSaved: () => void
   onUnauthorized: () => void
 }
 
-/** 한 섹션의 편집기: 고른 목록(순서 이동·빼기) + 추가 드롭다운 + 저장. */
+/** 저장 여부 비교용. 설명의 앞뒤 공백·빈 값은 서버가 걷으므로 같게 본다. */
+function snapshot(items: HomeCurationItem[]): string {
+  return JSON.stringify(items.map((item) => [item.id, item.describe?.trim() || null]))
+}
+
+/** 한 섹션의 편집기: 고른 목록(설명·순서 이동·빼기) + 추가 드롭다운 + 저장. */
 function HomeSection<T extends { id: string }>({
   title,
   noun,
   items,
-  initialIds,
+  initial,
   optionLabel,
   renderItem,
   save,
   onSaved,
   onUnauthorized,
 }: SectionProps<T>) {
-  const [ids, setIds] = useState<string[]>(initialIds)
+  const [picked, setPicked] = useState<HomeCurationItem[]>(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
-  // 저장 뒤 목록을 다시 받으면 서버 값으로 맞춘다. 배열은 매번 새로 만들어지므로
-  // 내용으로 비교한다.
-  const initialKey = initialIds.join(',')
+  // 저장 뒤 다시 받으면 서버 값으로 맞춘다. 배열은 매번 새로 만들어지므로 내용으로 비교한다.
+  const initialKey = snapshot(initial)
   useEffect(() => {
-    setIds(initialKey ? initialKey.split(',') : [])
+    setPicked(initial)
   }, [initialKey])
 
   const byId = new Map(items.map((item) => [item.id, item]))
-  const picked = ids.map((id) => byId.get(id)).filter((item): item is T => item != null)
-  const candidates = items.filter((item) => !ids.includes(item.id))
-  const dirty = ids.join(',') !== initialKey
+  const pickedIds = new Set(picked.map((entry) => entry.id))
+  const candidates = items.filter((item) => !pickedIds.has(item.id))
+  const dirty = snapshot(picked) !== initialKey
 
-  const change = (next: string[]) => {
-    setIds(next)
+  const change = (next: HomeCurationItem[]) => {
+    setPicked(next)
     setSaved(false)
   }
 
   const move = (index: number, delta: number) => {
-    const next = [...ids]
+    const next = [...picked]
     const [moved] = next.splice(index, 1)
     next.splice(index + delta, 0, moved)
     change(next)
@@ -175,7 +178,7 @@ function HomeSection<T extends { id: string }>({
     setSaving(true)
     setError(null)
     try {
-      await save(ids)
+      await save(picked)
       setSaved(true)
       onSaved()
     } catch (err) {
@@ -196,41 +199,68 @@ function HomeSection<T extends { id: string }>({
         <p className="muted">고른 {noun}이 없어요. 앱 홈에서 이 섹션이 숨겨져요.</p>
       ) : (
         <table>
+          <thead>
+            <tr>
+              <th style={{ width: 32 }}>#</th>
+              <th>{noun}</th>
+              <th>설명</th>
+              <th />
+            </tr>
+          </thead>
           <tbody>
-            {picked.map((item, index) => (
-              <tr key={item.id} style={{ cursor: 'default' }}>
-                <td style={{ width: 32 }}>
-                  <strong>{index + 1}</strong>
-                </td>
-                {renderItem(item)}
-                <td style={{ width: 1, whiteSpace: 'nowrap' }}>
-                  <div className="row" style={{ gap: 6 }}>
-                    <button
-                      className="secondary small"
-                      disabled={index === 0}
-                      onClick={() => move(index, -1)}
-                      aria-label="위로"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      className="secondary small"
-                      disabled={index === picked.length - 1}
-                      onClick={() => move(index, 1)}
-                      aria-label="아래로"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      className="danger small"
-                      onClick={() => change(ids.filter((id) => id !== item.id))}
-                    >
-                      빼기
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {picked.map((entry, index) => {
+              const item = byId.get(entry.id)
+              return (
+                <tr key={entry.id} style={{ cursor: 'default' }}>
+                  <td>
+                    <strong>{index + 1}</strong>
+                  </td>
+                  <td>
+                    <div className="row" style={{ alignItems: 'center' }}>
+                      {item ? renderItem(item) : <span className="muted">찾을 수 없는 {noun}</span>}
+                    </div>
+                  </td>
+                  <td style={{ width: '40%' }}>
+                    <textarea
+                      rows={2}
+                      value={entry.describe ?? ''}
+                      placeholder="큐레이션 설명 (선택)"
+                      onChange={(e) =>
+                        change(
+                          picked.map((p, i) => (i === index ? { ...p, describe: e.target.value } : p)),
+                        )
+                      }
+                    />
+                  </td>
+                  <td style={{ width: 1, whiteSpace: 'nowrap' }}>
+                    <div className="row" style={{ gap: 6 }}>
+                      <button
+                        className="secondary small"
+                        disabled={index === 0}
+                        onClick={() => move(index, -1)}
+                        aria-label="위로"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="secondary small"
+                        disabled={index === picked.length - 1}
+                        onClick={() => move(index, 1)}
+                        aria-label="아래로"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        className="danger small"
+                        onClick={() => change(picked.filter((p) => p.id !== entry.id))}
+                      >
+                        빼기
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}
@@ -241,12 +271,12 @@ function HomeSection<T extends { id: string }>({
           value=""
           disabled={candidates.length === 0}
           onChange={(e) => {
-            if (e.target.value) change([...ids, e.target.value])
+            if (e.target.value) {
+              change([...picked, { id: e.target.value, describe: null, detail: {} }])
+            }
           }}
         >
-          <option value="">
-            {candidates.length === 0 ? `추가할 ${noun}이 없어요` : `${noun}을 고르면 맨 아래에 붙어요`}
-          </option>
+          <option value="">{candidates.length === 0 ? `추가할 ${noun}이 없어요` : '선택'}</option>
           {candidates.map((item) => (
             <option key={item.id} value={item.id}>
               {optionLabel(item)}
@@ -261,7 +291,7 @@ function HomeSection<T extends { id: string }>({
           {saving ? '저장 중…' : '저장'}
         </button>
         {dirty && (
-          <button className="secondary" onClick={() => change(initialKey ? initialKey.split(',') : [])}>
+          <button className="secondary" onClick={() => change(initial)}>
             되돌리기
           </button>
         )}
