@@ -4,6 +4,7 @@ import { ApiError, getMe, logout, type AdminIdentity } from './api'
 import AuthPage from './pages/AuthPage'
 import CourseListPage from './pages/CourseListPage'
 import CourseStatsPage from './pages/CourseStatsPage'
+import HomeCurationPage from './pages/HomeCurationPage'
 import LogsPage from './pages/LogsPage'
 import NoticeListPage from './pages/NoticeListPage'
 import PartnerListPage from './pages/PartnerListPage'
@@ -19,6 +20,7 @@ type Auth =
   | { status: 'authed'; who: AdminIdentity }
 
 type Page =
+  | 'home'
   | 'courses'
   | 'partners'
   | 'notices'
@@ -43,6 +45,7 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
   {
     group: '데이터 편집',
     items: [
+      { key: 'home', label: '홈 구성' },
       { key: 'courses', label: '코스' },
       { key: 'partners', label: '협력업체' },
       { key: 'notices', label: '공지사항' },
@@ -128,6 +131,9 @@ export default function App() {
           ))}
         </aside>
         <main>
+          {page === 'home' && (
+            <HomeCurationPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
           {page === 'courses' && (
             <CourseListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
           )}

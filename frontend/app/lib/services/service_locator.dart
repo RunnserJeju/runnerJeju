@@ -1,6 +1,7 @@
 import '../api/auth_api.dart';
 import '../api/course_api.dart';
 import '../api/favorite_api.dart';
+import '../api/home_api.dart';
 import '../api/notice_api.dart';
 import '../api/partner_api.dart';
 import '../api/run_api.dart';
@@ -15,6 +16,7 @@ import 'course_service.dart';
 import 'current_location.dart';
 import 'favorite_service.dart';
 import 'heading_service.dart';
+import 'home_service.dart';
 import 'kakao_map_launcher.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
@@ -82,8 +84,11 @@ class Services {
   );
   late final NoticeService notice = NoticeService(NoticeApi(apiClient));
 
-  /// 협력업체(러닝 탭 협력업체 모드, 홈 큐레이션).
+  /// 협력업체(러닝 탭 협력업체 모드, 홈 추천 협력 업체).
   late final PartnerService partner = PartnerService(PartnerApi(apiClient));
+
+  /// 홈 구성(러닝 코스 큐레이션·추천 협력 업체에 무엇을 띄울지).
+  late final HomeService home = HomeService(HomeApi(apiClient));
 
   /// 실제 GPS. 시뮬레이션 러닝은 이걸 바꾸지 않고 [RunTracker.start]에
   /// 위치원을 따로 넘긴다 — 그래야 앱 전역이 아니라 그 한 번의 러닝만 가짜가 된다.

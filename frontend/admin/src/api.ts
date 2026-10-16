@@ -311,6 +311,38 @@ export function deletePartner(id: string): Promise<void> {
   return request(`/admin/partners/${id}`, { method: 'DELETE' })
 }
 
+// --- 홈 구성 ------------------------------------------------------------
+
+/** 앱 홈 구성. 서버 HomeCurationOut과 1:1. 앞에 있을수록 먼저 나온다. */
+export interface HomeCuration {
+  /** '러닝 코스 큐레이션'에 띄울 코스. */
+  course_ids: string[]
+  /** '추천 협력 업체'에 띄울 업체. */
+  partner_ids: string[]
+}
+
+export function getHome(): Promise<HomeCuration> {
+  return request('/admin/home')
+}
+
+/** 앱 홈 '러닝 코스 큐레이션'을 교체한다. 앞에 있을수록 먼저 나온다. */
+export function setHomeCourses(ids: string[]): Promise<void> {
+  return request('/admin/home/courses', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+}
+
+/** 앱 홈 '추천 협력 업체'를 교체한다. 앞에 있을수록 먼저 나온다. */
+export function setHomePartners(ids: string[]): Promise<void> {
+  return request('/admin/home/partners', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+}
+
 export function geocode(address: string): Promise<{ results: GeocodeResult[] }> {
   return request(`/admin/geo/geocode?address=${encodeURIComponent(address)}`)
 }

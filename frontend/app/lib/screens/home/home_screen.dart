@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../models/course_partner.dart';
+import '../../models/home_curation.dart';
 import '../../models/notice.dart';
 import '../../models/running_course.dart';
 import '../../models/user_log.dart';
@@ -16,7 +17,10 @@ import '../../widgets/partner_category_tile.dart';
 import '../notification/notification_screen.dart';
 import '../../widgets/section_title.dart';
 
-/// 홈: 배너(이미지 있는 공지) + 러닝 코스 큐레이션 + 협력 업체.
+/// 홈: 배너(이미지 있는 공지) + 러닝 코스 큐레이션 + 추천 협력 업체.
+///
+/// 두 섹션에 무엇을 어떤 순서로 띄울지는 운영 웹 '홈 구성'에서 고른다
+/// ([HomeCuration]). 고른 게 없으면 그 섹션은 접힌다.
 ///
 /// 공지 목록은 홈에 따로 펼치지 않는다 — 배너와 겹쳐서다. 헤더의 벨은 공지가
 /// 아니라 알림 화면([NotificationScreen])을 연다.
@@ -34,7 +38,7 @@ class HomeScreen extends StatefulWidget {
   /// 코스 카드를 눌렀을 때. 러닝 탭으로 옮겨 그 코스를 고른 상태로 연다.
   final ValueChanged<String> onOpenCourse;
 
-  /// 협력 업체 줄을 눌렀을 때. 러닝 탭으로 옮겨 그 업체 핀을 고른 상태로 연다.
+  /// 추천 협력 업체 줄을 눌렀을 때. 러닝 탭으로 옮겨 그 업체 핀을 고른 상태로 연다.
   final ValueChanged<CoursePartner> onOpenPartner;
 
   @override
@@ -43,11 +47,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Notice>> _noticesFuture;
-  late Future<List<RunningCourse>> _coursesFuture;
-  late Future<List<CoursePartner>> _partnersFuture;
-
-  /// 협력 업체 섹션에 보여줄 최대 줄 수.
-  static const int _partnerLimit = 5;
+  late Future<List<RunningCourse>> _curatedCoursesFuture;
+  late Future<List<CoursePartner>> _featuredPartnersFuture;
 
   @override
   void initState() {
@@ -57,15 +58,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _load() {
     _noticesFuture = Services.instance.notice.loadNotices();
-    _coursesFuture = Services.instance.course.loadCourses();
-    _partnersFuture = Services.instance.partner.loadPartners();
+    final curation = Services.instance.home.loadCuration();
+    _curatedCoursesFuture = _pick(
+      Services.instance.course.loadCourses(),
+      curation.then((c) => c.courseIds),
+      (course) => course.id,
+    );
+    _featuredPartnersFuture = _pick(
+      Services.instance.partner.loadPartners(),
+      curation.then((c) => c.partnerIds),
+      (partner) => partner.id,
+    );
+  }
+
+  /// [items] 중 [ids]에 든 것만 그 순서대로. 목록에 없는 id(비공개로 바뀐 코스 등)는
+  /// 건너뛴다. 둘 중 하나라도 실패하면 실패라 섹션이 접힌다.
+  static Future<List<T>> _pick<T>(
+    Future<List<T>> items,
+    Future<List<String>> ids,
+    String Function(T) idOf,
+  ) async {
+    final (loaded, picked) = await (items, ids).wait;
+    final byId = {for (final item in loaded) idOf(item): item};
+    return [for (final id in picked) ?byId[id]];
   }
 
   Future<void> _refresh() async {
     setState(_load);
     await _noticesFuture.catchError((_) => <Notice>[]);
-    await _coursesFuture.catchError((_) => <RunningCourse>[]);
-    await _partnersFuture.catchError((_) => <CoursePartner>[]);
+    await _curatedCoursesFuture.catchError((_) => <RunningCourse>[]);
+    await _featuredPartnersFuture.catchError((_) => <CoursePartner>[]);
   }
 
   /// [section]은 홈의 어느 구역에서 눌렀는지 — 로그용. 지금은 코스 큐레이션
@@ -144,12 +166,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // ── 러닝 코스 큐레이션 ──
             FutureBuilder<List<RunningCourse>>(
-              future: _coursesFuture,
+              future: _curatedCoursesFuture,
               builder: (context, snapshot) {
-                final courses = snapshot.data ?? const <RunningCourse>[];
-                // 코스가 아직 없거나 로드 실패면 섹션을 조용히 접는다.
-                if (courses.isEmpty) return const SizedBox.shrink();
-                final recommended = courses.take(5).toList();
+                // 운영 웹 '홈 구성'에서 고른 코스(고른 순서대로).
+                final recommended = snapshot.data ?? const <RunningCourse>[];
+                // 고른 코스가 없거나 로드 실패면 섹션을 조용히 접는다.
+                if (recommended.isEmpty) return const SizedBox.shrink();
                 return DecoratedBox(
                   decoration: const BoxDecoration(
                     border: Border(
@@ -199,17 +221,13 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
 
-            // ── 협력 업체 ──
+            // ── 추천 협력 업체 ──
             FutureBuilder<List<CoursePartner>>(
-              future: _partnersFuture,
+              future: _featuredPartnersFuture,
               builder: (context, snapshot) {
-                // 코스에 연결된 업체만 싣는다 — 한 줄이 "○○ 코스 근처"를 함께
-                // 보여주므로, 코스가 없는 업체는 줄을 만들 수 없다.
-                final picks = [
-                  for (final partner in snapshot.data ?? const <CoursePartner>[])
-                    if (partner.courses.isNotEmpty) partner,
-                ].take(_partnerLimit).toList();
-                // 업체가 없거나 로드 실패면 섹션을 조용히 접는다.
+                // 운영 웹 '홈 구성'에서 고른 업체(고른 순서대로).
+                final picks = snapshot.data ?? const <CoursePartner>[];
+                // 고른 업체가 없거나 로드 실패면 섹션을 조용히 접는다.
                 if (picks.isEmpty) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SectionTitle('협력 업체', small: true),
+                          SectionTitle('추천 협력 업체', small: true),
                           SizedBox(height: 2),
                           Text(
                             '코스를 달리고 근처 제휴처에서 혜택까지',
@@ -235,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     for (final (index, partner) in picks.indexed)
                       _PartnerItem(
                         partner: partner,
-                        course: partner.courses.first,
+                        course: partner.courses.firstOrNull,
                         isLast: index == picks.length - 1,
                         // 로그(partner_preview_open, source=home)는 러닝 탭이
                         // 업체를 고를 때 남긴다.
@@ -325,9 +343,9 @@ class _BellButton extends StatelessWidget {
   }
 }
 
-/// 협력 업체 한 줄: 협력업체와 그 업체가 연결된 코스(운영 웹에서 연결).
+/// 추천 협력 업체 한 줄: 협력업체와 그 업체가 연결된 코스(운영 웹에서 연결).
 /// 누르면 러닝 탭에서 그 업체 핀을 고른 상태로 연다. 업체가 여러 코스에 걸려 있으면
-/// "근처" 표기에는 첫 코스(이름순)를 쓴다.
+/// "근처" 표기에는 첫 코스(이름순)를 쓰고, 연결된 코스가 없으면 그 줄을 뺀다.
 class _PartnerItem extends StatelessWidget {
   const _PartnerItem({
     required this.partner,
@@ -337,7 +355,7 @@ class _PartnerItem extends StatelessWidget {
   });
 
   final CoursePartner partner;
-  final PartnerCourseRef course;
+  final PartnerCourseRef? course;
 
   /// 마지막 줄은 아래 구분선을 긋지 않는다.
   final bool isLast;
@@ -404,28 +422,30 @@ class _PartnerItem extends StatelessWidget {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      SvgPicture.asset(
-                        'assets/icons/pin.svg',
-                        width: 12,
-                        height: 12,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          '${course.name} 근처',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: AppColors.muted,
+                  if (course case final course?) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        SvgPicture.asset(
+                          'assets/icons/pin.svg',
+                          width: 12,
+                          height: 12,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            '${course.name} 근처',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.muted,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

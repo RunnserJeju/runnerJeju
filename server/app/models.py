@@ -248,6 +248,41 @@ class CoursePartner(Base):
     partner: Mapped[Partner] = relationship(lazy="joined")
 
 
+class CourseCuration(Base):
+    """앱 홈 '러닝 코스 큐레이션'에 띄울 코스. 운영 웹 '홈 구성'에서 고른다.
+
+    홈에 나오는 건 몇 개뿐이라 코스 테이블에 컬럼을 두지 않고 고른 것만 행으로 둔다.
+    코스가 지워지면 함께 지워진다(CASCADE).
+    """
+
+    __tablename__ = "course_curations"
+
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 홈에서 보여줄 순서(작을수록 앞).
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class PartnerCuration(Base):
+    """앱 홈 '추천 협력 업체'에 띄울 업체. 운영 웹 '홈 구성'에서 고른다.
+
+    [CourseCuration]과 같은 이유로 따로 둔다. 업체가 지워지면 함께 지워진다(CASCADE).
+    """
+
+    __tablename__ = "partner_curations"
+
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partners.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 홈에서 보여줄 순서(작을수록 앞).
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Run(Base):
     __tablename__ = "runs"
 

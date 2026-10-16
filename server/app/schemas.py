@@ -209,6 +209,24 @@ class PartnerOut(PartnerSummary):
     updated_at: datetime
 
 
+class HomeCurationOut(BaseModel):
+    """앱 홈 구성. GET /home/curation(앱), GET /admin/home(운영 웹).
+
+    앞에 있을수록 홈에서 먼저 나온다. 비어 있으면 그 섹션은 앱 홈에서 접힌다.
+    """
+
+    # '러닝 코스 큐레이션'에 띄울 코스.
+    course_ids: list[uuid.UUID]
+    # '추천 협력 업체'에 띄울 업체.
+    partner_ids: list[uuid.UUID]
+
+
+class HomeCurationPayload(BaseModel):
+    """홈 섹션 하나의 구성(전체 교체). PUT /admin/home/courses, /admin/home/partners."""
+
+    ids: list[uuid.UUID]
+
+
 class CourseListItem(BaseModel):
     """목록용. 카드에 필요한 것만 담고 경로 좌표는 뺀다.
 
