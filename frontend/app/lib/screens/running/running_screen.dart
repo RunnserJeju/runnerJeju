@@ -579,6 +579,12 @@ class RunningScreenState extends State<RunningScreen> {
       return;
     }
 
+    _enterLayer(layer);
+    if (layer == _MapLayer.partners) writeLog(LogName.partnerListOpen);
+  }
+
+  /// [layer]로 바꾸고 코스·업체 선택을 걷는다. 업체 목록이 없으면 받아 온다.
+  void _enterLayer(_MapLayer layer) {
     _closeSearch();
     _detailRequestId++;
     setState(() {
@@ -589,7 +595,6 @@ class RunningScreenState extends State<RunningScreen> {
       _detailError = null;
       _isReversed = false;
     });
-    if (layer == _MapLayer.partners) writeLog(LogName.partnerListOpen);
 
     if (_partners.isEmpty || _partnersError != null) {
       unawaited(_loadPartners());
@@ -616,6 +621,14 @@ class RunningScreenState extends State<RunningScreen> {
         _isLoadingPartners = false;
       });
     }
+  }
+
+  /// 다른 탭에서 협력업체를 열 때(홈 '협력 업체' 목록). 협력업체 칩을 켜고 지도에서
+  /// 그 업체 핀을 누른 것과 같은 선택 상태로 만든다. 업체 목록은 [_enterLayer]가
+  /// 받아 오고, 상세는 넘겨받은 [partner]로 바로 띄운다.
+  void openPartner(CoursePartner partner, {required LogSource source}) {
+    _enterLayer(_MapLayer.partners);
+    _selectPartner(partner, source: source);
   }
 
   void _selectPartner(CoursePartner partner, {required LogSource source}) {

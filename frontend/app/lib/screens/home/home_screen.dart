@@ -16,7 +16,7 @@ import '../../widgets/partner_category_tile.dart';
 import '../notification/notification_screen.dart';
 import '../../widgets/section_title.dart';
 
-/// 홈: 배너(이미지 있는 공지) + 추천 코스 + 러닝 코스 큐레이션.
+/// 홈: 배너(이미지 있는 공지) + 러닝 코스 큐레이션 + 협력 업체.
 ///
 /// 공지 목록은 홈에 따로 펼치지 않는다 — 배너와 겹쳐서다. 헤더의 벨은 공지가
 /// 아니라 알림 화면([NotificationScreen])을 연다.
@@ -25,6 +25,7 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.onShowMap,
     required this.onOpenCourse,
+    required this.onOpenPartner,
   });
 
   /// '지도로 보기'를 눌렀을 때. 러닝 탭으로 옮겨 준다.
@@ -32,6 +33,9 @@ class HomeScreen extends StatefulWidget {
 
   /// 코스 카드를 눌렀을 때. 러닝 탭으로 옮겨 그 코스를 고른 상태로 연다.
   final ValueChanged<String> onOpenCourse;
+
+  /// 협력 업체 줄을 눌렀을 때. 러닝 탭으로 옮겨 그 업체 핀을 고른 상태로 연다.
+  final ValueChanged<CoursePartner> onOpenPartner;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -42,8 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<RunningCourse>> _coursesFuture;
   late Future<List<CoursePartner>> _partnersFuture;
 
-  /// 큐레이션에 보여줄 최대 줄 수.
-  static const int _curationLimit = 5;
+  /// 협력 업체 섹션에 보여줄 최대 줄 수.
+  static const int _partnerLimit = 5;
 
   @override
   void initState() {
@@ -64,7 +68,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await _partnersFuture.catchError((_) => <CoursePartner>[]);
   }
 
-  /// [section]은 홈의 어느 구역(recommended/curation)에서 눌렀는지 — 로그용.
+  /// [section]은 홈의 어느 구역에서 눌렀는지 — 로그용. 지금은 코스 큐레이션
+  /// 섹션('recommended', 옛 '추천 코스' 시절 값을 그대로 쓴다)뿐이다.
   void _openCourse(
     String courseId, {
     required String section,
@@ -137,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
 
-            // ── 추천 코스 ──
+            // ── 러닝 코스 큐레이션 ──
             FutureBuilder<List<RunningCourse>>(
               future: _coursesFuture,
               builder: (context, snapshot) {
@@ -159,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const SectionTitle('추천 코스', small: true),
+                            const SectionTitle('러닝 코스 큐레이션', small: true),
                             _LinkButton(
                               label: '지도로 보기',
                               onTap: widget.onShowMap,
@@ -194,16 +199,16 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
 
-            // ── 러닝 코스 큐레이션 (협력업체 × 연결 코스) ──
+            // ── 협력 업체 ──
             FutureBuilder<List<CoursePartner>>(
               future: _partnersFuture,
               builder: (context, snapshot) {
-                // 코스에 연결된 업체만 싣는다 — 한 줄이 "이 코스를 달리고 이
-                // 업체에서 혜택"이라, 코스가 없는 업체는 줄을 만들 수 없다.
+                // 코스에 연결된 업체만 싣는다 — 한 줄이 "○○ 코스 근처"를 함께
+                // 보여주므로, 코스가 없는 업체는 줄을 만들 수 없다.
                 final picks = [
                   for (final partner in snapshot.data ?? const <CoursePartner>[])
                     if (partner.courses.isNotEmpty) partner,
-                ].take(_curationLimit).toList();
+                ].take(_partnerLimit).toList();
                 // 업체가 없거나 로드 실패면 섹션을 조용히 접는다.
                 if (picks.isEmpty) return const SizedBox.shrink();
                 return Column(
@@ -214,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SectionTitle('러닝 코스 큐레이션', small: true),
+                          SectionTitle('협력 업체', small: true),
                           SizedBox(height: 2),
                           Text(
                             '코스를 달리고 근처 제휴처에서 혜택까지',
@@ -228,15 +233,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     for (final (index, partner) in picks.indexed)
-                      _CurationItem(
+                      _PartnerItem(
                         partner: partner,
                         course: partner.courses.first,
                         isLast: index == picks.length - 1,
-                        onTap: () => _openCourse(
-                          partner.courses.first.id,
-                          section: 'curation',
-                          position: index,
-                        ),
+                        // 로그(partner_preview_open, source=home)는 러닝 탭이
+                        // 업체를 고를 때 남긴다.
+                        onTap: () => widget.onOpenPartner(partner),
                       ),
                   ],
                 );
@@ -322,10 +325,11 @@ class _BellButton extends StatelessWidget {
   }
 }
 
-/// 러닝 코스 큐레이션 한 줄: 협력업체와 그 업체가 연결된 코스(운영 웹에서 연결).
-/// 누르면 그 코스 상세로 간다. 업체가 여러 코스에 걸려 있으면 첫 코스(이름순)를 쓴다.
-class _CurationItem extends StatelessWidget {
-  const _CurationItem({
+/// 협력 업체 한 줄: 협력업체와 그 업체가 연결된 코스(운영 웹에서 연결).
+/// 누르면 러닝 탭에서 그 업체 핀을 고른 상태로 연다. 업체가 여러 코스에 걸려 있으면
+/// "근처" 표기에는 첫 코스(이름순)를 쓴다.
+class _PartnerItem extends StatelessWidget {
+  const _PartnerItem({
     required this.partner,
     required this.course,
     required this.isLast,

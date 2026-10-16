@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../models/course_partner.dart';
 import '../models/user_log.dart';
 import '../theme/app_theme.dart';
 import 'community/community_screen.dart';
@@ -36,6 +37,12 @@ class _AppShellState extends State<AppShell> {
     _runningKey.currentState?.openCourse(courseId, source: source);
   }
 
+  /// 러닝 탭으로 옮기고 협력업체 모드에서 그 업체를 고른 상태로 연다.
+  void _openPartner(CoursePartner partner, LogSource source) {
+    setState(() => _index = _runningTab);
+    _runningKey.currentState?.openPartner(partner, source: source);
+  }
+
   static const _items = <({IconData? icon, String? asset, String label})>[
     (icon: Icons.home, asset: null, label: '홈'),
     (icon: Icons.groups, asset: null, label: '커뮤니티'),
@@ -50,6 +57,7 @@ class _AppShellState extends State<AppShell> {
       HomeScreen(
         onShowMap: () => setState(() => _index = _runningTab),
         onOpenCourse: (courseId) => _openCourse(courseId, LogSource.home),
+        onOpenPartner: (partner) => _openPartner(partner, LogSource.home),
       ),
       const CommunityScreen(),
       RunningScreen(key: _runningKey),
