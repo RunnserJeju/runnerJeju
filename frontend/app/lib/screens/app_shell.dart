@@ -59,7 +59,10 @@ class _AppShellState extends State<AppShell> {
         onOpenCourse: (courseId) => _openCourse(courseId, LogSource.home),
         onOpenPartner: (partner) => _openPartner(partner, LogSource.home),
       ),
-      const CommunityScreen(),
+      CommunityScreen(
+        onOpenCourse: (courseId) =>
+            _openCourse(courseId, LogSource.runningWeek),
+      ),
       RunningScreen(key: _runningKey),
       const StampScreen(),
       ProfileScreen(

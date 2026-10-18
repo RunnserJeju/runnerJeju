@@ -297,6 +297,90 @@ export function deleteStampImage(id: string): Promise<StampDefinition> {
   return request(`/admin/stamps/${id}/image`, { method: 'DELETE' })
 }
 
+// --- 러닝위크 -----------------------------------------------------------
+
+export const BINGO_CELLS = 25
+
+/** 러닝위크 회차. 공개 규칙은 공지와 같고, 공개 중이면 앱 커뮤니티 상단에 배너가 뜬다. */
+export interface RunningWeek {
+  id: string
+  title: string
+  description: string | null
+  image_url: string | null
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+  /** 칸 0~24에 놓은 스탬프 종류 id. 비어 있으면 빙고판을 아직 안 짠 것. */
+  bingo_stamp_ids: string[]
+  participant_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface RunningWeekPayload {
+  title: string
+  description: string | null
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+}
+
+export interface Participation {
+  id: string
+  user_id: string
+  name: string
+  phone: string
+  gender: 'male' | 'female'
+  age: number
+  residence: 'jeju' | 'non_jeju'
+  form_version: number
+  agreed_at: string
+  expires_at: string
+  created_at: string
+}
+
+export function listRunningWeeks(): Promise<RunningWeek[]> {
+  return request('/admin/running-weeks')
+}
+
+export function createRunningWeek(payload: RunningWeekPayload): Promise<RunningWeek> {
+  return request('/admin/running-weeks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateRunningWeek(id: string, payload: RunningWeekPayload): Promise<RunningWeek> {
+  return request(`/admin/running-weeks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function setRunningWeekBingo(id: string, stampIds: string[]): Promise<RunningWeek> {
+  return request(`/admin/running-weeks/${id}/bingo`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stamp_ids: stampIds }),
+  })
+}
+
+export function setRunningWeekImage(id: string, file: File): Promise<RunningWeek> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/running-weeks/${id}/image`, { method: 'PUT', body: form })
+}
+
+export function deleteRunningWeekImage(id: string): Promise<RunningWeek> {
+  return request(`/admin/running-weeks/${id}/image`, { method: 'DELETE' })
+}
+
+export function listParticipations(id: string): Promise<Participation[]> {
+  return request(`/admin/running-weeks/${id}/participations`)
+}
+
 // --- 공지 ---------------------------------------------------------------
 
 /** 전체 목록(예약·만료 포함). 공개 GET /notices는 노출 중인 것만 주고 앱 JWT가 필요하다. */

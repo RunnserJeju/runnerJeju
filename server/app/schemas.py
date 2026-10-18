@@ -462,6 +462,141 @@ class AdminStampDefinitionOut(BaseModel):
     updated_at: datetime
 
 
+# --- 러닝위크 -------------------------------------------------------------
+
+BINGO_SIZE = 5
+BINGO_CELLS = BINGO_SIZE * BINGO_SIZE
+
+# 참가 폼 버전. 항목을 바꾸면 올린다 — 신청 행마다 어떤 폼으로 받았는지 남는다.
+PARTICIPATION_FORM_VERSION = 1
+
+
+class BingoCellOut(BaseModel):
+    position: int
+    # 칸에 놓인 스탬프. 운영자가 숨긴 스탬프면 None(빈 칸).
+    stamp: StampDefinitionOut | None
+    acquired: bool
+
+
+class BingoOut(BaseModel):
+    cells: list[BingoCellOut]
+    # 다 채운 가로·세로·대각선 줄 수(0~12).
+    completed_lines: int
+
+
+class RunningWeekOut(BaseModel):
+    """앱용. 빙고판은 참가 신청을 한 사람에게만 내린다."""
+
+    id: uuid.UUID
+    title: str
+    description: str | None
+    image_url: str | None
+    starts_at: datetime | None
+    ends_at: datetime | None
+    participated: bool
+    bingo: BingoOut | None
+
+
+class RunningWeekParticipationCreate(BaseModel):
+    """참가 신청. 개인정보 수집·이용 동의(agreed)가 있어야 받는다."""
+
+    name: str = Field(min_length=1, max_length=50)
+    phone: str
+    gender: Literal["male", "female"]
+    age: int = Field(ge=1, le=120)
+    residence: Literal["jeju", "non_jeju"]
+    agreed: bool
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("이름을 입력해 주세요.")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize_phone(cls, value: str) -> str:
+        # 숫자만 남겨 저장한다. 국내 휴대폰·일반 전화 길이(9~11자리)만 받는다.
+        digits = "".join(ch for ch in value if ch.isdigit())
+        if not 9 <= len(digits) <= 11:
+            raise ValueError("연락처를 확인해 주세요.")
+        return digits
+
+    @field_validator("agreed")
+    @classmethod
+    def _must_agree(cls, value: bool) -> bool:
+        if not value:
+            raise ValueError("개인정보 수집·이용에 동의해야 참가할 수 있어요.")
+        return value
+
+
+class RunningWeekCreate(BaseModel):
+    """운영툴 등록·수정. 배너 이미지와 빙고 배치는 전용 엔드포인트로 따로 바꾼다."""
+
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _check_period(self):
+        if self.starts_at and self.ends_at and self.ends_at < self.starts_at:
+            raise ValueError("공개 종료가 시작보다 빠를 수 없어요.")
+        return self
+
+
+class RunningWeekUpdate(RunningWeekCreate):
+    """수정(PATCH /admin/running-weeks/{id}). 작성과 같은 필드로 전체를 교체한다."""
+
+
+class BingoUpdate(BaseModel):
+    """빙고 배치. 칸 순서대로 스탬프 종류 id 25개, 중복 없이."""
+
+    stamp_ids: list[uuid.UUID] = Field(min_length=BINGO_CELLS, max_length=BINGO_CELLS)
+
+    @field_validator("stamp_ids")
+    @classmethod
+    def _unique(cls, value: list[uuid.UUID]) -> list[uuid.UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("같은 스탬프를 두 칸에 놓을 수 없어요.")
+        return value
+
+
+class AdminRunningWeekOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    description: str | None
+    image_url: str | None
+    starts_at: datetime | None
+    ends_at: datetime | None
+    is_active: bool
+    bingo_stamp_ids: list[str]
+    participant_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminParticipationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: str
+    name: str
+    phone: str
+    gender: str
+    age: int
+    residence: str
+    form_version: int
+    agreed_at: datetime
+    expires_at: datetime
+    created_at: datetime
+
+
 # --- 공지사항 -------------------------------------------------------------
 
 

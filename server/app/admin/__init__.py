@@ -18,6 +18,7 @@ from app.admin import (
     missions,
     notices,
     partners,
+    running_weeks,
     stamps,
     user_logs,
     users,
@@ -33,6 +34,7 @@ admin_router.include_router(courses.router)
 admin_router.include_router(notices.router)
 admin_router.include_router(missions.router)
 admin_router.include_router(stamps.router)
+admin_router.include_router(running_weeks.router)
 admin_router.include_router(users.router)
 admin_router.include_router(metrics_router)
 admin_router.include_router(user_logs.router)

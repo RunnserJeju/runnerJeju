@@ -8,6 +8,7 @@ import HomeCurationPage from './pages/HomeCurationPage'
 import LogsPage from './pages/LogsPage'
 import NoticeListPage from './pages/NoticeListPage'
 import PartnerListPage from './pages/PartnerListPage'
+import RunningWeekListPage from './pages/RunningWeekListPage'
 import StampListPage from './pages/StampListPage'
 import UsersPage from './pages/UsersPage'
 
@@ -25,6 +26,7 @@ type Page =
   | 'courses'
   | 'partners'
   | 'stamps'
+  | 'running-weeks'
   | 'notices'
   | 'dashboard'
   | 'course-stats'
@@ -51,6 +53,7 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
       { key: 'courses', label: '코스' },
       { key: 'partners', label: '협력업체' },
       { key: 'stamps', label: '스탬프' },
+      { key: 'running-weeks', label: '러닝위크' },
       { key: 'notices', label: '공지사항' },
     ],
   },
@@ -145,6 +148,9 @@ export default function App() {
           )}
           {page === 'stamps' && (
             <StampListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'running-weeks' && (
+            <RunningWeekListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
           )}
           {page === 'notices' && (
             <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />

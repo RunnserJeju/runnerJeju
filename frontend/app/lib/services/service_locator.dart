@@ -9,6 +9,7 @@ import '../api/stamp_api.dart';
 import '../api/user_log_api.dart';
 import '../api/verification_api.dart';
 import '../config/app_config.dart';
+import '../features/running_week/running_week_service.dart';
 import '../network/api_client.dart';
 import '../network/client_context_interceptor.dart';
 import 'auth_service.dart';
@@ -78,6 +79,9 @@ class Services {
   /// 러닝 프로그램(커뮤니티/마이페이지). 아직 서버 API가 없어 빈 목록만 준다.
   late final ProgramService program = const ProgramService();
   late final RunService run = RunService(RunApi(apiClient));
+
+  /// 러닝위크(커뮤니티 상단 배너, 빙고).
+  late final RunningWeekService runningWeek = RunningWeekService(apiClient);
   late final StampService stamp = StampService(StampApi(apiClient));
   late final VerificationService verification = VerificationService(
     VerificationApi(apiClient),

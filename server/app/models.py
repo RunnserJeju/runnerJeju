@@ -465,6 +465,87 @@ class Notice(Base):
     )
 
 
+class RunningWeek(Base):
+    """러닝위크. 정기적으로 여는 행사 한 회차이고, 5x5 빙고판을 갖는다(#70).
+
+    노출 규칙은 공지와 같다 — starts_at/ends_at은 null이면 "제한 없음", is_active로
+    따로 끌 수 있다. 공개 중이면 앱 커뮤니티 상단에 image_url 배너가 뜬다.
+
+    빙고 칸 전용 테이블은 두지 않는다. 칸 순서대로 스탬프 종류 id 25개만 담고, 칸이
+    채워졌는지는 조회 때 발급 기록(stamps)에서 계산한다. 배열 안 id에는 외래키가 없어서
+    저장할 때 서버가 실제 스탬프 종류인지 확인한다(admin/running_weeks).
+    """
+
+    __tablename__ = "running_weeks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    # 커뮤니티 상단 배너(Supabase Storage public URL). PUT/DELETE /admin/running-weeks/{id}/image.
+    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # 칸 0~24에 놓을 스탬프 종류 id(문자열). 비어 있으면 빙고판을 아직 안 짠 것.
+    bingo_stamp_ids: Mapped[list] = mapped_column(JSONB, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class RunningWeekParticipation(Base):
+    """러닝위크 참가 신청. 사용자·회차당 하나이고, 수정은 아직 없다.
+
+    이름·연락처는 개인정보라 동의를 받고, 신청일로부터 1년 뒤 폐기한다(expires_at).
+    폐기는 서버 기동 때와 운영 웹 참가자 조회 때 지난 행을 지우는 것으로 처리한다
+    (running_weeks.purge_expired_participations). 폼 항목이 회차마다 바뀔 수 있어
+    어떤 폼으로 받았는지 form_version을 남긴다.
+    """
+
+    __tablename__ = "running_week_participations"
+    __table_args__ = (
+        UniqueConstraint(
+            "running_week_id", "user_id", name="uq_running_week_participation_user"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    running_week_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("running_weeks.id", ondelete="CASCADE"), index=True
+    )
+    # 토큰 sub(문자열). Stamp/Run과 같다.
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+
+    name: Mapped[str] = mapped_column(String(50))
+    phone: Mapped[str] = mapped_column(String(20))
+    # 'male' | 'female'
+    gender: Mapped[str] = mapped_column(String(10))
+    age: Mapped[int] = mapped_column(SmallInteger)
+    # 'jeju'(도민) | 'non_jeju'(도외)
+    residence: Mapped[str] = mapped_column(String(20))
+
+    form_version: Mapped[int] = mapped_column(SmallInteger, default=1)
+    agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Mission(Base):
     """이벤트 미션. 운영자가 참여 기간·달성 조건·리워드·내용을 설정한다.
 
