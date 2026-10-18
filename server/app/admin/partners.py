@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import CoursePartner, Partner
+from app.models import CoursePartner, Partner, UserCoupon
 from app.schemas import PartnerOut, PartnerPayload
 
 router = APIRouter(tags=["partners"])
@@ -36,7 +36,19 @@ def _course_counts(db: Session, partner_ids: list[uuid.UUID]) -> dict[uuid.UUID,
     return {partner_id: count for partner_id, count in rows}
 
 
-def _to_out(partner: Partner, course_count: int) -> PartnerOut:
+def _coupon_used_counts(db: Session, partner_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """업체별 쿠폰 사용 수(업체 이용률)."""
+    if not partner_ids:
+        return {}
+    rows = db.execute(
+        select(UserCoupon.used_partner_id, func.count())
+        .where(UserCoupon.used_partner_id.in_(partner_ids))
+        .group_by(UserCoupon.used_partner_id)
+    ).all()
+    return {partner_id: count for partner_id, count in rows}
+
+
+def _to_out(partner: Partner, course_count: int, coupon_used_count: int = 0) -> PartnerOut:
     return PartnerOut(
         id=partner.id,
         name=partner.name,
@@ -48,6 +60,7 @@ def _to_out(partner: Partner, course_count: int) -> PartnerOut:
         benefit=partner.benefit,
         detail=partner.detail or {},
         course_count=course_count,
+        coupon_used_count=coupon_used_count,
         created_at=partner.created_at,
         updated_at=partner.updated_at,
     )
@@ -69,8 +82,13 @@ def _apply(partner: Partner, payload: PartnerPayload) -> None:
 def list_partners(db: Session = Depends(get_db)):
     """협력업체 전체 목록(이름순). (관리자 전용 — 라우터 레벨에서 강제)"""
     partners = list(db.execute(select(Partner).order_by(Partner.name)).scalars())
-    counts = _course_counts(db, [partner.id for partner in partners])
-    return [_to_out(partner, counts.get(partner.id, 0)) for partner in partners]
+    ids = [partner.id for partner in partners]
+    counts = _course_counts(db, ids)
+    used = _coupon_used_counts(db, ids)
+    return [
+        _to_out(partner, counts.get(partner.id, 0), used.get(partner.id, 0))
+        for partner in partners
+    ]
 
 
 @router.post("/partners", response_model=PartnerOut, status_code=201)

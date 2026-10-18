@@ -1,4 +1,5 @@
 import '../api/auth_api.dart';
+import '../api/coupon_api.dart';
 import '../api/course_api.dart';
 import '../api/favorite_api.dart';
 import '../api/home_api.dart';
@@ -13,6 +14,7 @@ import '../features/running_week/running_week_service.dart';
 import '../network/api_client.dart';
 import '../network/client_context_interceptor.dart';
 import 'auth_service.dart';
+import 'coupon_service.dart';
 import 'course_service.dart';
 import 'current_location.dart';
 import 'favorite_service.dart';
@@ -83,6 +85,9 @@ class Services {
   /// 러닝위크(커뮤니티 상단 배너, 빙고).
   late final RunningWeekService runningWeek = RunningWeekService(apiClient);
   late final StampService stamp = StampService(StampApi(apiClient));
+
+  /// 내 쿠폰(마이페이지, 완주 직후 획득 연출).
+  late final CouponService coupon = CouponService(CouponApi(apiClient));
   late final VerificationService verification = VerificationService(
     VerificationApi(apiClient),
   );

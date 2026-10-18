@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 
 import { ApiError, getMe, logout, type AdminIdentity } from './api'
 import AuthPage from './pages/AuthPage'
+import CouponListPage from './pages/CouponListPage'
 import CourseListPage from './pages/CourseListPage'
 import CourseStatsPage from './pages/CourseStatsPage'
 import HomeCurationPage from './pages/HomeCurationPage'
@@ -27,6 +28,7 @@ type Page =
   | 'partners'
   | 'stamps'
   | 'running-weeks'
+  | 'coupons'
   | 'notices'
   | 'dashboard'
   | 'course-stats'
@@ -54,6 +56,7 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
       { key: 'partners', label: '협력업체' },
       { key: 'stamps', label: '스탬프' },
       { key: 'running-weeks', label: '러닝위크' },
+      { key: 'coupons', label: '쿠폰' },
       { key: 'notices', label: '공지사항' },
     ],
   },
@@ -151,6 +154,9 @@ export default function App() {
           )}
           {page === 'running-weeks' && (
             <RunningWeekListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'coupons' && (
+            <CouponListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
           )}
           {page === 'notices' && (
             <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />

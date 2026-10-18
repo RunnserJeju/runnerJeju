@@ -25,6 +25,8 @@ export interface PartnerSummary {
 export interface Partner extends PartnerSummary {
   /** 연결된 코스 수. 삭제 경고에 쓴다. */
   course_count: number
+  /** 이 업체에서 사용된 쿠폰 수(업체 이용률). */
+  coupon_used_count: number
   created_at: string
   updated_at: string
 }
@@ -444,6 +446,79 @@ export function updatePartner(id: string, payload: PartnerPayload): Promise<Part
 /** 삭제하면 연결된 코스에서도 빠진다(서버 FK CASCADE). */
 export function deletePartner(id: string): Promise<void> {
   return request(`/admin/partners/${id}`, { method: 'DELETE' })
+}
+
+// --- 쿠폰 ---------------------------------------------------------------
+// 템플릿 행은 서버 마이그레이션이 심는다 — 여기서는 수정·지급·현황만.
+
+/** 지급 조건. 서버 app/coupon_rules.TRIGGER_TYPES와 같다. */
+export type CouponTriggerType = 'manual' | 'course_complete'
+
+export interface Coupon {
+  id: string
+  name: string
+  description: string | null
+  benefit: string
+  valid_until: string | null
+  trigger_type: CouponTriggerType
+  /** 끄면 자동 지급이 멈춘다. 이미 발급된 쿠폰은 그대로 쓸 수 있다. */
+  is_active: boolean
+  /** 쓸 수 있는 업체. 비어 있으면 모든 업체. */
+  partner_ids: string[]
+  created_at: string
+  issued_count: number
+  used_count: number
+}
+
+export interface CouponPayload {
+  name: string
+  benefit: string
+  description: string | null
+  valid_until: string | null
+  is_active: boolean
+  partner_ids: string[]
+}
+
+export type CouponStatus = 'available' | 'used' | 'expired'
+
+export interface IssuedCoupon {
+  id: string
+  user_id: string
+  nickname: string | null
+  issued_at: string
+  used_at: string | null
+  used_partner_name: string | null
+  status: CouponStatus
+}
+
+export function listCoupons(): Promise<Coupon[]> {
+  return request('/admin/coupons')
+}
+
+export function updateCoupon(id: string, payload: CouponPayload): Promise<Coupon> {
+  return request(`/admin/coupons/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** 고른 회원들에게 한 장씩 지급. 실제 발급된 수를 돌려준다. */
+export function issueCoupon(id: string, userIds: string[]): Promise<{ issued: number }> {
+  return request(`/admin/coupons/${id}/issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_ids: userIds }),
+  })
+}
+
+export function listIssuedCoupons(
+  id: string,
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: IssuedCoupon[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  return request(`/admin/coupons/${id}/issued?${params}`)
 }
 
 // --- 홈 구성 ------------------------------------------------------------

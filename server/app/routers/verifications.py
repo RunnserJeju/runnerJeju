@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import stamp_rules
+from app import coupon_rules, stamp_rules
 from app import verification as verification_logic
 from app.db import get_db
 from app.deps import current_user_id
-from app.models import Course, Run, Stamp, Verification
+from app.models import Course, Run, Stamp, UserCoupon, Verification
 from app.schemas import VerificationCreate, VerificationOut
 
 router = APIRouter(tags=["verifications"])
@@ -29,12 +29,23 @@ def _earned_stamp_id(db: Session, user_id: str, course_id: uuid.UUID) -> uuid.UU
     ).scalar_one_or_none()
 
 
+def _earned_coupon_id(db: Session, user_id: str, course_id: uuid.UUID) -> uuid.UUID | None:
+    """이 코스 완주로 받은 코스완료 쿠폰. 여러 템플릿이면 처음 것."""
+    return db.execute(
+        select(UserCoupon.id)
+        .where(
+            UserCoupon.user_id == user_id,
+            UserCoupon.grant_key == coupon_rules.course_grant_key(course_id),
+        )
+        .order_by(UserCoupon.issued_at)
+        .limit(1)
+    ).scalar_one_or_none()
+
+
 def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
-    stamp_id = (
-        _earned_stamp_id(db, user_id, verification.course_id)
-        if verification.status == "matched"
-        else None
-    )
+    matched = verification.status == "matched"
+    stamp_id = _earned_stamp_id(db, user_id, verification.course_id) if matched else None
+    coupon_id = _earned_coupon_id(db, user_id, verification.course_id) if matched else None
 
     return {
         "id": verification.id,
@@ -45,6 +56,7 @@ def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
         "detail": verification.detail,
         "completed_at": verification.completed_at,
         "earned_stamp_id": stamp_id,
+        "earned_coupon_id": coupon_id,
     }
 
 
@@ -99,6 +111,7 @@ def request_verification(
 
     if outcome.status == "matched":
         stamp_rules.on_course_completed(db, user_id, run, course.id)
+        coupon_rules.on_course_completed(db, user_id, course.id)
 
     db.commit()
     db.refresh(record)

@@ -12,6 +12,7 @@ import '../../widgets/course_card.dart';
 import '../../widgets/metric_tile.dart';
 import '../auth/login_screen.dart';
 import '../run/run_detail_screen.dart';
+import 'coupon_list_screen.dart';
 import '../../widgets/section_title.dart';
 
 /// 프로필: 최근 한 달 러닝 요약 + 찜한 코스 + 참여한 프로그램.
@@ -78,9 +79,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await Services.instance.auth.withdraw();
     } on AppException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
       return;
     }
     if (!mounted) return;
@@ -115,12 +116,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           builder: (context, snapshot) => AsyncView<_ProfileData>(
             snapshot: snapshot,
             onRetry: _refresh,
-            builder: (context, data) =>
-                _ProfileBody(
-                  data: data,
-                  onWithdraw: _withdraw,
-                  onOpenCourse: widget.onOpenCourse,
-                ),
+            builder: (context, data) => _ProfileBody(
+              data: data,
+              onWithdraw: _withdraw,
+              onOpenCourse: widget.onOpenCourse,
+            ),
           ),
         ),
       ),
@@ -234,6 +234,8 @@ class _ProfileBodyState extends State<_ProfileBody> {
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        const _CouponEntry(),
         const SizedBox(height: 28),
         const SectionTitle('최근 한 달 러닝'),
         const SizedBox(height: 12),
@@ -299,6 +301,39 @@ class _ProfileBodyState extends State<_ProfileBody> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 내 쿠폰함으로 가는 줄. 쿠폰은 업체에서 보여주며 쓰는 것이라 마이페이지에 둔다.
+class _CouponEntry extends StatelessWidget {
+  const _CouponEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const CouponListScreen())),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(Icons.confirmation_number_rounded, color: AppColors.accent),
+              SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  '내 쿠폰',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

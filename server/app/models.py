@@ -677,11 +677,14 @@ class UserLog(Base):
 
 
 class Coupon(Base):
-    """쿠폰 템플릿(종류). 운영자가 제작하고 유저에게 발급(user_coupons)한다.
+    """쿠폰 템플릿(종류). 행은 코드(마이그레이션)가 심고 운영툴은 수정만 한다.
+
+    지급 조건은 스탬프처럼 trigger_type으로 가른다(app/coupon_rules.py). 조건이 늘면
+    규칙 코드와 행 하나를 같이 더한다 — 운영툴에서 만들어 봤자 지급할 방법이 없다.
 
     혜택(benefit)은 자유 텍스트다 — 커머스가 없어 서버가 자동 적용하지 않고, 유저가
-    오프라인/이벤트에서 쓰는 증표다. 발급된 쿠폰은 이 템플릿을 라이브 참조하므로
-    (혜택/이름을 복사하지 않음) 운영자가 나중에 고치면 발급분에도 즉시 반영된다.
+    협력업체에서 쓰는 증표다. 발급된 쿠폰은 이 템플릿을 라이브 참조하므로(혜택/이름을
+    복사하지 않음) 운영자가 나중에 고치면 발급분에도 즉시 반영된다.
     """
 
     __tablename__ = "coupons"
@@ -697,6 +700,12 @@ class Coupon(Base):
     valid_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+
+    # 'manual' | 'course_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
+    trigger_type: Mapped[str] = mapped_column(String(30), default="manual")
+    # 끄면 자동 지급이 멈춘다. 이미 발급된 쿠폰은 그대로 쓸 수 있다.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -704,18 +713,43 @@ class Coupon(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    # 쓸 수 있는 업체. 비어 있으면 모든 업체.
+    partners: Mapped[list["CouponPartner"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class CouponPartner(Base):
+    """쿠폰 ↔ 사용 가능 업체. 쿠폰이나 업체가 지워지면 연결도 지워진다(CASCADE)."""
+
+    __tablename__ = "coupon_partners"
+
+    coupon_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("coupons.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partners.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+
 
 class UserCoupon(Base):
     """유저에게 발급된 쿠폰 한 장. 템플릿(coupons)을 라이브 참조한다.
 
     상태는 used_at 하나로 표현한다 — null이면 미사용(사용가능/만료), 값이 있으면
-    사용완료. '만료'는 저장하지 않고 coupons.valid_until로 계산한다. 템플릿을 삭제하면
-    FK ON DELETE CASCADE로 발급분·사용기록도 함께 사라진다(운영 웹이 확인 후 삭제).
+    사용완료. '만료'는 저장하지 않고 coupons.valid_until로 계산한다.
 
     user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
     """
 
     __tablename__ = "user_coupons"
+    __table_args__ = (
+        UniqueConstraint("coupon_id", "user_id", "grant_key", name="uq_user_coupon_grant"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -724,9 +758,18 @@ class UserCoupon(Base):
         UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
+    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}"). 운영자 수동 지급은 None.
+    grant_key: Mapped[str | None] = mapped_column(String(100), default=None)
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
+    )
+    # 어느 업체에서 썼는지. 업체가 지워지면 None으로 남는다.
+    used_partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partners.id", ondelete="SET NULL"),
+        default=None,
+        index=True,
     )

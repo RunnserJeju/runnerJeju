@@ -1,11 +1,10 @@
-"""운영자 전용 쿠폰 API — 제작/목록/상세/수정/삭제 + 지급 + 발급 현황.
+"""운영자 전용 쿠폰 API — 목록/상세/수정 + 지급 + 발급 현황.
 
-쿠폰 템플릿(coupons)을 만들고 유저에게 발급(user_coupons)한다. 삭제는 발급분까지
-FK ON DELETE CASCADE로 함께 지운다(운영 웹이 "진짜 삭제?"를 확인). 발급 현황은
-누구에게 발급됐고 사용했는지를 회원 닉네임까지 붙여 보여준다.
+쿠폰 템플릿(coupons)은 코드가 심는다(app/coupon_rules.py). 운영툴에서 만들어 봤자
+지급 조건을 붙일 수 없어 제작·삭제는 없고, 이름·혜택·설명·유효기간·사용 업체·켜고
+끄기만 고친다. 발급 현황은 누구에게 발급됐고 어느 업체에서 썼는지를 보여준다.
 
-이용완료(사용)는 유저 앱(app/routers/coupons.py의 /me/coupons)에서 처리한다 —
-여기(운영자)는 제작·지급·현황 조회까지다.
+이용완료(사용)는 유저 앱(app/routers/coupons.py의 /me/coupons)에서 처리한다.
 """
 
 import uuid
@@ -16,12 +15,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Coupon, User, UserCoupon
+from app.models import Coupon, CouponPartner, Partner, User, UserCoupon
 from app.schemas import (
-    CouponCreate,
     CouponOut,
     CouponUpdate,
-    IssuedCouponOut,
     IssuedListOut,
     IssueRequest,
     IssueResult,
@@ -82,32 +79,20 @@ def _to_out(coupon: Coupon, issued_count: int, used_count: int) -> dict:
         "description": coupon.description,
         "benefit": coupon.benefit,
         "valid_until": coupon.valid_until,
+        "trigger_type": coupon.trigger_type,
+        "is_active": coupon.is_active,
+        "partner_ids": [link.partner_id for link in coupon.partners],
         "created_at": coupon.created_at,
         "issued_count": issued_count,
         "used_count": used_count,
     }
 
 
-@router.post("/coupons", response_model=CouponOut, status_code=201)
-def create_coupon(payload: CouponCreate, db: Session = Depends(get_db)):
-    """쿠폰을 제작한다. (관리자 전용 — 라우터 레벨에서 강제)"""
-    coupon = Coupon(
-        name=payload.name,
-        benefit=payload.benefit,
-        description=payload.description,
-        valid_until=payload.valid_until,
-    )
-    db.add(coupon)
-    db.commit()
-    db.refresh(coupon)
-    return _to_out(coupon, 0, 0)
-
-
 @router.get("/coupons", response_model=list[CouponOut])
 def list_coupons(db: Session = Depends(get_db)):
-    """쿠폰 전체 목록(최신순) + 발급/사용 수."""
+    """쿠폰 전체 목록(심은 순) + 발급/사용 수."""
     coupons = list(
-        db.execute(select(Coupon).order_by(Coupon.created_at.desc())).scalars()
+        db.execute(select(Coupon).order_by(Coupon.created_at)).scalars()
     )
     issued, used = _issued_used_counts(db, [c.id for c in coupons])
     return [_to_out(c, issued.get(c.id, 0), used.get(c.id, 0)) for c in coupons]
@@ -125,25 +110,38 @@ def get_coupon(coupon_id: uuid.UUID, db: Session = Depends(get_db)):
 def update_coupon(
     coupon_id: uuid.UUID, payload: CouponUpdate, db: Session = Depends(get_db)
 ):
-    """쿠폰 수정(전체 교체). 발급분은 라이브 참조라 즉시 반영된다."""
+    """쿠폰 수정(전체 교체). 발급분은 라이브 참조라 즉시 반영된다.
+
+    사용 업체는 실제 있는 업체만 남기고 통째로 바꾼다. 비우면 모든 업체 허용.
+    """
     coupon = _load_coupon_or_404(db, coupon_id)
-    coupon.name = payload.name
-    coupon.benefit = payload.benefit
-    coupon.description = payload.description
+
+    wanted = list(dict.fromkeys(payload.partner_ids))
+    existing = set(
+        db.execute(select(Partner.id).where(Partner.id.in_(wanted))).scalars()
+    ) if wanted else set()
+    missing = [pid for pid in wanted if pid not in existing]
+    if missing:
+        raise HTTPException(status_code=400, detail="없는 협력업체가 있어요.")
+
+    coupon.name = payload.name.strip()
+    coupon.benefit = payload.benefit.strip()
+    coupon.description = (payload.description or "").strip() or None
     coupon.valid_until = payload.valid_until
+    coupon.is_active = payload.is_active
+    # 통째로 갈아끼우지 않고 차이만 반영한다 — 같은 (쿠폰, 업체) PK를 지웠다 다시 넣는
+    # flush에 기대지 않으려고.
+    current = {link.partner_id: link for link in coupon.partners}
+    for pid, link in current.items():
+        if pid not in wanted:
+            coupon.partners.remove(link)
+    for pid in wanted:
+        if pid not in current:
+            coupon.partners.append(CouponPartner(partner_id=pid))
     db.commit()
     db.refresh(coupon)
     issued, used = _issued_used_counts(db, [coupon.id])
     return _to_out(coupon, issued.get(coupon.id, 0), used.get(coupon.id, 0))
-
-
-@router.delete("/coupons/{coupon_id}", status_code=204)
-def delete_coupon(coupon_id: uuid.UUID, db: Session = Depends(get_db)):
-    """쿠폰을 삭제한다. 발급분·사용기록은 FK ON DELETE CASCADE로 함께 지워진다
-    ("이미 발급된 쿠폰인데 진짜 삭제?" 확인은 운영 웹이 맡는다)."""
-    coupon = _load_coupon_or_404(db, coupon_id)
-    db.delete(coupon)
-    db.commit()
 
 
 @router.post("/coupons/{coupon_id}/issue", response_model=IssueResult, status_code=201)
@@ -178,9 +176,9 @@ def list_issued(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    """이 쿠폰이 누구에게 발급됐는지 + 사용 여부. 회원 닉네임까지 붙인다.
+    """이 쿠폰이 누구에게 발급됐는지 + 사용 여부·사용 업체. 회원 닉네임까지 붙인다.
 
-    닉네임은 이 페이지 발급분의 user_id들만 배치로 조회해 붙인다(N+1 없음). 탈퇴/닉네임
+    닉네임·업체 이름은 이 페이지 발급분의 id들만 배치로 조회해 붙인다(N+1 없음). 탈퇴/닉네임
     미설정이면 null. 발급이 많아질 수 있어 offset 페이지네이션.
     """
     coupon = _load_coupon_or_404(db, coupon_id)
@@ -210,6 +208,15 @@ def list_issued(
                 select(User.id, User.nickname).where(User.id.in_(user_ids))
             ).all()
         }
+    partner_ids = {uc.used_partner_id for uc in rows if uc.used_partner_id is not None}
+    partner_name = {}
+    if partner_ids:
+        partner_name = {
+            pid: name
+            for pid, name in db.execute(
+                select(Partner.id, Partner.name).where(Partner.id.in_(partner_ids))
+            ).all()
+        }
 
     now = datetime.now(timezone.utc)
     items = [
@@ -219,6 +226,7 @@ def list_issued(
             "nickname": nickname.get(uuid.UUID(uc.user_id)),
             "issued_at": uc.issued_at,
             "used_at": uc.used_at,
+            "used_partner_name": partner_name.get(uc.used_partner_id),
             "status": _effective_status(uc.used_at, coupon.valid_until, now),
         }
         for uc in rows

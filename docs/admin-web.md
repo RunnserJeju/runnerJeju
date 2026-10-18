@@ -43,13 +43,11 @@
 | `GET /admin/users/{id}` | 회원 상세 (기본정보 + 완주 코스 목록) |
 | `GET /admin/stats/overview` | 이용 통계 — 사이트 전체 요약 |
 | `GET /admin/stats/courses` | 이용 통계 — 코스별 지표(완주·찜·이용자, 정렬) |
-| `POST /admin/coupons` | 쿠폰 제작 |
 | `GET /admin/coupons` | 쿠폰 목록 (+발급/사용 수) |
 | `GET /admin/coupons/{id}` | 쿠폰 상세 |
-| `PATCH /admin/coupons/{id}` | 쿠폰 수정 |
-| `DELETE /admin/coupons/{id}` | 쿠폰 삭제 (발급분 cascade) |
+| `PATCH /admin/coupons/{id}` | 쿠폰 수정 (이름·혜택·설명·유효기간·사용 업체·on/off) |
 | `POST /admin/coupons/{id}/issue` | 지급 (user_ids 대량) |
-| `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·사용여부, 닉네임) |
+| `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·사용여부·사용 업체, 닉네임) |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /courses/{id}/gpx`(업로드한 GPX 원본 내려받기, 원본 없으면 404), `GET /notices`.
@@ -189,17 +187,16 @@
 - **조회수 (하루 1회 중복제거)**: `course_views(course_id, user_id, view_date)` + `(course_id, user_id, view_date)` 유니크. 공개 `GET /courses/{id}`(앱)가 서버측에서 `ON CONFLICT DO NOTHING`으로 기록 → **앱 변경 없음**. 같은 사람이 하루에 여러 번 열어도 1 → **raw 클릭 수가 아니라 '고유 조회(사람·일)'**. 시간축은 `view_date`(일 단위)뿐이라 **기간별(period) 추이는 이후**.
 - **인기 '지역' 보류**: 코스에 구조화된 지역 필드가 없어(주소·태그는 자유 텍스트) 지역 집계는 안 한다. 코스 정렬이 곧 인기 코스. region 필드가 생기면 그때.
 
-## 쿠폰 관리 (백엔드, 2026-09-06)
+## 쿠폰 (2026-10-18 개편)
 
-운영자가 쿠폰을 제작·지급하고, 유저가 앱에서 사용(이용완료)한다. 마이그레이션 `0021`(`coupons` 템플릿 + `user_coupons` 발급). 커머스가 없어 혜택은 자유 텍스트이고 서버가 자동 적용하지 않는다(오프라인/이벤트 증표).
+쿠폰 템플릿(`coupons`)은 **코드가 심고 운영툴은 수정만** 한다. 지급 조건은 스탬프처럼 `trigger_type`으로 가르고 판정은 `app/coupon_rules.py` 한 곳에 쓴다(마이그레이션 `0021` 기본 구조, `0032` 규칙·업체).
 
-- **2계층**: `coupons`(종류·템플릿) + `user_coupons`(개인 발급 인스턴스). 발급분은 템플릿을 **라이브 참조**(혜택·유효기간 복사 안 함) → 운영자 수정이 발급분에 즉시 반영.
-- **상태**: `user_coupons.used_at` 하나로 — null=미사용, 값=사용완료. **만료는 저장 안 하고** `coupons.valid_until < now`로 계산. 유효상태 = 사용완료 / 만료 / 사용가능.
-- **삭제**: 템플릿 삭제 시 발급분·사용기록이 FK `ON DELETE CASCADE`로 함께 삭제. "이미 발급된 쿠폰인데 진짜?" 확인은 운영 웹 다이얼로그가 맡고 백엔드는 그냥 삭제한다.
-- **운영자 API** (`/admin/coupons`): `POST`(제작)·`GET`(목록+발급/사용 수)·`GET/{id}`·`PATCH/{id}`·`DELETE/{id}` + `POST /{id}/issue`(user_ids 대량, **실존 비탈퇴 회원만** 발급) + `GET /{id}/issued`(발급 현황 — 누구에게·사용여부, **회원 닉네임 조인**, offset 페이지네이션).
-- **앱 API** (`/me/coupons`, 공개): `GET`(내 쿠폰 — 라이브 혜택·유효상태) + `POST /{user_coupon_id}/use`(사용). 사용은 `used_at IS NULL`일 때만 채우는 **조건부 UPDATE**로 중복 사용 방지(동시성), 소유·만료 확인.
-- **닉네임 조인**: `user_coupons.user_id`는 `str(users.id)`(FK 아님)이라, 발급 현황은 페이지 user_id들을 UUID로 되돌려 `users` 배치 조회(N+1 없음). 탈퇴/미설정이면 닉네임 null.
-- **안 한 것**: 회수(revoke)·개별 발급 수정/삭제·구조화 혜택·per-issuance 만료·미션 자동지급 연결·Flutter/운영웹 화면(API만).
+- **지급 조건**: `manual`(운영자가 회원 골라 지급) / `course_complete`(아무 코스나 완주 인증이 통과하면 한 장, 코스마다 1회 — `user_coupons.grant_key = "course:{course_id}"` 유니크). 새 조건(빙고 줄·블랙아웃 등)은 규칙 함수 + 행을 심는 마이그레이션을 같이 더한다. 운영툴에 생성·삭제는 없다 — 만들어 봤자 지급할 방법이 없어서.
+- **사용 업체**: `coupon_partners`(쿠폰 ↔ 업체). 행이 없으면 모든 업체 허용. 앱은 업체 **이름 검색**으로 골라 `POST /me/coupons/{id}/use {partner_id}` — 업체 코드 없음. 서버는 제한 안의 업체인지 확인하고 `user_coupons.used_partner_id`에 남긴다(업체 목록의 "쿠폰 사용" 수, 발급 현황의 사용 업체).
+- **상태**: `used_at` 하나로 — null=미사용, 값=사용완료. 만료는 `valid_until < now`로 계산. `is_active`는 자동 지급을 끄는 스위치이고 이미 발급된 쿠폰은 그대로 쓸 수 있다.
+- **인증 응답**: `VerificationOut.earned_coupon_id` — 앱이 스탬프 연출 뒤 쿠폰 획득 연출에 쓴다.
+- **앱 API** (`/me/coupons`): `GET`(목록, `partner_ids` null=모든 업체) · `GET /{id}` · `POST /{id}/use`(조건부 UPDATE로 중복 사용 방지).
+- **안 한 것**: 회수(revoke)·per-issuance 만료·복권/룰렛 연출·빙고 쿠폰.
 
 ## 목표 서버 구조
 

@@ -205,6 +205,8 @@ class PartnerOut(PartnerSummary):
 
     # 이 업체가 연결된 코스 수. 삭제하면 그 코스들에서 빠진다는 경고에 쓴다.
     course_count: int
+    # 이 업체에서 사용된 쿠폰 수(업체 이용률).
+    coupon_used_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -398,6 +400,8 @@ class VerificationOut(BaseModel):
 
     # 검증이 matched면 이때 발급된 스탬프 id. 앱은 이 값으로 스탬프를 조회한다.
     earned_stamp_id: uuid.UUID | None = None
+    # 이 코스 완주로 받은 코스완료 쿠폰(user_coupon id). 쿠폰이 꺼져 있으면 None.
+    earned_coupon_id: uuid.UUID | None = None
 
 
 # --- 스탬프 --------------------------------------------------------------
@@ -739,23 +743,24 @@ class UserListOut(BaseModel):
 
 
 # --- 쿠폰 (운영자 + 앱) ----------------------------------------------------
-# 템플릿(coupons) + 발급 인스턴스(user_coupons). 혜택은 자유텍스트, 발급분은 템플릿을
-# 라이브 참조(수정 즉시 반영). 상태는 used_at으로, '만료'는 valid_until로 계산한다.
+# 템플릿(coupons) + 발급 인스턴스(user_coupons). 템플릿 행은 코드가 심고 운영툴은 수정만
+# 한다. 발급분은 템플릿을 라이브 참조(수정 즉시 반영). 상태는 used_at으로, '만료'는
+# valid_until로 계산한다.
 
 CouponStatus = Literal["available", "used", "expired"]
+CouponTriggerType = Literal["manual", "course_complete"]
 
 
-class CouponCreate(BaseModel):
-    """쿠폰 제작. 혜택은 자유 텍스트, 유효기간은 생략 가능(무기한)."""
+class CouponUpdate(BaseModel):
+    """쿠폰 수정(PATCH). 지급 조건은 못 바꾼다 — 이름·혜택·설명·유효기간·사용 업체·켜고 끄기."""
 
     name: str = Field(min_length=1, max_length=200)
     benefit: str = Field(min_length=1, max_length=500)
     description: str | None = None
     valid_until: datetime | None = None
-
-
-class CouponUpdate(CouponCreate):
-    """쿠폰 수정(PATCH). 작성과 같은 필드로 전체 교체한다."""
+    is_active: bool = True
+    # 쓸 수 있는 업체. 비우면 모든 업체.
+    partner_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class CouponOut(BaseModel):
@@ -766,6 +771,9 @@ class CouponOut(BaseModel):
     description: str | None
     benefit: str
     valid_until: datetime | None
+    trigger_type: CouponTriggerType
+    is_active: bool
+    partner_ids: list[uuid.UUID]
     created_at: datetime
     issued_count: int
     used_count: int
@@ -782,13 +790,14 @@ class IssueResult(BaseModel):
 
 
 class IssuedCouponOut(BaseModel):
-    """발급 현황 한 행 — 누구에게 발급됐고 사용했는지."""
+    """발급 현황 한 행 — 누구에게 발급됐고 어디서 썼는지."""
 
     id: uuid.UUID  # user_coupon id
     user_id: uuid.UUID
     nickname: str | None  # 탈퇴/미설정이면 null
     issued_at: datetime
     used_at: datetime | None
+    used_partner_name: str | None  # 업체가 지워졌거나 미사용이면 null
     status: CouponStatus
 
 
@@ -808,6 +817,15 @@ class MyCouponOut(BaseModel):
     used_at: datetime | None
     valid_until: datetime | None
     status: CouponStatus
+    # 쓸 수 있는 업체 id. None이면 모든 업체.
+    partner_ids: list[uuid.UUID] | None
+    used_partner_name: str | None
+
+
+class CouponUseRequest(BaseModel):
+    """쿠폰 사용. 앱이 업체 이름 검색으로 고른 업체를 보낸다."""
+
+    partner_id: uuid.UUID
 
 
 class UserLogIn(BaseModel):
