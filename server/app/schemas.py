@@ -205,8 +205,38 @@ class PartnerOut(PartnerSummary):
 
     # 이 업체가 연결된 코스 수. 삭제하면 그 코스들에서 빠진다는 경고에 쓴다.
     course_count: int
+    # 이 업체에서 사용된 쿠폰 수(업체 이용률).
+    coupon_used_count: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class HomeCurationItem(BaseModel):
+    """홈 섹션의 한 칸. id는 섹션에 따라 코스 id 또는 협력업체 id다."""
+
+    id: uuid.UUID
+    # 운영자가 쓰는 큐레이션 설명. 앱 노출 방식은 아직 정하지 않았다.
+    describe: str | None = None
+    # 형태 미정 부가 정보. 서버는 내용을 해석하지 않는다.
+    detail: dict = Field(default_factory=dict)
+
+
+class HomeCurationOut(BaseModel):
+    """앱 홈 구성. GET /home/curation(앱), GET /admin/home(운영 웹).
+
+    앞에 있을수록 홈에서 먼저 나온다. 비어 있으면 그 섹션은 앱 홈에서 접힌다.
+    """
+
+    # '러닝 코스 큐레이션'에 띄울 코스.
+    courses: list[HomeCurationItem]
+    # '추천 협력 업체'에 띄울 업체.
+    partners: list[HomeCurationItem]
+
+
+class HomeCurationPayload(BaseModel):
+    """홈 섹션 하나의 구성(전체 교체). PUT /admin/home/courses, /admin/home/partners."""
+
+    items: list[HomeCurationItem]
 
 
 class CourseListItem(BaseModel):
@@ -244,9 +274,9 @@ class CourseListItem(BaseModel):
     # 대표 썸네일 public URL. 전용 엔드포인트로만 설정/삭제된다(등록·수정 폼과 별개).
     thumbnail_url: str | None
 
-    # 이 코스 완주 시 주는 스탬프 도안 public URL. 스탬프 앨범이 코스 목록만으로
-    # 잠긴 칸(미획득)의 목표 도안까지 그릴 수 있게 코스 응답에 함께 내린다.
-    stamp_image_url: str | None
+    # 이 코스 완주 스탬프의 도안(스탬프 종류에서 가져옴). 옛 앱 스탬프 탭 호환용 —
+    # 새 앱은 GET /stamp-definitions를 쓴다(#71).
+    stamp_image_url: str | None = None
 
     completed_count: int
     is_completed_by_me: bool
@@ -370,18 +400,205 @@ class VerificationOut(BaseModel):
 
     # 검증이 matched면 이때 발급된 스탬프 id. 앱은 이 값으로 스탬프를 조회한다.
     earned_stamp_id: uuid.UUID | None = None
+    # 이 코스 완주로 받은 코스완료 쿠폰(user_coupon id). 쿠폰이 꺼져 있으면 None.
+    earned_coupon_id: uuid.UUID | None = None
 
 
 # --- 스탬프 --------------------------------------------------------------
 
 
+class StampDefinitionOut(BaseModel):
+    """스탬프 종류. 앱 스탬프 탭이 잠긴 칸까지 그리는 데 쓴다."""
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    image_url: str | None
+    condition_type: str
+    # condition_type이 course_complete일 때 그 코스. 앱이 칸을 누르면 코스 안내로 보낸다.
+    course_id: uuid.UUID | None
+    sort_order: int
+
+
 class StampOut(BaseModel):
     id: uuid.UUID
-    course_id: uuid.UUID
-    course_name: str
-    acquired_at: datetime
+    stamp_definition_id: uuid.UUID
+    name: str
+    description: str | None
     image_url: str | None
+    condition_type: str
+    course_id: uuid.UUID | None
+    acquired_at: datetime
     record_id: uuid.UUID | None
+    # 옛 앱 호환. course_name은 스탬프 이름과 같다.
+    course_name: str
+
+
+class StampDefinitionCreate(BaseModel):
+    """스탬프 종류 등록·수정(운영툴). 도안은 전용 엔드포인트로 올린다."""
+
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = None
+    condition_type: str
+    condition_params: dict = Field(default_factory=dict)
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class StampDefinitionUpdate(StampDefinitionCreate):
+    """수정(PATCH /admin/stamps/{id}). 작성과 같은 필드로 전체를 교체한다."""
+
+
+class AdminStampDefinitionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    image_url: str | None
+    condition_type: str
+    condition_params: dict
+    is_active: bool
+    sort_order: int
+    # 이 스탬프를 받은 사람 수.
+    issued_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+# --- 러닝위크 -------------------------------------------------------------
+
+BINGO_SIZE = 5
+BINGO_CELLS = BINGO_SIZE * BINGO_SIZE
+
+# 참가 폼 버전. 항목을 바꾸면 올린다 — 신청 행마다 어떤 폼으로 받았는지 남는다.
+PARTICIPATION_FORM_VERSION = 1
+
+
+class BingoCellOut(BaseModel):
+    position: int
+    # 칸에 놓인 스탬프. 운영자가 숨긴 스탬프면 None(빈 칸).
+    stamp: StampDefinitionOut | None
+    acquired: bool
+
+
+class BingoOut(BaseModel):
+    cells: list[BingoCellOut]
+    # 다 채운 가로·세로·대각선 줄 수(0~12).
+    completed_lines: int
+
+
+class RunningWeekOut(BaseModel):
+    """앱용. 빙고판은 참가 신청을 한 사람에게만 내린다."""
+
+    id: uuid.UUID
+    title: str
+    description: str | None
+    image_url: str | None
+    starts_at: datetime | None
+    ends_at: datetime | None
+    participated: bool
+    bingo: BingoOut | None
+
+
+class RunningWeekParticipationCreate(BaseModel):
+    """참가 신청. 개인정보 수집·이용 동의(agreed)가 있어야 받는다."""
+
+    name: str = Field(min_length=1, max_length=50)
+    phone: str
+    gender: Literal["male", "female"]
+    age: int = Field(ge=1, le=120)
+    residence: Literal["jeju", "non_jeju"]
+    agreed: bool
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("이름을 입력해 주세요.")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize_phone(cls, value: str) -> str:
+        # 숫자만 남겨 저장한다. 국내 휴대폰·일반 전화 길이(9~11자리)만 받는다.
+        digits = "".join(ch for ch in value if ch.isdigit())
+        if not 9 <= len(digits) <= 11:
+            raise ValueError("연락처를 확인해 주세요.")
+        return digits
+
+    @field_validator("agreed")
+    @classmethod
+    def _must_agree(cls, value: bool) -> bool:
+        if not value:
+            raise ValueError("개인정보 수집·이용에 동의해야 참가할 수 있어요.")
+        return value
+
+
+class RunningWeekCreate(BaseModel):
+    """운영툴 등록·수정. 배너 이미지와 빙고 배치는 전용 엔드포인트로 따로 바꾼다."""
+
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _check_period(self):
+        if self.starts_at and self.ends_at and self.ends_at < self.starts_at:
+            raise ValueError("공개 종료가 시작보다 빠를 수 없어요.")
+        return self
+
+
+class RunningWeekUpdate(RunningWeekCreate):
+    """수정(PATCH /admin/running-weeks/{id}). 작성과 같은 필드로 전체를 교체한다."""
+
+
+class BingoUpdate(BaseModel):
+    """빙고 배치. 칸 순서대로 스탬프 종류 id 25개, 중복 없이."""
+
+    stamp_ids: list[uuid.UUID] = Field(min_length=BINGO_CELLS, max_length=BINGO_CELLS)
+
+    @field_validator("stamp_ids")
+    @classmethod
+    def _unique(cls, value: list[uuid.UUID]) -> list[uuid.UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("같은 스탬프를 두 칸에 놓을 수 없어요.")
+        return value
+
+
+class AdminRunningWeekOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    description: str | None
+    image_url: str | None
+    starts_at: datetime | None
+    ends_at: datetime | None
+    is_active: bool
+    bingo_stamp_ids: list[str]
+    participant_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminParticipationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: str
+    name: str
+    phone: str
+    gender: str
+    age: int
+    residence: str
+    form_version: int
+    agreed_at: datetime
+    expires_at: datetime
+    created_at: datetime
 
 
 # --- 공지사항 -------------------------------------------------------------
@@ -420,19 +637,14 @@ class NoticeOut(BaseModel):
     created_at: datetime
 
 
-# --- 미션 -----------------------------------------------------------------
+# --- 이벤트 ----------------------------------------------------------------
 
 
-class MissionCreate(BaseModel):
-    """이벤트 미션 작성. 달성 조건·리워드는 자유 텍스트로 서술한다(자동 판정 없음).
-
-    참여 기간(starts_at/ends_at)은 생략 가능하며 null은 '제한 없음'이다.
-    """
+class EventCreate(BaseModel):
+    """이벤트 작성. 이미지는 전용 엔드포인트로 올린다. 기간 null은 '제한 없음'이다."""
 
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)
-    condition: str = Field(min_length=1, max_length=500)
-    reward: str = Field(min_length=1, max_length=500)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     is_active: bool = True
@@ -440,29 +652,31 @@ class MissionCreate(BaseModel):
 
     @model_validator(mode="after")
     def _check_period(self):
-        # 종료가 시작보다 빠르면 아무 때도 참여할 수 없는 죽은 미션이 된다 — 미리 막는다.
         if self.starts_at and self.ends_at and self.ends_at < self.starts_at:
-            raise ValueError("참여 종료가 시작보다 빠를 수 없어요.")
+            raise ValueError("노출 종료가 시작보다 빠를 수 없어요.")
         return self
 
 
-class MissionUpdate(MissionCreate):
-    """미션 수정(PATCH /admin/missions/{id}). 작성과 같은 필드로 전체를 교체한다."""
+class EventUpdate(EventCreate):
+    """이벤트 수정(PATCH /admin/events/{id}). 작성과 같은 필드로 전체를 교체한다."""
 
 
-class MissionOut(BaseModel):
+class EventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     title: str
     body: str
-    condition: str
-    reward: str
+    image_url: str | None
     starts_at: datetime | None
     ends_at: datetime | None
+    created_at: datetime
+
+
+class AdminEventOut(EventOut):
     is_active: bool
     sort_order: int
-    created_at: datetime
+    updated_at: datetime
 
 
 # --- 회원 (운영자 조회) ---------------------------------------------------
@@ -526,23 +740,24 @@ class UserListOut(BaseModel):
 
 
 # --- 쿠폰 (운영자 + 앱) ----------------------------------------------------
-# 템플릿(coupons) + 발급 인스턴스(user_coupons). 혜택은 자유텍스트, 발급분은 템플릿을
-# 라이브 참조(수정 즉시 반영). 상태는 used_at으로, '만료'는 valid_until로 계산한다.
+# 템플릿(coupons) + 발급 인스턴스(user_coupons). 템플릿 행은 코드가 심고 운영툴은 수정만
+# 한다. 발급분은 템플릿을 라이브 참조(수정 즉시 반영). 상태는 used_at(사용) ·
+# expired_at(만료, 서버가 알아챈 시점에 저장) · valid_until(아직 저장 전인 만료)로 계산한다.
 
 CouponStatus = Literal["available", "used", "expired"]
+CouponTriggerType = Literal["manual", "course_complete"]
 
 
-class CouponCreate(BaseModel):
-    """쿠폰 제작. 혜택은 자유 텍스트, 유효기간은 생략 가능(무기한)."""
+class CouponUpdate(BaseModel):
+    """쿠폰 수정(PATCH). 지급 조건은 못 바꾼다 — 이름·혜택·설명·유효기간·사용 업체·켜고 끄기."""
 
     name: str = Field(min_length=1, max_length=200)
     benefit: str = Field(min_length=1, max_length=500)
     description: str | None = None
     valid_until: datetime | None = None
-
-
-class CouponUpdate(CouponCreate):
-    """쿠폰 수정(PATCH). 작성과 같은 필드로 전체 교체한다."""
+    is_active: bool = True
+    # 쓸 수 있는 업체. 비우면 모든 업체.
+    partner_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class CouponOut(BaseModel):
@@ -553,6 +768,9 @@ class CouponOut(BaseModel):
     description: str | None
     benefit: str
     valid_until: datetime | None
+    trigger_type: CouponTriggerType
+    is_active: bool
+    partner_ids: list[uuid.UUID]
     created_at: datetime
     issued_count: int
     used_count: int
@@ -569,13 +787,14 @@ class IssueResult(BaseModel):
 
 
 class IssuedCouponOut(BaseModel):
-    """발급 현황 한 행 — 누구에게 발급됐고 사용했는지."""
+    """발급 현황 한 행 — 누구에게 발급됐고 어디서 썼는지."""
 
     id: uuid.UUID  # user_coupon id
     user_id: uuid.UUID
     nickname: str | None  # 탈퇴/미설정이면 null
     issued_at: datetime
     used_at: datetime | None
+    used_partner_name: str | None  # 업체가 지워졌거나 미사용이면 null
     status: CouponStatus
 
 
@@ -595,6 +814,15 @@ class MyCouponOut(BaseModel):
     used_at: datetime | None
     valid_until: datetime | None
     status: CouponStatus
+    # 쓸 수 있는 업체 id. None이면 모든 업체.
+    partner_ids: list[uuid.UUID] | None
+    used_partner_name: str | None
+
+
+class CouponUseRequest(BaseModel):
+    """쿠폰 사용. 앱이 업체 이름 검색으로 고른 업체를 보낸다."""
+
+    partner_id: uuid.UUID
 
 
 class UserLogIn(BaseModel):

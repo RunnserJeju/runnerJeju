@@ -98,4 +98,14 @@ abstract final class LogKeys {
 }
 
 /// 어디서 눌렀는지(detail[LogKeys.source]).
-enum LogSource { home, map, list, search, favorite, stamp, profile, detail }
+enum LogSource {
+  home,
+  map,
+  list,
+  search,
+  favorite,
+  stamp,
+  profile,
+  detail,
+  runningWeek,
+}

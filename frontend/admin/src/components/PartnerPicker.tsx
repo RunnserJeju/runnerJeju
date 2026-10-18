@@ -5,11 +5,19 @@ import { ApiError, listPartners, type Partner } from '../api'
 interface Props {
   selectedIds: string[]
   onChange: (ids: string[]) => void
+  /** 기본은 코스 연결용 문구. 쿠폰 사용 업체처럼 다른 자리에서 쓰면 바꾼다. */
+  label?: string
+  hint?: string
 }
 
-/** 코스에 연결할 협력업체 고르기. 업체 등록·수정은 "협력업체" 메뉴에서 하고, 여기서는
- * 등록된 업체를 골라 순서만 정한다(위에 있을수록 앱에서 먼저 보인다). */
-export default function PartnerPicker({ selectedIds, onChange }: Props) {
+/** 등록된 협력업체 고르기. 업체 등록·수정은 "협력업체" 메뉴에서 하고, 여기서는
+ * 골라서 순서만 정한다(코스에서는 위에 있을수록 앱에서 먼저 보인다). */
+export default function PartnerPicker({
+  selectedIds,
+  onChange,
+  label = '협력업체',
+  hint = '"협력업체" 메뉴에서 먼저 등록한 뒤 여기서 골라요. 위에 있을수록 앱에서 먼저 보여요',
+}: Props) {
   const [partners, setPartners] = useState<Partner[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState('')
@@ -35,8 +43,8 @@ export default function PartnerPicker({ selectedIds, onChange }: Props) {
   return (
     <div className="field">
       <label>
-        협력업체
-        <span className="hint">"협력업체" 메뉴에서 먼저 등록한 뒤 여기서 골라요. 위에 있을수록 앱에서 먼저 보여요</span>
+        {label}
+        <span className="hint">{hint}</span>
       </label>
       {error && <div className="error">{error}</div>}
       {selectedIds.map((id, index) => {

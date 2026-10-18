@@ -149,13 +149,6 @@ class Course(Base):
     # 채우고, 코스 등록/수정(GPX·메타데이터)은 이 컬럼을 건드리지 않는다.
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
-    # 이 코스를 완주하면 주는 스탬프 도안(Supabase Storage public URL). 스탬프는
-    # 코스에 1:1로 종속돼서 도안을 코스에 둔다. 발급된 스탬프(stamps)는 이 값을
-    # 조회 시 참조하므로(라이브 참조), 운영자가 나중에 도안을 넣거나 바꿔도 이미
-    # 완주한 사람에게까지 반영된다. 전용 엔드포인트(PUT/DELETE
-    # /courses/{id}/stamp-image)가 채운다.
-    stamp_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
-
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
     # 업로드한 GPX 파일 바이트 그대로. path는 리샘플본이라 원본 점이 남지 않아서
@@ -175,8 +168,6 @@ class Course(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-
-    stamps: Mapped[list["Stamp"]] = relationship(back_populates="course")
 
     # 이 코스에 연결된 협력업체(순서대로). 목록 응답이 코스마다 업체를 따로 조회하지
     # 않게 selectin으로 한 번에 불러온다(링크 → 업체는 CoursePartner.partner가 join).
@@ -248,6 +239,49 @@ class CoursePartner(Base):
     partner: Mapped[Partner] = relationship(lazy="joined")
 
 
+class CourseCuration(Base):
+    """앱 홈 '러닝 코스 큐레이션'에 띄울 코스. 운영 웹 '홈 구성'에서 고른다.
+
+    홈에 나오는 건 몇 개뿐이라 코스 테이블에 컬럼을 두지 않고 고른 것만 행으로 둔다.
+    코스가 지워지면 함께 지워진다(CASCADE).
+    """
+
+    __tablename__ = "course_curations"
+
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 홈에서 보여줄 순서(작을수록 앞).
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # 운영자가 쓰는 큐레이션 설명. 앱 노출 방식은 아직 정하지 않았다.
+    describe: Mapped[str | None] = mapped_column(Text, default=None)
+    # 형태 미정 부가 정보(Partner.detail과 같은 전략).
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
+class PartnerCuration(Base):
+    """앱 홈 '추천 협력 업체'에 띄울 업체. 운영 웹 '홈 구성'에서 고른다.
+
+    [CourseCuration]과 같은 이유로 따로 둔다. 업체가 지워지면 함께 지워진다(CASCADE).
+    """
+
+    __tablename__ = "partner_curations"
+
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partners.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 홈에서 보여줄 순서(작을수록 앞).
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # 운영자가 쓰는 큐레이션 설명. 앱 노출 방식은 아직 정하지 않았다.
+    describe: Mapped[str | None] = mapped_column(Text, default=None)
+    # 형태 미정 부가 정보(Partner.detail과 같은 전략).
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+
 class Run(Base):
     __tablename__ = "runs"
 
@@ -309,31 +343,69 @@ class Verification(Base):
     course: Mapped[Course] = relationship()
 
 
+class StampDefinition(Base):
+    """스탬프 종류. 도전과제처럼 "조건 종류 + 조건 값"을 데이터로 갖는다.
+
+    판정 코드는 조건 종류마다 한 번만 쓴다(app/stamp_rules.py). 새 스탬프가 기존
+    종류로 표현되면 행만 추가하면 되고, 새로운 종류의 조건이 생길 때만 코드를 더한다.
+    코스는 조건 값의 하나일 뿐이라 외래키로 묶지 않는다 — 코스를 지우면 그 코스를
+    조건으로 가진 스탬프는 노출을 끈다(admin/courses).
+    """
+
+    __tablename__ = "stamp_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    # 획득 조건 안내. 앱이 스탬프 상세·빙고 칸에 그대로 보여준다.
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    # 도안(Supabase Storage public URL). PUT/DELETE /admin/stamps/{id}/image가 채운다.
+    # 발급 기록은 이 값을 조회 시 참조하므로 도안을 바꾸면 이미 딴 스탬프에도 반영된다.
+    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    # 'course_complete' {"course_id": str} | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
+    condition_type: Mapped[str] = mapped_column(String(30))
+    condition_params: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    # 지우지 않고 끈다 — 발급 기록이 이 행을 가리킨다.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Stamp(Base):
-    """코스 완주 스탬프. 검증이 matched일 때만 발급된다."""
+    """사용자가 받은 스탬프(발급 기록). 스탬프 종류당 한 번만 받는다."""
 
     __tablename__ = "stamps"
-    __table_args__ = (UniqueConstraint("user_id", "course_id", name="uq_stamp_user_course"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "stamp_definition_id", name="uq_stamp_user_definition"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
-    course_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("courses.id"), index=True
+    stamp_definition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stamp_definitions.id"), index=True
     )
+    # 달려서 받은 스탬프면 그 러닝. 운영자 지급 등은 None.
     run_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("runs.id"), default=None
     )
-
-    # 스탬프 도안은 이 행이 아니라 코스(courses.stamp_image_url)에 있다 — 코스당
-    # 하나이고 운영자가 설정하는 값이라, 완주 인스턴스마다 복제하지 않고 조회 시
-    # course에서 라이브로 가져온다(stamps 라우터 _to_out 참고).
     acquired_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
-    course: Mapped[Course] = relationship(back_populates="stamps")
+    definition: Mapped[StampDefinition] = relationship(lazy="joined")
 
 
 class Favorite(Base):
@@ -393,36 +465,114 @@ class Notice(Base):
     )
 
 
-class Mission(Base):
-    """이벤트 미션. 운영자가 참여 기간·달성 조건·리워드·내용을 설정한다.
+class RunningWeek(Base):
+    """러닝위크. 정기적으로 여는 행사 한 회차이고, 5x5 빙고판을 갖는다(#70).
 
-    달성 조건(condition)과 리워드(reward)는 자유 텍스트다 — 자동 판정(런타임)은
-    아직 없고, 운영자가 서술하면 앱이 그대로 보여주는 단계다. 자동 판정이
-    필요해지면 그때 condition을 타입+목표값으로 구조화한다.
+    노출 규칙은 공지와 같다 — starts_at/ends_at은 null이면 "제한 없음", is_active로
+    따로 끌 수 있다. 공개 중이면 앱 커뮤니티 상단에 image_url 배너가 뜬다.
+
+    빙고 칸 전용 테이블은 두지 않는다. 칸 순서대로 스탬프 종류 id 25개만 담고, 칸이
+    채워졌는지는 조회 때 발급 기록(stamps)에서 계산한다. 배열 안 id에는 외래키가 없어서
+    저장할 때 서버가 실제 스탬프 종류인지 확인한다(admin/running_weeks).
     """
 
-    __tablename__ = "missions"
+    __tablename__ = "running_weeks"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     title: Mapped[str] = mapped_column(String(200))
-    body: Mapped[str] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    # 커뮤니티 상단 배너(Supabase Storage public URL). PUT/DELETE /admin/running-weeks/{id}/image.
+    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
-    # 자유 텍스트. 예) "제주 동부 코스 3개 완주" / "굿즈 + 포인트 500".
-    condition: Mapped[str] = mapped_column(String(500))
-    reward: Mapped[str] = mapped_column(String(500))
-
-    # 참여 기간. 둘 다 nullable이고 null은 "제한 없음"이다(공지와 같은 규칙).
     starts_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
     ends_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
-
-    # 노출 on/off(기간과 별개)와 정렬. 배너와 같은 방식이다.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # 칸 0~24에 놓을 스탬프 종류 id(문자열). 비어 있으면 빙고판을 아직 안 짠 것.
+    bingo_stamp_ids: Mapped[list] = mapped_column(JSONB, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class RunningWeekParticipation(Base):
+    """러닝위크 참가 신청. 사용자·회차당 하나이고, 수정은 아직 없다.
+
+    이름·연락처는 개인정보라 동의를 받고, 신청일로부터 1년 뒤 폐기한다. 폐기는 아직
+    자동이 아니다 — expires_at이 지난 행을 운영자가 DB에서 직접 지운다. 폼 항목이
+    회차마다 바뀔 수 있어 어떤 폼으로 받았는지 form_version을 남긴다.
+    """
+
+    __tablename__ = "running_week_participations"
+    __table_args__ = (
+        UniqueConstraint(
+            "running_week_id", "user_id", name="uq_running_week_participation_user"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    running_week_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("running_weeks.id", ondelete="CASCADE"), index=True
+    )
+    # 토큰 sub(문자열). Stamp/Run과 같다.
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+
+    name: Mapped[str] = mapped_column(String(50))
+    phone: Mapped[str] = mapped_column(String(20))
+    # 'male' | 'female'
+    gender: Mapped[str] = mapped_column(String(10))
+    age: Mapped[int] = mapped_column(SmallInteger)
+    # 'jeju'(도민) | 'non_jeju'(도외)
+    residence: Mapped[str] = mapped_column(String(20))
+
+    form_version: Mapped[int] = mapped_column(SmallInteger, default=1)
+    agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Event(Base):
+    """커뮤니티 이벤트. 그림 한 장(선택)과 게시글이다(#70).
+
+    운영툴에서 등록한다. 본문에 붙여 넣은 링크(https://...)나 [글자](https://...)는
+    앱이 눌러서 열 수 있게 그린다. 노출 규칙은 공지와 같다 — starts_at/ends_at은 null이면
+    "제한 없음"이고 is_active로 따로 끌 수 있다.
+
+    옛 missions(이벤트 미션, 앱 노출 없이 데이터 0건)를 0033에서 이 테이블로 바꿨다.
+    """
+
+    __tablename__ = "events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    # Supabase Storage public URL. PUT/DELETE /admin/events/{id}/image로 관리.
+    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 앱 목록 정렬. 작을수록 위, 같으면 최신순.
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -525,11 +675,14 @@ class UserLog(Base):
 
 
 class Coupon(Base):
-    """쿠폰 템플릿(종류). 운영자가 제작하고 유저에게 발급(user_coupons)한다.
+    """쿠폰 템플릿(종류). 행은 코드(마이그레이션)가 심고 운영툴은 수정만 한다.
+
+    지급 조건은 스탬프처럼 trigger_type으로 가른다(app/coupon_rules.py). 조건이 늘면
+    규칙 코드와 행 하나를 같이 더한다 — 운영툴에서 만들어 봤자 지급할 방법이 없다.
 
     혜택(benefit)은 자유 텍스트다 — 커머스가 없어 서버가 자동 적용하지 않고, 유저가
-    오프라인/이벤트에서 쓰는 증표다. 발급된 쿠폰은 이 템플릿을 라이브 참조하므로
-    (혜택/이름을 복사하지 않음) 운영자가 나중에 고치면 발급분에도 즉시 반영된다.
+    협력업체에서 쓰는 증표다. 발급된 쿠폰은 이 템플릿을 라이브 참조하므로(혜택/이름을
+    복사하지 않음) 운영자가 나중에 고치면 발급분에도 즉시 반영된다.
     """
 
     __tablename__ = "coupons"
@@ -545,6 +698,12 @@ class Coupon(Base):
     valid_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+
+    # 'manual' | 'course_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
+    trigger_type: Mapped[str] = mapped_column(String(30), default="manual")
+    # 끄면 자동 지급이 멈춘다. 이미 발급된 쿠폰은 그대로 쓸 수 있다.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -552,18 +711,44 @@ class Coupon(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    # 쓸 수 있는 업체. 비어 있으면 모든 업체.
+    partners: Mapped[list["CouponPartner"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class CouponPartner(Base):
+    """쿠폰 ↔ 사용 가능 업체. 쿠폰이나 업체가 지워지면 연결도 지워진다(CASCADE)."""
+
+    __tablename__ = "coupon_partners"
+
+    coupon_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("coupons.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partners.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+
 
 class UserCoupon(Base):
     """유저에게 발급된 쿠폰 한 장. 템플릿(coupons)을 라이브 참조한다.
 
-    상태는 used_at 하나로 표현한다 — null이면 미사용(사용가능/만료), 값이 있으면
-    사용완료. '만료'는 저장하지 않고 coupons.valid_until로 계산한다. 템플릿을 삭제하면
-    FK ON DELETE CASCADE로 발급분·사용기록도 함께 사라진다(운영 웹이 확인 후 삭제).
+    used_at이 있으면 사용완료, expired_at이 있으면 만료, 둘 다 없으면 사용 가능.
+    만료는 coupons.valid_until이 지난 걸 서버가 알아챈 시점(내 쿠폰 조회·사용 시도)에
+    expired_at으로 남긴다. 그 전이라도 valid_until이 지났으면 만료로 취급한다.
 
     user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
     """
 
     __tablename__ = "user_coupons"
+    __table_args__ = (
+        UniqueConstraint("coupon_id", "user_id", "grant_key", name="uq_user_coupon_grant"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -572,9 +757,21 @@ class UserCoupon(Base):
         UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
+    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}"). 운영자 수동 지급은 None.
+    grant_key: Mapped[str | None] = mapped_column(String(100), default=None)
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
+    )
+    expired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # 어느 업체에서 썼는지. 업체가 지워지면 None으로 남는다.
+    used_partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("partners.id", ondelete="SET NULL"),
+        default=None,
+        index=True,
     )

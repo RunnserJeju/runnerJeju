@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/coupon.dart';
 import '../../models/run_record.dart';
 import '../../models/run_stamp.dart';
 import '../../models/run_verification.dart';
@@ -7,9 +8,12 @@ import '../../models/user_log.dart';
 import '../../services/service_locator.dart';
 import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/coupon_card.dart';
+import '../../widgets/coupon_celebration.dart';
 import '../../widgets/run_metrics_card.dart';
 import '../../widgets/run_map_view.dart';
 import '../../widgets/stamp_badge.dart';
+import '../../widgets/stamp_celebration.dart';
 import 'run_share_screen.dart';
 
 /// 러닝 결과: 기록을 서버에 저장하고, 완주 스탬프를 받았으면 함께 보여준다.
@@ -26,6 +30,12 @@ class _RunResultScreenState extends State<RunResultScreen> {
   /// 기록 저장은 화면 진입 시 자동으로 1회 실행하고, 실패하면 재시도 버튼을 준다.
   RunUploadResult? _uploadResult;
   RunStamp? _earnedStamp;
+
+  /// 획득 팝업은 한 번만. 스탬프가 업로드·검증 양쪽에서 올 수 있어서 막는다.
+  bool _celebrated = false;
+
+  /// 완주로 받은 코스완료 쿠폰. 스탬프 팝업이 닫힌 뒤 이어서 보여준다.
+  Coupon? _earnedCoupon;
   String? _saveError;
   bool _saving = true;
 
@@ -107,6 +117,10 @@ class _RunResultScreenState extends State<RunResultScreen> {
       if (stampId != null && stampId != _uploadResult?.earnedStampId) {
         await _loadStamp(stampId);
       }
+      final couponId = verification.earnedCouponId;
+      if (couponId != null && _earnedCoupon == null) {
+        await _loadCoupon(couponId);
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -129,9 +143,26 @@ class _RunResultScreenState extends State<RunResultScreen> {
   Future<void> _loadStamp(String stampId) async {
     try {
       final stamp = await Services.instance.stamp.loadStamp(stampId);
-      if (mounted) setState(() => _earnedStamp = stamp);
+      if (!mounted) return;
+      setState(() => _earnedStamp = stamp);
+      if (!_celebrated) {
+        _celebrated = true;
+        await showStampCelebration(context, stamp);
+      }
     } catch (_) {
       // 무시: 스탬프 획득 사실은 이미 업로드 결과로 알고 있다.
+    }
+  }
+
+  /// 쿠폰 조회 실패도 저장을 실패로 만들지 않는다. 마이페이지에서 다시 볼 수 있다.
+  Future<void> _loadCoupon(String couponId) async {
+    try {
+      final coupon = await Services.instance.coupon.loadCoupon(couponId);
+      if (!mounted) return;
+      setState(() => _earnedCoupon = coupon);
+      await showCouponCelebration(context, coupon);
+    } catch (_) {
+      // 무시.
     }
   }
 
@@ -194,6 +225,10 @@ class _RunResultScreenState extends State<RunResultScreen> {
             if (_earnedStamp != null) ...[
               const SizedBox(height: 20),
               _EarnedStampCard(stamp: _earnedStamp!),
+            ],
+            if (_earnedCoupon != null) ...[
+              const SizedBox(height: 12),
+              CouponCard(coupon: _earnedCoupon!),
             ],
             const SizedBox(height: 20),
             Card(

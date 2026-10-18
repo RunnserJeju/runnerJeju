@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,6 +10,7 @@ import '../../models/course_partner.dart';
 import '../../models/geo_point.dart';
 import '../../models/running_course.dart';
 import '../../models/user_log.dart';
+import '../../services/course_service.dart';
 import '../../services/current_location.dart';
 import '../../services/service_locator.dart';
 import '../../services/user_log_service.dart';
@@ -114,10 +116,12 @@ class RunningScreenState extends State<RunningScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  /// '협력업체' 칩으로 켜는 모드. 켜져 있으면 지도에 협력업체 전체를 핀으로 찍고,
-  /// 아래 시트 자리에 코스 목록 대신 협력업체 목록([PartnerListSheet])이 온다.
-  /// 코스 라벨은 그대로 둔다 — 업체와 코스의 위치 관계가 보여야 해서다.
-  bool _isPartnerMode = false;
+  /// 지도에 무엇을 찍을지. '협력업체' 칩이면 업체만(코스 라벨은 숨기고 아래 시트는
+  /// [PartnerListSheet]), '전체' 칩이면 코스와 업체를 함께. 코스를 고르면 courses로
+  /// 돌아가 그 코스만 남는다.
+  _MapLayer _layer = _MapLayer.courses;
+
+  bool get _isPartnerMode => _layer == _MapLayer.partners;
 
   /// 협력업체 전체. 처음 모드를 켤 때 한 번 받고, 실패했을 때만 다시 받는다.
   List<CoursePartner> _partners = const [];
@@ -292,9 +296,9 @@ class RunningScreenState extends State<RunningScreen> {
       _selectedDetail = null;
       _detailError = null;
       _selectedIsFavorite = false;
-      // 코스를 고르면(협력업체 시트의 연결 코스, 지도의 코스 라벨) 협력업체 모드를
-      // 끝낸다. 지도에는 그 코스에 연결된 업체만 남는다.
-      _isPartnerMode = false;
+      // 코스를 고르면(협력업체 시트의 연결 코스, 지도의 코스 라벨) 업체 레이어를
+      // 끈다. 지도에는 코스만 남는다.
+      _layer = _MapLayer.courses;
       _selectedPartner = null;
     });
 
@@ -332,16 +336,44 @@ class RunningScreenState extends State<RunningScreen> {
     _showMessage(nowFavorite ? '찜한 코스에 담았어요.' : '찜을 해제했어요.');
   }
 
-  /// 고른 코스의 GPX 원본을 받아 공유 시트로 넘긴다. '파일에 저장'이나 다른 러닝
-  /// 앱으로 열기는 사용자가 시트에서 고른다 — 저장 위치를 앱이 정하면 플랫폼마다
-  /// 저장소 권한·폴더 노출 설정이 따로 필요하다.
+  /// 고른 코스의 GPX 원본을 받는다. 공유 시트만으로는 가민·순토가 잘 안 떠서
+  /// 먼저 보낼 곳을 고르게 한다.
+  /// - 안드로이드: 깔린 워치 앱으로 열기 · 기기에 저장 · 다른 앱으로 보내기.
+  ///   저장이 안 되는 구형 안드로이드는 공유 시트로 넘어간다.
+  /// - iOS: 설치 앱을 알 수 없어, GPX 앱 목록으로 열기 · 공유 시트(파일에 저장 포함).
   Future<void> _downloadSelectedGpx() async {
     final course = _selected;
     if (course == null || _downloadingGpx) return;
+
+    final apps = await Services.instance.course.installedGpxApps();
+    if (!mounted) return;
+    final destination = await _askGpxDestination(apps);
+    if (destination == null || !mounted) return;
     setState(() => _downloadingGpx = true);
 
     try {
       final file = await Services.instance.course.downloadGpx(course);
+      if (Platform.isIOS) {
+        if (!destination.gpxApps) {
+          await Services.instance.course.shareGpxOnIOS(file);
+        } else if (!await Services.instance.course.openInGpxApps(file)) {
+          if (mounted) _showMessage('GPX 파일을 열 수 있는 앱이 없어요.');
+        }
+        return;
+      }
+      final app = destination.app;
+      if (app != null) {
+        final opened = await Services.instance.course.openGpxInApp(file, app);
+        if (!opened && mounted) {
+          _showMessage('다운로드 폴더에 저장했어요. ${app.label} 앱에서 GPX를 가져와 주세요.');
+        }
+        return;
+      }
+      if (destination.save &&
+          await Services.instance.course.saveGpxToDownloads(file)) {
+        if (mounted) _showMessage('다운로드 폴더에 저장했어요.');
+        return;
+      }
       if (!mounted) return;
 
       final size = MediaQuery.sizeOf(context);
@@ -363,6 +395,62 @@ class RunningScreenState extends State<RunningScreen> {
     } finally {
       if (mounted) setState(() => _downloadingGpx = false);
     }
+  }
+
+  /// GPX를 어디로 보낼지. 깔린 워치 앱([apps])이 맨 위에 온다. 닫으면 null.
+  Future<_GpxDestination?> _askGpxDestination(List<GpxApp> apps) {
+    return showModalBottomSheet<_GpxDestination>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: Platform.isIOS
+              ? [
+                  ListTile(
+                    leading: const Icon(Icons.watch_rounded),
+                    title: const Text('GPX 앱에서 열기'),
+                    subtitle: const Text('가민·순토 등 GPX를 여는 앱'),
+                    onTap: () => Navigator.of(
+                      sheetContext,
+                    ).pop(const _GpxDestination.gpxApps()),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.ios_share_rounded),
+                    title: const Text('파일에 저장 / 공유하기'),
+                    onTap: () => Navigator.of(
+                      sheetContext,
+                    ).pop(const _GpxDestination.share()),
+                  ),
+                ]
+              : [
+                  for (final app in apps)
+                    ListTile(
+                      leading: const Icon(Icons.watch_rounded),
+                      title: Text('${app.label}로 열기'),
+                      subtitle: Text(app.description),
+                      onTap: () => Navigator.of(
+                        sheetContext,
+                      ).pop(_GpxDestination.app(app)),
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.download_rounded),
+                    title: const Text('기기에 저장'),
+                    subtitle: const Text('다운로드 폴더에 저장해요'),
+                    onTap: () => Navigator.of(
+                      sheetContext,
+                    ).pop(const _GpxDestination.save()),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.share_rounded),
+                    title: const Text('다른 앱으로 보내기'),
+                    onTap: () => Navigator.of(
+                      sheetContext,
+                    ).pop(const _GpxDestination.share()),
+                  ),
+                ],
+        ),
+      ),
+    );
   }
 
   /// 시트 맨 아래 '코스 방향 바꾸기'. 출발·도착을 맞바꿔 지도·고도·러닝이 반대
@@ -440,7 +528,7 @@ class RunningScreenState extends State<RunningScreen> {
       _selectedDetail = null;
       _detailError = null;
       _isReversed = false;
-      _isPartnerMode = false;
+      _layer = _MapLayer.courses;
       _selectedPartner = null;
     });
     // 상세를 걷은 프레임에서 시트가 다시 트리에 붙는다. 붙은 뒤에 움직인다.
@@ -474,32 +562,42 @@ class RunningScreenState extends State<RunningScreen> {
   // 협력업체
   // ---------------------------------------------------------------------------
 
-  /// '협력업체' 칩. 켜면 코스 선택을 걷고 협력업체 전체를 지도·목록에 펼친다.
-  void _togglePartnerMode() {
-    if (_isPartnerMode) {
+  /// '협력업체' 칩. 켜면 코스 선택을 걷고 업체만 지도·목록에 펼친다.
+  void _togglePartnerMode() => _toggleLayer(_MapLayer.partners);
+
+  /// '전체' 칩. 코스와 업체를 함께 찍는다. 시트는 코스 목록 그대로.
+  void _toggleAllMode() => _toggleLayer(_MapLayer.all);
+
+  /// 같은 칩을 다시 누르면 코스만 보기로 돌아간다. 카메라는 건드리지 않는다 —
+  /// 보던 자리에서 마커만 바뀌어야 어디를 보고 있었는지 잃지 않는다.
+  void _toggleLayer(_MapLayer layer) {
+    if (_layer == layer) {
       setState(() {
-        _isPartnerMode = false;
+        _layer = _MapLayer.courses;
         _selectedPartner = null;
       });
       return;
     }
 
+    _enterLayer(layer);
+    if (layer == _MapLayer.partners) writeLog(LogName.partnerListOpen);
+  }
+
+  /// [layer]로 바꾸고 코스·업체 선택을 걷는다. 업체 목록이 없으면 받아 온다.
+  void _enterLayer(_MapLayer layer) {
     _closeSearch();
     _detailRequestId++;
     setState(() {
-      _isPartnerMode = true;
+      _layer = layer;
       _selectedPartner = null;
       _selected = null;
       _selectedDetail = null;
       _detailError = null;
       _isReversed = false;
     });
-    writeLog(LogName.partnerListOpen);
 
     if (_partners.isEmpty || _partnersError != null) {
       unawaited(_loadPartners());
-    } else {
-      _fitPartners();
     }
   }
 
@@ -516,7 +614,6 @@ class RunningScreenState extends State<RunningScreen> {
         _partners = partners;
         _isLoadingPartners = false;
       });
-      if (_isPartnerMode && _selectedPartner == null) _fitPartners();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -526,11 +623,12 @@ class RunningScreenState extends State<RunningScreen> {
     }
   }
 
-  /// 협력업체가 모두 보이게 카메라를 맞춘다.
-  void _fitPartners() {
-    unawaited(
-      _mapController.fitPoints([for (final partner in _partners) partner.point]),
-    );
+  /// 다른 탭에서 협력업체를 열 때(홈 '협력 업체' 목록). 협력업체 칩을 켜고 지도에서
+  /// 그 업체 핀을 누른 것과 같은 선택 상태로 만든다. 업체 목록은 [_enterLayer]가
+  /// 받아 오고, 상세는 넘겨받은 [partner]로 바로 띄운다.
+  void openPartner(CoursePartner partner, {required LogSource source}) {
+    _enterLayer(_MapLayer.partners);
+    _selectPartner(partner, source: source);
   }
 
   void _selectPartner(CoursePartner partner, {required LogSource source}) {
@@ -576,8 +674,15 @@ class RunningScreenState extends State<RunningScreen> {
 
   /// 협력업체까지 길찾기. 현위치를 알면 도보 길찾기를, 모르면 카카오맵에 업체를
   /// 띄운다(거기서 길찾기를 누르면 카카오맵이 현위치를 잡는다).
+  ///
+  /// 먼저 우리 팝업으로 묻는다. 바로 스킴을 열면 iOS 시스템 팝업("카카오맵에서
+  /// 열까요?")만 뜨는데, 거기서 취소해도 웹 폴백 때문에 카카오맵으로 가 버려
+  /// 사용자가 헷갈렸다(#64).
   Future<void> _navigateToPartner(CoursePartner partner) async {
     writeLog(LogName.navigateClick, detail: {LogKeys.partnerId: partner.id});
+    final confirmed = await _confirmPartnerRoute(partner);
+    if (confirmed != true || !mounted) return;
+
     final me = _currentLocation.latest;
     final launcher = Services.instance.kakaoMapLauncher;
     final opened = me != null
@@ -680,6 +785,44 @@ class RunningScreenState extends State<RunningScreen> {
   );
   static const _dialogButtonPadding = EdgeInsets.symmetric(horizontal: 8);
 
+  /// 협력업체 길찾기 전에 묻는다. '아니오'나 바깥 탭이면 아무 일도 안 한다.
+  Future<bool?> _confirmPartnerRoute(CoursePartner partner) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('길찾기'),
+        content: Text('${partner.name}까지\n카카오맵에서 길찾기를 실행할게요.'),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  style: OutlinedButton.styleFrom(
+                    textStyle: _dialogButtonText,
+                    padding: _dialogButtonPadding,
+                  ),
+                  child: const Text('아니오', maxLines: 1),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  style: FilledButton.styleFrom(
+                    textStyle: _dialogButtonText,
+                    padding: _dialogButtonPadding,
+                  ),
+                  child: const Text('예', maxLines: 1),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
   /// 러닝도 길찾기도 시작하지 않는다.
   Future<bool?> _confirmRouteGuide(RunningCourse course, double meters) {
@@ -773,7 +916,8 @@ class RunningScreenState extends State<RunningScreen> {
                     listenable: _currentLocation,
                     builder: (context, _) => CourseMapView(
                       controller: _mapController,
-                      courses: _courses,
+                      // 협력업체 모드면 코스 라벨을 치워 업체만 보이게 한다.
+                      courses: _isPartnerMode ? const [] : _courses,
                       selectedCourseId: selected?.id,
                       selectedPath: detail?.path ?? const [],
                       // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
@@ -784,12 +928,11 @@ class RunningScreenState extends State<RunningScreen> {
                       selectedRestrooms: selected == null
                           ? const []
                           : (detail ?? selected).restrooms,
-                      // 협력업체 모드면 전체를, 코스를 골랐으면 그 코스의 업체만.
-                      partners: _isPartnerMode
-                          ? _partners
-                          : selected == null
+                      // 업체는 협력업체·전체 레이어에서만. 코스를 고르면 레이어가
+                      // courses로 돌아가므로 코스만 남는다.
+                      partners: _layer == _MapLayer.courses
                           ? const []
-                          : (detail ?? selected).partners,
+                          : _partners,
                       selectedPartnerId: _selectedPartner?.id,
                       onPartnerTap: _onPartnerMarkerTap,
                       myPosition: _currentLocation.latest,
@@ -838,7 +981,8 @@ class RunningScreenState extends State<RunningScreen> {
                       onTapFavorite: () => _showComingSoon('찜'),
                       onTapExplore: _openExplore,
                       onTapPartner: _togglePartnerMode,
-                      isPartnerMode: _isPartnerMode,
+                      onTapAll: _toggleAllMode,
+                      layer: _layer,
                     ),
                     const SizedBox(height: 10),
                     Padding(
@@ -1007,19 +1151,24 @@ class _SearchField extends StatelessWidget {
   }
 }
 
+/// 지도에 찍는 마커 레이어.
+enum _MapLayer { courses, partners, all }
+
 /// 검색창 아래 가로로 늘어서는 기능 칩들. 화면보다 길어지면 좌우로 스크롤한다.
 class _ActionChips extends StatelessWidget {
   const _ActionChips({
     required this.onTapFavorite,
     required this.onTapExplore,
     required this.onTapPartner,
-    required this.isPartnerMode,
+    required this.onTapAll,
+    required this.layer,
   });
 
   final VoidCallback onTapFavorite;
   final VoidCallback onTapExplore;
   final VoidCallback onTapPartner;
-  final bool isPartnerMode;
+  final VoidCallback onTapAll;
+  final _MapLayer layer;
 
   @override
   Widget build(BuildContext context) {
@@ -1038,7 +1187,13 @@ class _ActionChips extends StatelessWidget {
         icon: Icons.storefront_rounded,
         label: '협력업체',
         onTap: onTapPartner,
-        active: isPartnerMode,
+        active: layer == _MapLayer.partners,
+      ),
+      _ActionChip(
+        icon: Icons.layers_rounded,
+        label: '전체',
+        onTap: onTapAll,
+        active: layer == _MapLayer.all,
       ),
     ];
 
@@ -1194,4 +1349,17 @@ class _StatusPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// GPX다운 선택지. [app]이 있으면 그 워치 앱으로(안드로이드), [gpxApps]면 GPX 앱
+/// 목록으로(iOS) 연다.
+class _GpxDestination {
+  const _GpxDestination.app(GpxApp this.app) : save = false, gpxApps = false;
+  const _GpxDestination.gpxApps() : app = null, save = false, gpxApps = true;
+  const _GpxDestination.save() : app = null, save = true, gpxApps = false;
+  const _GpxDestination.share() : app = null, save = false, gpxApps = false;
+
+  final GpxApp? app;
+  final bool save;
+  final bool gpxApps;
 }

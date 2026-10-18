@@ -54,6 +54,7 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
               <th>혜택</th>
               <th>인스타그램</th>
               <th>연결 코스</th>
+              <th>쿠폰 사용</th>
             </tr>
           </thead>
           <tbody>
@@ -68,6 +69,7 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
                 <td>{partner.benefit ?? '—'}</td>
                 <td className="muted">{partner.instagram ?? '—'}</td>
                 <td>{partner.course_count}</td>
+                <td>{partner.coupon_used_count}</td>
               </tr>
             ))}
           </tbody>

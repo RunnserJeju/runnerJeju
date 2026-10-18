@@ -47,6 +47,7 @@ class RunVerification {
     this.detail,
     this.completedAt,
     this.earnedStampId,
+    this.earnedCouponId,
   });
 
   final String id;
@@ -65,6 +66,9 @@ class RunVerification {
   /// 검증이 matched일 때 발급된 완주 스탬프 id. 스탬프는 검증 결과로만 발급된다.
   final String? earnedStampId;
 
+  /// 이 코스 완주로 받은 코스완료 쿠폰 id. 쿠폰이 꺼져 있으면 null.
+  final String? earnedCouponId;
+
   /// 일치율을 백분율 문자열로. 아직 없으면 null.
   String? get matchRateLabel =>
       matchRate == null ? null : '${(matchRate! * 100).round()}%';
@@ -81,5 +85,6 @@ class RunVerification {
             ? null
             : DateTime.parse(json['completed_at'] as String),
         earnedStampId: json['earned_stamp_id']?.toString(),
+        earnedCouponId: json['earned_coupon_id']?.toString(),
       );
 }

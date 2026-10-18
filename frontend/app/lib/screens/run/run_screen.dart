@@ -55,6 +55,7 @@ class _RunScreenState extends State<RunScreen> {
   void initState() {
     super.initState();
     _tracker.addListener(_onTrackerChanged);
+    Services.instance.heading.start();
     _initialCenter = widget.initialCenter;
     if (_initialCenter == null) _resolveInitialCenter();
   }
@@ -62,6 +63,7 @@ class _RunScreenState extends State<RunScreen> {
   @override
   void dispose() {
     _tracker.removeListener(_onTrackerChanged);
+    Services.instance.heading.stop();
     Services.instance.currentLocation.removeListener(_onFirstLocation);
     // 화면을 벗어나면 잠금화면 위젯도 걷어낸다 — 유령 위젯이 남지 않게.
     // (정상 종료는 _finish에서 이미 걷지만, 여기서 한 번 더 안전망을 둔다.)
@@ -260,6 +262,7 @@ class _RunScreenState extends State<RunScreen> {
                 // 모른다. 그동안 지도 자리에 로딩이 보인다.
                 isAwaitingLocation: _initialCenter == null,
                 showCourseDirection: isActive,
+                heading: Services.instance.heading.heading,
               ),
             ),
             if (isActive && !_isFollowing)

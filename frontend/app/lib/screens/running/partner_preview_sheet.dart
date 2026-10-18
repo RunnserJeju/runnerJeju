@@ -162,26 +162,10 @@ class PartnerDetailContent extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: onNavigate,
-                icon: const Icon(Icons.directions_walk_rounded),
-                label: const Text('길찾기'),
-              ),
-            ),
-            if (partner.instagramUrl != null) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onOpenInstagram,
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('인스타그램'),
-                ),
-              ),
-            ],
-          ],
+        FilledButton.icon(
+          onPressed: onNavigate,
+          icon: const Icon(Icons.directions_walk_rounded),
+          label: const Text('길찾기'),
         ),
         if (comment != null) ...[
           const SizedBox(height: 20),
@@ -210,6 +194,34 @@ class PartnerDetailContent extends StatelessWidget {
             ],
           ),
         ],
+        if (partner.instagramUrl case final instagramUrl?) ...[
+          const SizedBox(height: 20),
+          const SectionTitle('인스타그램', small: true),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: onOpenInstagram,
+            borderRadius: BorderRadius.circular(6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.photo_camera_outlined, size: 17, color: AppColors.textSubtle),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _instagramLabel(instagramUrl),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppColors.textBody,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.textSubtle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (onSelectCourse != null && partner.courses.isNotEmpty) ...[
           const SizedBox(height: 20),
           const SectionTitle('근처 러닝 코스', small: true),
@@ -230,6 +242,13 @@ class PartnerDetailContent extends StatelessWidget {
       ],
     );
   }
+}
+
+/// "instagram.com/handle" 꼴로 보여준다. 스킴·www·끝 슬래시는 뺀다.
+String _instagramLabel(Uri url) {
+  final host = url.host.replaceFirst(RegExp(r'^www\.'), '');
+  final path = url.path.replaceFirst(RegExp(r'/$'), '');
+  return '$host$path';
 }
 
 /// 코스를 보다가 그 코스의 협력업체 핀을 눌렀을 때. 코스 선택을 깨지 않도록 모달로

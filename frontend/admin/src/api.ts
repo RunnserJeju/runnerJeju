@@ -25,6 +25,8 @@ export interface PartnerSummary {
 export interface Partner extends PartnerSummary {
   /** 연결된 코스 수. 삭제 경고에 쓴다. */
   course_count: number
+  /** 이 업체에서 사용된 쿠폰 수(업체 이용률). */
+  coupon_used_count: number
   created_at: string
   updated_at: string
 }
@@ -58,7 +60,6 @@ export interface Course {
   description: string | null
   estimated_time_min: number | null
   thumbnail_url: string | null
-  stamp_image_url: string | null
   completed_count: number
 }
 
@@ -236,14 +237,209 @@ export function deleteCourseThumbnail(id: string): Promise<Course> {
   return request(`/admin/courses/${id}/thumbnail`, { method: 'DELETE' })
 }
 
-export function setCourseStampImage(id: string, file: File): Promise<Course> {
-  const form = new FormData()
-  form.set('file', file)
-  return request(`/admin/courses/${id}/stamp-image`, { method: 'PUT', body: form })
+// --- 스탬프 -------------------------------------------------------------
+
+/** 획득 조건 종류. 서버 app/stamp_rules.CONDITION_TYPES와 같아야 한다. */
+export type StampConditionType = 'course_complete' | 'manual'
+
+/** 스탬프 종류. 코스 완주는 조건의 하나(course_complete {course_id})다. */
+export interface StampDefinition {
+  id: string
+  name: string
+  description: string | null
+  image_url: string | null
+  condition_type: StampConditionType
+  condition_params: { course_id?: string }
+  is_active: boolean
+  sort_order: number
+  issued_count: number
+  created_at: string
+  updated_at: string
 }
 
-export function deleteCourseStampImage(id: string): Promise<Course> {
-  return request(`/admin/courses/${id}/stamp-image`, { method: 'DELETE' })
+export interface StampDefinitionPayload {
+  name: string
+  description: string | null
+  condition_type: StampConditionType
+  condition_params: { course_id?: string }
+  is_active: boolean
+  sort_order: number
+}
+
+export function listStamps(): Promise<StampDefinition[]> {
+  return request('/admin/stamps')
+}
+
+export function createStamp(payload: StampDefinitionPayload): Promise<StampDefinition> {
+  return request('/admin/stamps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateStamp(
+  id: string,
+  payload: StampDefinitionPayload,
+): Promise<StampDefinition> {
+  return request(`/admin/stamps/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function setStampImage(id: string, file: File): Promise<StampDefinition> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/stamps/${id}/image`, { method: 'PUT', body: form })
+}
+
+export function deleteStampImage(id: string): Promise<StampDefinition> {
+  return request(`/admin/stamps/${id}/image`, { method: 'DELETE' })
+}
+
+// --- 러닝위크 -----------------------------------------------------------
+
+export const BINGO_CELLS = 25
+
+/** 러닝위크 회차. 공개 규칙은 공지와 같고, 공개 중이면 앱 커뮤니티 상단에 배너가 뜬다. */
+export interface RunningWeek {
+  id: string
+  title: string
+  description: string | null
+  image_url: string | null
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+  /** 칸 0~24에 놓은 스탬프 종류 id. 비어 있으면 빙고판을 아직 안 짠 것. */
+  bingo_stamp_ids: string[]
+  participant_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface RunningWeekPayload {
+  title: string
+  description: string | null
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+}
+
+export interface Participation {
+  id: string
+  user_id: string
+  name: string
+  phone: string
+  gender: 'male' | 'female'
+  age: number
+  residence: 'jeju' | 'non_jeju'
+  form_version: number
+  agreed_at: string
+  expires_at: string
+  created_at: string
+}
+
+export function listRunningWeeks(): Promise<RunningWeek[]> {
+  return request('/admin/running-weeks')
+}
+
+export function createRunningWeek(payload: RunningWeekPayload): Promise<RunningWeek> {
+  return request('/admin/running-weeks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateRunningWeek(id: string, payload: RunningWeekPayload): Promise<RunningWeek> {
+  return request(`/admin/running-weeks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function setRunningWeekBingo(id: string, stampIds: string[]): Promise<RunningWeek> {
+  return request(`/admin/running-weeks/${id}/bingo`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stamp_ids: stampIds }),
+  })
+}
+
+export function setRunningWeekImage(id: string, file: File): Promise<RunningWeek> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/running-weeks/${id}/image`, { method: 'PUT', body: form })
+}
+
+export function deleteRunningWeekImage(id: string): Promise<RunningWeek> {
+  return request(`/admin/running-weeks/${id}/image`, { method: 'DELETE' })
+}
+
+export function listParticipations(id: string): Promise<Participation[]> {
+  return request(`/admin/running-weeks/${id}/participations`)
+}
+
+// --- 이벤트 -------------------------------------------------------------
+
+/** 커뮤니티 이벤트. 그림(선택) + 게시글. 본문 링크는 앱에서 눌러 열 수 있다. */
+export interface CommunityEvent {
+  id: string
+  title: string
+  body: string
+  image_url: string | null
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CommunityEventPayload {
+  title: string
+  body: string
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+  sort_order: number
+}
+
+export function listEvents(): Promise<CommunityEvent[]> {
+  return request('/admin/events')
+}
+
+export function createEvent(payload: CommunityEventPayload): Promise<CommunityEvent> {
+  return request('/admin/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateEvent(id: string, payload: CommunityEventPayload): Promise<CommunityEvent> {
+  return request(`/admin/events/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteEvent(id: string): Promise<void> {
+  return request(`/admin/events/${id}`, { method: 'DELETE' })
+}
+
+export function setEventImage(id: string, file: File): Promise<CommunityEvent> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/events/${id}/image`, { method: 'PUT', body: form })
+}
+
+export function deleteEventImage(id: string): Promise<CommunityEvent> {
+  return request(`/admin/events/${id}/image`, { method: 'DELETE' })
 }
 
 // --- 공지 ---------------------------------------------------------------
@@ -309,6 +505,120 @@ export function updatePartner(id: string, payload: PartnerPayload): Promise<Part
 /** 삭제하면 연결된 코스에서도 빠진다(서버 FK CASCADE). */
 export function deletePartner(id: string): Promise<void> {
   return request(`/admin/partners/${id}`, { method: 'DELETE' })
+}
+
+// --- 쿠폰 ---------------------------------------------------------------
+// 템플릿 행은 서버 마이그레이션이 심는다 — 여기서는 수정·지급·현황만.
+
+/** 지급 조건. 서버 app/coupon_rules.TRIGGER_TYPES와 같다. */
+export type CouponTriggerType = 'manual' | 'course_complete'
+
+export interface Coupon {
+  id: string
+  name: string
+  description: string | null
+  benefit: string
+  valid_until: string | null
+  trigger_type: CouponTriggerType
+  /** 끄면 자동 지급이 멈춘다. 이미 발급된 쿠폰은 그대로 쓸 수 있다. */
+  is_active: boolean
+  /** 쓸 수 있는 업체. 비어 있으면 모든 업체. */
+  partner_ids: string[]
+  created_at: string
+  issued_count: number
+  used_count: number
+}
+
+export interface CouponPayload {
+  name: string
+  benefit: string
+  description: string | null
+  valid_until: string | null
+  is_active: boolean
+  partner_ids: string[]
+}
+
+export type CouponStatus = 'available' | 'used' | 'expired'
+
+export interface IssuedCoupon {
+  id: string
+  user_id: string
+  nickname: string | null
+  issued_at: string
+  used_at: string | null
+  used_partner_name: string | null
+  status: CouponStatus
+}
+
+export function listCoupons(): Promise<Coupon[]> {
+  return request('/admin/coupons')
+}
+
+export function updateCoupon(id: string, payload: CouponPayload): Promise<Coupon> {
+  return request(`/admin/coupons/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** 고른 회원들에게 한 장씩 지급. 실제 발급된 수를 돌려준다. */
+export function issueCoupon(id: string, userIds: string[]): Promise<{ issued: number }> {
+  return request(`/admin/coupons/${id}/issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_ids: userIds }),
+  })
+}
+
+export function listIssuedCoupons(
+  id: string,
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: IssuedCoupon[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  return request(`/admin/coupons/${id}/issued?${params}`)
+}
+
+// --- 홈 구성 ------------------------------------------------------------
+
+/** 홈 섹션의 한 칸. 서버 HomeCurationItem과 1:1. id는 코스 또는 협력업체 id. */
+export interface HomeCurationItem {
+  id: string
+  /** 큐레이션 설명. 앱 노출 방식은 아직 미정. */
+  describe: string | null
+  /** 형태 미정 부가 정보. 편집 UI는 없고 저장 시 그대로 돌려보낸다. */
+  detail: Record<string, unknown>
+}
+
+/** 앱 홈 구성. 서버 HomeCurationOut과 1:1. 앞에 있을수록 먼저 나온다. */
+export interface HomeCuration {
+  /** '러닝 코스 큐레이션'에 띄울 코스. */
+  courses: HomeCurationItem[]
+  /** '추천 협력 업체'에 띄울 업체. */
+  partners: HomeCurationItem[]
+}
+
+export function getHome(): Promise<HomeCuration> {
+  return request('/admin/home')
+}
+
+/** 앱 홈 '러닝 코스 큐레이션'을 교체한다. 앞에 있을수록 먼저 나온다. */
+export function setHomeCourses(items: HomeCurationItem[]): Promise<void> {
+  return request('/admin/home/courses', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+}
+
+/** 앱 홈 '추천 협력 업체'를 교체한다. 앞에 있을수록 먼저 나온다. */
+export function setHomePartners(items: HomeCurationItem[]): Promise<void> {
+  return request('/admin/home/partners', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
 }
 
 export function geocode(address: string): Promise<{ results: GeocodeResult[] }> {

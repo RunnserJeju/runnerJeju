@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
-from app.models import Course, Partner, Run, Stamp, Verification
+from app.models import Course, Partner, Run, Stamp, StampDefinition, Verification
+from app.stamp_rules import course_condition
 from app.routers.courses import (
     CourseUploadError,
     _completed_counts,
@@ -221,7 +222,8 @@ def _course_has_activity(db: Session, course_id: uuid.UUID) -> bool:
     경로 교체 시 확인을 강제하는 가드용이다. 찜(Favorite)은 경로와 무관하니 세지
     않는다 — 찜만 된 코스는 경로를 바꿔도 기존 데이터가 어긋날 게 없다.
     """
-    for model in (Run, Stamp, Verification):
+    # 완주 스탬프는 통과한 검증이 있어야 생기므로 검증만 봐도 된다.
+    for model in (Run, Verification):
         row = db.execute(
             select(model.id).where(model.course_id == course_id).limit(1)
         ).first()
@@ -231,18 +233,19 @@ def _course_has_activity(db: Session, course_id: uuid.UUID) -> bool:
 
 
 def _reset_course_records(db: Session, course_id: uuid.UUID) -> None:
-    """이 코스의 완주 스탬프와 검증을 모두 지운다(hard delete).
+    """이 코스의 검증과 이 코스 완주로 받은 스탬프를 모두 지운다(hard delete).
 
     경로가 바뀌면 옛 경로 기준으로 계산된 완주·검증은 새 경로와 어긋나므로
     초기화한다. **개인 러닝 기록(Run)은 남긴다** — "언제 얼마 달렸다"는 개인 활동
     히스토리이고, 원본 GPS·시각이 남아 이 초기화의 감사 흔적 역할도 한다.
-    (Run에 course_id는 남지만 완주 여부는 Stamp가 정하므로, "달렸지만 완주 스탬프는
-    없음"이라는 정상 상태가 된다.)
+    (Run에 course_id는 남지만 완주 여부는 통과한 검증이 정하므로, "달렸지만 완주
+    기록은 없음"이라는 정상 상태가 된다.)
 
     커밋은 호출한 엔드포인트가 경로 교체까지 묶어 한 트랜잭션으로 처리한다.
     """
     db.execute(delete(Verification).where(Verification.course_id == course_id))
-    db.execute(delete(Stamp).where(Stamp.course_id == course_id))
+    course_stamps = select(StampDefinition.id).where(*course_condition(course_id))
+    db.execute(delete(Stamp).where(Stamp.stamp_definition_id.in_(course_stamps)))
 
 
 @router.put("/courses/{course_id}/gpx", response_model=CourseSummary)
@@ -377,75 +380,6 @@ def delete_course_thumbnail(
         db.commit()
         db.refresh(course)
         storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
-
-    counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
-
-
-@router.put("/courses/{course_id}/stamp-image", response_model=CourseSummary)
-def set_course_stamp_image(
-    course_id: uuid.UUID,
-    file: UploadFile = File(..., description="스탬프 도안 (jpg/png/webp)"),
-    db: Session = Depends(get_db),
-):
-    """이 코스 완주 시 주는 스탬프 도안을 올린다(교체 포함). (관리자 전용)
-
-    썸네일과 같은 패턴이지만 스탬프 전용 버킷(SUPABASE_STAMP_BUCKET)에 넣는다 —
-    배너·썸네일과 섞이지 않게. 발급된 스탬프는 조회 때 이 값을 참조하므로 나중에
-    넣거나 바꿔도 기존 완주자까지 반영된다.
-
-    교체해도 옛 오브젝트는 Storage에 남긴다 — 도안 하나를 여러 코스가 공유하므로
-    (난이도별 도안) 지우면 다른 코스까지 깨진다. URL만 바꾸고 파일은 누적한다.
-    """
-    course = _load_course_or_404(db, course_id)
-
-    extension = _ALLOWED_IMAGE_TYPES.get(file.content_type or "")
-    if extension is None:
-        raise HTTPException(status_code=422, detail="jpg/png/webp 이미지만 올릴 수 있어요.")
-
-    content = file.file.read(MAX_THUMBNAIL_BYTES + 1)
-    if len(content) > MAX_THUMBNAIL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"이미지가 너무 커요. {MAX_THUMBNAIL_BYTES // (1024 * 1024)}MB 이하여야 해요.",
-        )
-    if not content:
-        raise HTTPException(status_code=422, detail="빈 파일이에요.")
-
-    try:
-        new_url = storage.upload_image(
-            content,
-            content_type=file.content_type,
-            extension=extension,
-            bucket=storage.SUPABASE_STAMP_BUCKET,
-        )
-    except storage.StorageUploadError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    course.stamp_image_url = new_url
-    db.commit()
-    db.refresh(course)
-
-    counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
-
-
-@router.delete("/courses/{course_id}/stamp-image", response_model=CourseSummary)
-def delete_course_stamp_image(
-    course_id: uuid.UUID,
-    db: Session = Depends(get_db),
-):
-    """코스 스탬프 도안을 뗀다(컬럼을 NULL로). (관리자 전용)
-
-    이미 없으면 아무 일도 안 한다. Storage 파일은 지우지 않는다 — 다른 코스가
-    같은 도안을 쓰고 있을 수 있다.
-    """
-    course = _load_course_or_404(db, course_id)
-
-    if course.stamp_image_url:
-        course.stamp_image_url = None
-        db.commit()
-        db.refresh(course)
 
     counts = _completed_counts(db, [course.id])
     return _to_summary(course, counts.get(course.id, 0), False)

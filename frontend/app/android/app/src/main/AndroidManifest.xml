@@ -26,6 +26,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -75,6 +76,17 @@
                 <data android:host="oauth" android:scheme="kakaob996f6761bcc8585602205c0912bc007"/>
             </intent-filter>
         </activity>
+
+        <!-- GPX를 가민·순토 앱에 열기(ACTION_VIEW)로 넘길 때 쓰는 content URI. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.gpx_provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/gpx_file_paths" />
+        </provider>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
@@ -97,5 +109,8 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- GPX 다운로드에서 설치된 가민·순토 앱을 찾는다. -->
+        <package android:name="com.garmin.android.apps.connectmobile"/>
+        <package android:name="com.stt.android.suunto"/>
     </queries>
 </manifest>

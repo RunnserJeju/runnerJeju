@@ -17,6 +17,7 @@ class AsyncView<T> extends StatelessWidget {
     this.emptyTitle = '아직 데이터가 없어요',
     this.emptyMessage,
     this.emptyIcon = Icons.inbox_outlined,
+    this.emptyActionLabel = '새로고침',
   });
 
   final AsyncSnapshot<T> snapshot;
@@ -29,6 +30,10 @@ class AsyncView<T> extends StatelessWidget {
   final String emptyTitle;
   final String? emptyMessage;
   final IconData emptyIcon;
+
+  /// 빈 상태의 버튼 문구. null이면 버튼을 안 그린다 — 당겨서 새로고침이 되는
+  /// 화면에서 버튼까지 두면 중복이다.
+  final String? emptyActionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +66,7 @@ class AsyncView<T> extends StatelessWidget {
         icon: emptyIcon,
         title: emptyTitle,
         message: emptyMessage,
-        actionLabel: '새로고침',
+        actionLabel: emptyActionLabel,
         onAction: onRetry,
       );
     }
@@ -84,52 +89,66 @@ void _goToLogin(BuildContext context) {
   );
 }
 
+/// 상태 안내. 화면을 꽉 채우는 스크롤 안에 두어, 바깥에 [RefreshIndicator]가
+/// 있으면 빈 화면·에러 화면에서도 당겨서 새로고침이 된다.
 class _StateMessage extends StatelessWidget {
   const _StateMessage({
     required this.icon,
     required this.title,
-    required this.actionLabel,
     required this.onAction,
+    this.actionLabel,
     this.message,
   });
 
   final IconData icon;
   final String title;
   final String? message;
-  final String actionLabel;
+  final String? actionLabel;
   final VoidCallback onAction;
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: _body(context)),
+        ),
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 44,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-            ),
-            const SizedBox(height: 16),
-            Text(title, style: theme.textTheme.titleMedium),
-            if (message != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                message!,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 44,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+          ),
+          const SizedBox(height: 16),
+          Text(title, style: theme.textTheme.titleMedium),
+          if (message != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              message!,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
-            ],
-            const SizedBox(height: 20),
-            OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
+            ),
           ],
-        ),
+          if (actionLabel case final label?) ...[
+            const SizedBox(height: 20),
+            OutlinedButton(onPressed: onAction, child: Text(label)),
+          ],
+        ],
       ),
     );
   }

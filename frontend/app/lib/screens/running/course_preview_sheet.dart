@@ -181,7 +181,7 @@ class CoursePreviewSheet extends StatelessWidget {
       if (course.partners.isNotEmpty)
         _InfoRow(
           icon: Icons.storefront_rounded,
-          label: '제휴',
+          label: '근처 제휴',
           value: course.partners.map((p) => p.label).join('\n'),
         ),
       if (course.tagList.isNotEmpty) ...[

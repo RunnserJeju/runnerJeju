@@ -1,6 +1,9 @@
 import '../api/auth_api.dart';
+import '../api/coupon_api.dart';
 import '../api/course_api.dart';
+import '../api/event_api.dart';
 import '../api/favorite_api.dart';
+import '../api/home_api.dart';
 import '../api/notice_api.dart';
 import '../api/partner_api.dart';
 import '../api/run_api.dart';
@@ -8,12 +11,17 @@ import '../api/stamp_api.dart';
 import '../api/user_log_api.dart';
 import '../api/verification_api.dart';
 import '../config/app_config.dart';
+import '../features/running_week/running_week_service.dart';
 import '../network/api_client.dart';
 import '../network/client_context_interceptor.dart';
 import 'auth_service.dart';
+import 'coupon_service.dart';
 import 'course_service.dart';
 import 'current_location.dart';
+import 'event_service.dart';
 import 'favorite_service.dart';
+import 'heading_service.dart';
+import 'home_service.dart';
 import 'kakao_map_launcher.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
@@ -75,14 +83,26 @@ class Services {
   /// 러닝 프로그램(커뮤니티/마이페이지). 아직 서버 API가 없어 빈 목록만 준다.
   late final ProgramService program = const ProgramService();
   late final RunService run = RunService(RunApi(apiClient));
+
+  /// 커뮤니티 이벤트(그림 + 게시글).
+  late final EventService event = EventService(EventApi(apiClient));
+
+  /// 러닝위크(커뮤니티 상단 배너, 빙고).
+  late final RunningWeekService runningWeek = RunningWeekService(apiClient);
   late final StampService stamp = StampService(StampApi(apiClient));
+
+  /// 내 쿠폰(마이페이지, 완주 직후 획득 연출).
+  late final CouponService coupon = CouponService(CouponApi(apiClient));
   late final VerificationService verification = VerificationService(
     VerificationApi(apiClient),
   );
   late final NoticeService notice = NoticeService(NoticeApi(apiClient));
 
-  /// 협력업체(러닝 탭 협력업체 모드, 홈 큐레이션).
+  /// 협력업체(러닝 탭 협력업체 모드, 홈 추천 협력 업체).
   late final PartnerService partner = PartnerService(PartnerApi(apiClient));
+
+  /// 홈 구성(러닝 코스 큐레이션·추천 협력 업체에 무엇을 띄울지).
+  late final HomeService home = HomeService(HomeApi(apiClient));
 
   /// 실제 GPS. 시뮬레이션 러닝은 이걸 바꾸지 않고 [RunTracker.start]에
   /// 위치원을 따로 넘긴다 — 그래야 앱 전역이 아니라 그 한 번의 러닝만 가짜가 된다.
@@ -100,6 +120,9 @@ class Services {
 
   /// 기기 정지 감지(가속도계). 러닝 중 정지 상태의 GPS 지터를 거르는 데 쓴다.
   late final MotionService motion = MotionService();
+
+  /// 폰이 향한 방향(나침반). 러닝 화면에 있는 동안만 켠다.
+  late final HeadingService heading = HeadingService(currentLocation);
 
   /// 진행 중인 러닝은 화면 전환과 무관하게 유지되어야 하므로 전역에 하나만 둔다.
   late final RunTracker runTracker = RunTracker(

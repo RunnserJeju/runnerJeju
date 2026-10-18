@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from app import user_log
 from app.admin.metrics import sources
-from app.models import Favorite, Run, Stamp, User, UserCoupon, Verification
+from app.models import Favorite, Run, User, UserCoupon, Verification
 
 ALL_GROUP_BYS = ("none", "day", "course")
 NO_COURSE = ("none", "day")
@@ -183,7 +183,7 @@ _EXPLICIT: list[Metric] = [
     Metric(
         "completions",
         "완주(스탬프)",
-        sources.table_count(Stamp.acquired_at, course_column=Stamp.course_id),
+        sources.course_stamp_count(),
         ALL_GROUP_BYS,
         # 완주는 러닝의 결과라 러닝 탭에 둔다(스탬프 탭이 아니라).
         group="러닝",

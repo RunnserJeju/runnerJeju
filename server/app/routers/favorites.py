@@ -10,6 +10,7 @@ from app.models import Course, Favorite
 from app.routers.courses import (
     _completed_counts,
     _my_completed_course_ids,
+    _stamp_images,
     _to_summary,
     visible_courses,
 )
@@ -50,9 +51,12 @@ def list_favorites(
     ids = [c.id for c in courses]
     counts = _completed_counts(db, ids)
     mine = _my_completed_course_ids(db, user_id, ids)
+    images = _stamp_images(db, ids)
 
     return [
-        _to_summary(course, counts.get(course.id, 0), course.id in mine)
+        _to_summary(
+            course, counts.get(course.id, 0), course.id in mine, images.get(course.id)
+        )
         for course in courses
     ]
 

@@ -34,22 +34,26 @@
 | `DELETE /admin/notices/{id}` | 공지 삭제 (배너 이미지 파일도 삭제) |
 | `PUT /admin/notices/{id}/image` | 배너 이미지 설정/교체 → 홈 상단 캐러셀에 실림 |
 | `DELETE /admin/notices/{id}/image` | 배너 이미지 제거 (텍스트 공지로) |
-| `GET /admin/missions` | 미션 전체 목록 (비활성·만료 포함) |
-| `GET /admin/missions/{id}` | 미션 상세 |
-| `POST /admin/missions` | 미션 등록 |
-| `PATCH /admin/missions/{id}` | 미션 수정 (전체 교체) |
-| `DELETE /admin/missions/{id}` | 미션 삭제 |
+| `GET /admin/events` | 이벤트 전체 목록 (숨김·예약·만료 포함) |
+| `POST /admin/events` | 이벤트 등록 |
+| `PATCH /admin/events/{id}` | 이벤트 수정 (전체 교체) |
+| `DELETE /admin/events/{id}` | 이벤트 삭제 (이미지 파일도 삭제) |
+| `PUT/DELETE /admin/events/{id}/image` | 이벤트 이미지 설정/교체/제거 |
+| `GET/POST /admin/stamps`, `PATCH /admin/stamps/{id}` | 스탬프 종류 목록·등록·수정 (#71) |
+| `PUT/DELETE /admin/stamps/{id}/image` | 스탬프 도안 설정/교체/제거 |
+| `GET/POST /admin/running-weeks`, `PATCH /admin/running-weeks/{id}` | 러닝위크 회차 (#70) |
+| `PUT /admin/running-weeks/{id}/bingo` | 빙고 배치(스탬프 종류 25개) |
+| `PUT/DELETE /admin/running-weeks/{id}/image` | 커뮤니티 배너 |
+| `GET /admin/running-weeks/{id}/participations` | 참가자 목록 |
 | `GET /admin/users` | 회원 목록 (검색·페이지네이션, 완주 수 포함) |
 | `GET /admin/users/{id}` | 회원 상세 (기본정보 + 완주 코스 목록) |
 | `GET /admin/stats/overview` | 이용 통계 — 사이트 전체 요약 |
 | `GET /admin/stats/courses` | 이용 통계 — 코스별 지표(완주·찜·이용자, 정렬) |
-| `POST /admin/coupons` | 쿠폰 제작 |
 | `GET /admin/coupons` | 쿠폰 목록 (+발급/사용 수) |
 | `GET /admin/coupons/{id}` | 쿠폰 상세 |
-| `PATCH /admin/coupons/{id}` | 쿠폰 수정 |
-| `DELETE /admin/coupons/{id}` | 쿠폰 삭제 (발급분 cascade) |
+| `PATCH /admin/coupons/{id}` | 쿠폰 수정 (이름·혜택·설명·유효기간·사용 업체·on/off) |
 | `POST /admin/coupons/{id}/issue` | 지급 (user_ids 대량) |
-| `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·사용여부, 닉네임) |
+| `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·사용여부·사용 업체, 닉네임) |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /courses/{id}/gpx`(업로드한 GPX 원본 내려받기, 원본 없으면 404), `GET /notices`.
@@ -87,6 +91,10 @@
 
 ## 스탬프 도안 (백엔드, 2026-09-02)
 
+> **2026-10-18 바뀜(#71)**: 스탬프를 코스에서 분리했다. 도안은 `stamp_definitions.image_url`에 있고
+> `PUT/DELETE /admin/stamps/{id}/image`(운영 웹 "데이터 편집 > 스탬프")로 관리한다.
+> 아래 `courses.stamp_image_url`·`/admin/courses/{id}/stamp-image`는 0030에서 없어졌다. 규격은 그대로다.
+
 코스 완주 시 주는 스탬프 도안. 마이그레이션 `0012`. 스탬프는 코스에 1:1 종속이라
 도안을 코스에 붙였다(별도 테이블 없음).
 
@@ -113,56 +121,14 @@
 
 운영 웹 폼: 제목·본문·노출 시작/종료(선택). 목록은 `GET /admin/notices`로 예약·만료까지 보여주고 상태 뱃지를 붙이면 좋다.
 
-## 미션 관리 (백엔드, 2026-09-02)
+## 이벤트 관리 (2026-10-18, #70)
 
-이벤트 미션 = `title, body, condition, reward, starts_at?, ends_at?, is_active, sort_order`. 마이그레이션 `0014`. **운영자 정의 API만** — 달성 자동 판정·유저 참여/진행·리워드 지급은 아직 없다(런타임은 나중).
+옛 미션(`missions`, 운영 API만 있고 앱 노출 없음, 데이터 0건)을 마이그레이션 `0033`에서 이벤트(`events`)로 바꿨다. 자유 텍스트 달성 조건·리워드는 지우고 이미지를 더했다.
 
-- **condition / reward** — **자유 텍스트**(예: "제주 코스 3개 완주" / "굿즈 + 포인트 500"). 자유도를 낮추려 타입 enum이 아니라 서술형으로 뒀다. 등록 시 **필수**. 자동 판정이 필요해지면 그때 condition을 타입+목표값으로 구조화한다.
-- **참여 기간** `starts_at`/`ends_at` — 둘 다 선택(생략=제한 없음). 검증 `ends_at ≥ starts_at`(422).
-- **is_active / sort_order** — 노출 on/off(기간과 별개)와 정렬.
-- **CRUD**: `GET /admin/missions`(전체), `GET /admin/missions/{id}`, `POST`, `PATCH`(전체 교체), `DELETE`.
-- 공개 `GET /missions`(앱)는 아직 없음 — 프론트 붙일 때 추가(공지처럼 노출 필터 얹으면 됨).
-
-운영 웹 폼: 제목·내용·달성 조건(텍스트)·리워드(텍스트)·참여 시작/종료(선택)·노출 여부·정렬.
-
-### 미션 — 다음 단계 & 결정 필요 (요구사항 확정 후 이어서)
-
-지금은 **1차 틀 = 운영자 "정의" API(Layer 1)만** 있다. 앱 노출·참여·진행·달성·리워드는 전부 미구현이고, **요구사항이 정해져야 다음 API가 결정된다.**
-
-**전체 레이어**
-| 레이어 | 내용 | 상태 |
-|---|---|---|
-| L1 정의 (운영자) | 미션 CRUD (`/admin/missions`) | ✅ 완료 |
-| L2 노출 (앱) | `GET /missions` — 유저가 미션 목록/상세 조회 | ❌ 미구현 (어느 방향이든 필요) |
-| L3 참여·진행·달성·리워드 | 유저 참여, 진행률, 달성 판정, 리워드 지급 | ❌ 미구현 (방향 미정) |
-
-**⚠️ 핵심 제약**: 현재 `condition`/`reward`는 **자유 텍스트**라 **서버가 달성을 자동 판정할 수 없다**("코스 3개 완주"가 글자일 뿐). L3 방향이 여기서 갈린다.
-
-**L3 방향 3안 (+ 각각 추가될 API)**
-- **A. 전시형(안내만)** — 참여/진행 추적 없음, 리워드는 수동/오프라인. 추가: `GET /missions`(공개)뿐. condition/reward 텍스트 그대로 표시. → 가장 단순, 텍스트 모델 유지.
-- **B. 수동 달성** — 유저 참여 신청 → 운영자가 달성 확인 → 리워드 지급. 추가: `mission_participations` 테이블 + `POST /missions/{id}/join` · `GET /me/missions`(내 참여/상태) · `POST /admin/missions/{id}/participants/{user}/complete`(달성 마킹) · `GET /me/rewards`. → 텍스트 조건 그대로 가능.
-- **C. 자동 판정** — 서버가 스탬프/러닝 데이터로 진행률 자동 계산·달성·지급. 추가: **condition 구조화(자유텍스트 → 타입+목표값, 스키마 변경 필요)** + 진행률 엔진 + `GET /me/missions/{id}/progress` + 자동 지급. → 가장 강력하나 모델 재작업.
-
-**유저(기획)가 정해야 할 것 — 요구사항 체크리스트**
-- [ ] L3 방향: A / B / C 중 무엇?
-- [ ] 참여 방식: 자동 집계(기간 내 활동이 자동 반영) vs 명시적 참여(참여 버튼)?
-- [ ] 달성 조건 종류: 어떤 조건을 지원? (특정 코스 완주 / N개 완주 / 누적 거리 / 러닝 횟수 / 빙고 …) — **C면 이게 곧 condition 타입 enum**이 된다.
-- [ ] 리워드 종류·지급: 포인트 / 배지 / 실물 쿠폰 …? 지급을 앱 안에서 처리? 오프라인?
-- [ ] 반복/동시성: 한 유저가 여러 미션 동시 참여 가능? 같은 미션 반복 달성 가능?
-- [ ] 미션 배너 이미지 필요 여부 (필요 시 썸네일/스탬프와 같은 업로드 패턴으로 `image_url` + 전용 엔드포인트 추가)
-
-**연관 메모 — 빙고**: 이전 논의에서 "스탬프를 격자에 모아 빙고 완성 시 상품" 아이디어가 있었다. 빙고는 사실상 **미션의 한 구체 형태**(달성 조건 = 빙고 라인/블랙아웃, 리워드 = 상품)일 수 있다. 미션 요구사항을 정할 때 빙고를 별도 기능으로 갈지 미션 condition 타입 중 하나로 흡수할지 함께 결정하면 좋다. 빙고는 스탬프(코스 완주)에서 파생되므로, 스탬프 도안 작업(0012)과 이어진다.
-
-**현재 모델을 바꿔야 하는 경우**: C(자동 판정)를 택하면 `missions.condition`(String) 하나로는 부족하다 — `condition_type`(enum) + `condition_config`(JSONB, 예: `{course_ids:[...]}` / `{count:3}` / `{distance_km:50}`)로 재설계가 필요하다. A/B면 지금 텍스트 모델 그대로 간다.
-
-`course-thumbnails` Public 버킷 **생성 완료 (2026-08-31, 개발·운영 양쪽)**. 서버
-제약과 같은 값으로 맞춰 뒀다 — `public=true`, `file_size_limit=8MB`,
-`allowed_mime_types=[image/jpeg, image/png, image/webp]`
-(`admin/courses.py`의 `MAX_THUMBNAIL_BYTES`·`_ALLOWED_IMAGE_TYPES`와 동일).
-개발 버킷에 업로드→public URL 조회→삭제까지 확인했다.
-
-> `cloudbuild.yaml`은 `SUPABASE_COURSE_BUCKET`을 넘기지 않는다 — 기본값이 곧
-> 버킷 이름이라 그대로 동작한다. 버킷 이름을 바꾸려면 그때 환경변수를 추가한다.
+- 필드: `title, body, image_url?, starts_at?, ends_at?, is_active, sort_order`. 노출 규칙은 공지와 같다(기간 null = 제한 없음).
+- 본문 링크: 주소를 그대로(`https://…`) 넣거나 `[글자](https://…)`로 넣으면 앱이 눌러서 열 수 있게 그린다(`lib/widgets/linked_text.dart`).
+- 앱: `GET /events`(노출 중, sort_order → 최신순), `GET /events/{id}`. 커뮤니티 탭 이벤트 목록 → 상세.
+- 운영 웹: "데이터 편집 > 이벤트" — 목록, 등록·수정, 이미지, 삭제.
 
 ## 회원 관리 (조회, 백엔드, 2026-09-05)
 
@@ -189,17 +155,16 @@
 - **조회수 (하루 1회 중복제거)**: `course_views(course_id, user_id, view_date)` + `(course_id, user_id, view_date)` 유니크. 공개 `GET /courses/{id}`(앱)가 서버측에서 `ON CONFLICT DO NOTHING`으로 기록 → **앱 변경 없음**. 같은 사람이 하루에 여러 번 열어도 1 → **raw 클릭 수가 아니라 '고유 조회(사람·일)'**. 시간축은 `view_date`(일 단위)뿐이라 **기간별(period) 추이는 이후**.
 - **인기 '지역' 보류**: 코스에 구조화된 지역 필드가 없어(주소·태그는 자유 텍스트) 지역 집계는 안 한다. 코스 정렬이 곧 인기 코스. region 필드가 생기면 그때.
 
-## 쿠폰 관리 (백엔드, 2026-09-06)
+## 쿠폰 (2026-10-18 개편)
 
-운영자가 쿠폰을 제작·지급하고, 유저가 앱에서 사용(이용완료)한다. 마이그레이션 `0021`(`coupons` 템플릿 + `user_coupons` 발급). 커머스가 없어 혜택은 자유 텍스트이고 서버가 자동 적용하지 않는다(오프라인/이벤트 증표).
+쿠폰 템플릿(`coupons`)은 **코드가 심고 운영툴은 수정만** 한다. 지급 조건은 스탬프처럼 `trigger_type`으로 가르고 판정은 `app/coupon_rules.py` 한 곳에 쓴다(마이그레이션 `0021` 기본 구조, `0032` 규칙·업체).
 
-- **2계층**: `coupons`(종류·템플릿) + `user_coupons`(개인 발급 인스턴스). 발급분은 템플릿을 **라이브 참조**(혜택·유효기간 복사 안 함) → 운영자 수정이 발급분에 즉시 반영.
-- **상태**: `user_coupons.used_at` 하나로 — null=미사용, 값=사용완료. **만료는 저장 안 하고** `coupons.valid_until < now`로 계산. 유효상태 = 사용완료 / 만료 / 사용가능.
-- **삭제**: 템플릿 삭제 시 발급분·사용기록이 FK `ON DELETE CASCADE`로 함께 삭제. "이미 발급된 쿠폰인데 진짜?" 확인은 운영 웹 다이얼로그가 맡고 백엔드는 그냥 삭제한다.
-- **운영자 API** (`/admin/coupons`): `POST`(제작)·`GET`(목록+발급/사용 수)·`GET/{id}`·`PATCH/{id}`·`DELETE/{id}` + `POST /{id}/issue`(user_ids 대량, **실존 비탈퇴 회원만** 발급) + `GET /{id}/issued`(발급 현황 — 누구에게·사용여부, **회원 닉네임 조인**, offset 페이지네이션).
-- **앱 API** (`/me/coupons`, 공개): `GET`(내 쿠폰 — 라이브 혜택·유효상태) + `POST /{user_coupon_id}/use`(사용). 사용은 `used_at IS NULL`일 때만 채우는 **조건부 UPDATE**로 중복 사용 방지(동시성), 소유·만료 확인.
-- **닉네임 조인**: `user_coupons.user_id`는 `str(users.id)`(FK 아님)이라, 발급 현황은 페이지 user_id들을 UUID로 되돌려 `users` 배치 조회(N+1 없음). 탈퇴/미설정이면 닉네임 null.
-- **안 한 것**: 회수(revoke)·개별 발급 수정/삭제·구조화 혜택·per-issuance 만료·미션 자동지급 연결·Flutter/운영웹 화면(API만).
+- **지급 조건**: `manual`(운영자가 회원 골라 지급) / `course_complete`(아무 코스나 완주 인증이 통과하면 한 장, 코스마다 1회 — `user_coupons.grant_key = "course:{course_id}"` 유니크). 새 조건(빙고 줄·블랙아웃 등)은 규칙 함수 + 행을 심는 마이그레이션을 같이 더한다. 운영툴에 생성·삭제는 없다 — 만들어 봤자 지급할 방법이 없어서.
+- **사용 업체**: `coupon_partners`(쿠폰 ↔ 업체). 행이 없으면 모든 업체 허용. 앱은 업체 **이름 검색**으로 골라 `POST /me/coupons/{id}/use {partner_id}` — 업체 코드 없음. 서버는 제한 안의 업체인지 확인하고 `user_coupons.used_partner_id`에 남긴다(업체 목록의 "쿠폰 사용" 수, 발급 현황의 사용 업체).
+- **상태**: `used_at`(사용) · `expired_at`(만료). 만료는 서버가 알아챈 시점(내 쿠폰 조회, 사용 시도)에 `expired_at`을 남기고(`0034`), 앱 목록에서는 뺀다. 만료 쿠폰을 쓰려 하면 410. 자동 지급도 템플릿 `valid_until`이 지났으면 멈춘다. `is_active`는 자동 지급 스위치이고 이미 발급된 쿠폰은 그대로 쓸 수 있다.
+- **인증 응답**: `VerificationOut.earned_coupon_id` — 앱이 스탬프 연출 뒤 쿠폰 획득 연출에 쓴다.
+- **앱 API** (`/me/coupons`): `GET`(목록, 만료 제외, `partner_ids` null=모든 업체) · `GET /{id}` · `POST /{id}/use`(조건부 UPDATE로 중복 사용 방지, 만료면 410).
+- **안 한 것**: 회수(revoke)·per-issuance 만료·복권/룰렛 연출·빙고 쿠폰.
 
 ## 목표 서버 구조
 
