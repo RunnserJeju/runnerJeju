@@ -15,7 +15,8 @@ from app.deps import (
     current_user_id,
     current_user_is_admin,
 )
-from app.models import Course, CoursePartner, Stamp
+from app.models import Course, CoursePartner, Run, StampDefinition, Verification
+from app.stamp_rules import COURSE_COMPLETE
 from app.schemas import CourseListItem, CourseSummary, PartnerSummary
 
 router = APIRouter(tags=["courses"])
@@ -25,7 +26,12 @@ router = APIRouter(tags=["courses"])
 KST = timezone(timedelta(hours=9))
 
 
-def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) -> dict:
+def _to_summary(
+    course: Course,
+    completed_count: int,
+    is_completed_by_me: bool,
+    stamp_image_url: str | None = None,
+) -> dict:
     path = course.path or []
 
     return {
@@ -44,7 +50,8 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
         "description": course.description,
         "estimated_time_min": course.estimated_time_min,
         "thumbnail_url": course.thumbnail_url,
-        "stamp_image_url": course.stamp_image_url,
+        # 도안은 스탬프 종류에 있다(#71). 옛 앱 스탬프 탭이 이 값을 써서 남겨 둔다.
+        "stamp_image_url": stamp_image_url,
         "path": path,
         # 목록 응답(CourseListItem)에는 path가 빠지므로, 지도에 라벨을 찍을 점은
         # 여기서 따로 뽑아 준다. 상세 응답에도 같이 들어가지만 값은 path[0]과
@@ -57,14 +64,22 @@ def _to_summary(course: Course, completed_count: int, is_completed_by_me: bool) 
 
 
 def _completed_counts(db: Session, course_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
-    """코스별 완주자 수를 한 번에 조회한다(목록에서 N+1을 피하려고)."""
+    """코스별 완주자 수(완주 인증을 통과한 사람 수)를 한 번에 조회한다(N+1 회피).
+
+    완주는 스탬프가 아니라 달리기의 사실이라 verifications에서 센다 — 스탬프는
+    코스와 분리됐다(#71).
+    """
     if not course_ids:
         return {}
 
     rows = db.execute(
-        select(Stamp.course_id, func.count(Stamp.id))
-        .where(Stamp.course_id.in_(course_ids))
-        .group_by(Stamp.course_id)
+        select(Verification.course_id, func.count(func.distinct(Run.user_id)))
+        .join(Run, Run.id == Verification.run_id)
+        .where(
+            Verification.course_id.in_(course_ids),
+            Verification.status == "matched",
+        )
+        .group_by(Verification.course_id)
     ).all()
 
     return {course_id: count for course_id, count in rows}
@@ -77,12 +92,40 @@ def _my_completed_course_ids(
         return set()
 
     rows = db.execute(
-        select(Stamp.course_id).where(
-            Stamp.user_id == user_id, Stamp.course_id.in_(course_ids)
+        select(Verification.course_id)
+        .join(Run, Run.id == Verification.run_id)
+        .where(
+            Run.user_id == user_id,
+            Verification.course_id.in_(course_ids),
+            Verification.status == "matched",
         )
+        .distinct()
     ).scalars()
 
     return set(rows)
+
+
+def _stamp_images(db: Session, course_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """코스 완주 스탬프의 도안. 옛 앱 호환용(stamp_image_url)."""
+    if not course_ids:
+        return {}
+
+    keys = {str(course_id): course_id for course_id in course_ids}
+    rows = db.execute(
+        select(StampDefinition.condition_params["course_id"].astext, StampDefinition.image_url)
+        .where(
+            StampDefinition.condition_type == COURSE_COMPLETE,
+            StampDefinition.condition_params["course_id"].astext.in_(keys),
+            StampDefinition.is_active.is_(True),
+            StampDefinition.image_url.is_not(None),
+        )
+        .order_by(StampDefinition.sort_order, StampDefinition.created_at)
+    ).all()
+
+    images: dict[uuid.UUID, str] = {}
+    for course_key, image_url in rows:
+        images.setdefault(keys[course_key], image_url)
+    return images
 
 
 def _record_view(
@@ -138,9 +181,12 @@ def list_courses(
 
     counts = _completed_counts(db, course_ids)
     mine = _my_completed_course_ids(db, user_id, course_ids)
+    images = _stamp_images(db, course_ids)
 
     return [
-        _to_summary(course, counts.get(course.id, 0), course.id in mine)
+        _to_summary(
+            course, counts.get(course.id, 0), course.id in mine, images.get(course.id)
+        )
         for course in courses
     ]
 
@@ -162,7 +208,10 @@ def get_course(
 
     counts = _completed_counts(db, [course.id])
     mine = _my_completed_course_ids(db, user_id, [course.id])
-    summary = _to_summary(course, counts.get(course.id, 0), course.id in mine)
+    images = _stamp_images(db, [course.id])
+    summary = _to_summary(
+        course, counts.get(course.id, 0), course.id in mine, images.get(course.id)
+    )
 
     # 응답을 다 만든 뒤 조회를 기록한다 — 여기 commit이 세션을 expire시켜도 이미 dict로
     # 뽑아둔 summary엔 영향이 없고(course 재로딩 없음), best-effort라 기록 실패가 상세
@@ -287,6 +336,8 @@ def create_course_from_gpx_bytes(
         )
 
     course = Course(
+        # 완주 스탬프가 이 id를 조건 값으로 가리켜야 해서 flush 없이 미리 정한다.
+        id=uuid.uuid4(),
         name=resolved_name,
         distance_km=distance_km,
         difficulty=difficulty,
@@ -310,6 +361,15 @@ def create_course_from_gpx_bytes(
     set_course_partners(course, partner_ids or [])
 
     db.add(course)
+    # 코스마다 완주 스탬프 하나가 기본이다. 이름은 코스 이름으로 시작하고, 이름·도안은
+    # 운영 웹 스탬프 편집에서 따로 고친다(#71).
+    db.add(
+        StampDefinition(
+            name=resolved_name[:100],
+            condition_type=COURSE_COMPLETE,
+            condition_params={"course_id": str(course.id)},
+        )
+    )
     db.commit()
     db.refresh(course)
 

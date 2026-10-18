@@ -25,8 +25,8 @@ class _Preview extends StatefulWidget {
 class _PreviewState extends State<_Preview> {
   final _stamp = RunStamp(
     id: 'preview',
-    courseId: 'preview',
-    courseName: '사려니숲길 코스',
+    definitionId: 'preview',
+    name: '사려니숲길 코스',
     acquiredAt: DateTime.now(),
   );
 

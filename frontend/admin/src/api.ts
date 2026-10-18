@@ -58,7 +58,6 @@ export interface Course {
   description: string | null
   estimated_time_min: number | null
   thumbnail_url: string | null
-  stamp_image_url: string | null
   completed_count: number
 }
 
@@ -236,14 +235,66 @@ export function deleteCourseThumbnail(id: string): Promise<Course> {
   return request(`/admin/courses/${id}/thumbnail`, { method: 'DELETE' })
 }
 
-export function setCourseStampImage(id: string, file: File): Promise<Course> {
-  const form = new FormData()
-  form.set('file', file)
-  return request(`/admin/courses/${id}/stamp-image`, { method: 'PUT', body: form })
+// --- 스탬프 -------------------------------------------------------------
+
+/** 획득 조건 종류. 서버 app/stamp_rules.CONDITION_TYPES와 같아야 한다. */
+export type StampConditionType = 'course_complete' | 'manual'
+
+/** 스탬프 종류. 코스 완주는 조건의 하나(course_complete {course_id})다. */
+export interface StampDefinition {
+  id: string
+  name: string
+  description: string | null
+  image_url: string | null
+  condition_type: StampConditionType
+  condition_params: { course_id?: string }
+  is_active: boolean
+  sort_order: number
+  issued_count: number
+  created_at: string
+  updated_at: string
 }
 
-export function deleteCourseStampImage(id: string): Promise<Course> {
-  return request(`/admin/courses/${id}/stamp-image`, { method: 'DELETE' })
+export interface StampDefinitionPayload {
+  name: string
+  description: string | null
+  condition_type: StampConditionType
+  condition_params: { course_id?: string }
+  is_active: boolean
+  sort_order: number
+}
+
+export function listStamps(): Promise<StampDefinition[]> {
+  return request('/admin/stamps')
+}
+
+export function createStamp(payload: StampDefinitionPayload): Promise<StampDefinition> {
+  return request('/admin/stamps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateStamp(
+  id: string,
+  payload: StampDefinitionPayload,
+): Promise<StampDefinition> {
+  return request(`/admin/stamps/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function setStampImage(id: string, file: File): Promise<StampDefinition> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/stamps/${id}/image`, { method: 'PUT', body: form })
+}
+
+export function deleteStampImage(id: string): Promise<StampDefinition> {
+  return request(`/admin/stamps/${id}/image`, { method: 'DELETE' })
 }
 
 // --- 공지 ---------------------------------------------------------------

@@ -15,8 +15,9 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import Date, String, cast, distinct, func, literal_column, select
 from sqlalchemy.orm import Session
 
-from app.models import User, UserLog
+from app.models import Stamp, StampDefinition, User, UserLog
 from app.routers.courses import KST
+from app.stamp_rules import COURSE_COMPLETE
 
 GroupBy = str  # "none" | "day" | "course"
 Rows = list[tuple[object, int]]
@@ -157,3 +158,24 @@ def course_key(value) -> uuid.UUID | None:
         return uuid.UUID(str(value))
     except ValueError:
         return None
+
+
+def course_stamp_count() -> Counter:
+    """코스 완주 스탬프 발급 수 = 처음 완주한 (사람, 코스) 수. 코스 키는 스탬프 종류의
+    조건 값(course_id 문자열)이다 — 스탬프는 코스와 분리됐다(#71)."""
+    course_key = StampDefinition.condition_params["course_id"].astext
+
+    def count(db, start, end, group_by):
+        key = kst_date(Stamp.acquired_at) if group_by == "day" else course_key
+        stmt = (
+            select(func.count().label("count"))
+            .select_from(Stamp)
+            .join(StampDefinition, StampDefinition.id == Stamp.stamp_definition_id)
+            .where(
+                StampDefinition.condition_type == COURSE_COMPLETE,
+                *Period(start, end).clauses(Stamp.acquired_at),
+            )
+        )
+        return _run(db, _grouped(stmt, key, group_by))
+
+    return count

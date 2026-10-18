@@ -4,13 +4,12 @@
 이용 제한(제재)·상태 표시·감사 로그·러닝 기록은 이번 범위가 아니다(제재와 함께
 추후). 그래서 User 스키마도 건드리지 않는다.
 
-완주 코스 = 획득 스탬프: 스탬프는 코스 완주로만, 유저·코스당 하나 발급된다
-(uq_stamp_user_course). 그래서 "완주한 코스 목록"과 "획득한 스탬프"는 같은 데이터다.
+완주 코스 = 완주 인증(verifications)을 통과한 코스. 스탬프는 코스와 분리됐다(#71) —
+코스 완주 말고도 받는 스탬프가 있어 "획득한 스탬프"와 "완주한 코스"는 다른 데이터다.
 
-주의(활동 테이블 조인): Stamp.user_id는 users.id(UUID)로 가는 FK가 아니라 토큰
+주의(활동 테이블 조인): Run.user_id는 users.id(UUID)로 가는 FK가 아니라 토큰
 sub(=UUID 문자열)의 복사본(String)이다. 그래서 유저↔완주 매칭은 users.id를 문자열로
-바꿔 stamps.user_id와 비교한다(courses._completed_counts와 같은 방식). 반면
-Stamp.course_id는 courses.id로 가는 진짜 UUID FK라 코스명은 단일 조인으로 가져온다.
+바꿔 runs.user_id와 비교한다(courses._completed_counts와 같은 방식).
 """
 
 import uuid
@@ -20,7 +19,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Course, Stamp, User, UserLog
+from app.models import Course, Run, User, UserLog, Verification
 from app.schemas import UserDetailOut, UserListOut
 
 router = APIRouter(tags=["users"])
@@ -40,7 +39,7 @@ def _providers(user: User) -> list[str]:
 
 
 def _completed_counts(db: Session, user_id_strs: list[str]) -> dict[str, int]:
-    """유저별 완주(스탬프) 수를 한 번에 조회한다(목록에서 N+1을 피하려고).
+    """유저별 완주한 코스 수를 한 번에 조회한다(목록에서 N+1을 피하려고).
 
     courses._completed_counts와 같은 배치 패턴이되, 키가 코스가 아니라 유저다.
     """
@@ -48,9 +47,10 @@ def _completed_counts(db: Session, user_id_strs: list[str]) -> dict[str, int]:
         return {}
 
     rows = db.execute(
-        select(Stamp.user_id, func.count(Stamp.id))
-        .where(Stamp.user_id.in_(user_id_strs))
-        .group_by(Stamp.user_id)
+        select(Run.user_id, func.count(func.distinct(Verification.course_id)))
+        .join(Verification, Verification.run_id == Run.id)
+        .where(Run.user_id.in_(user_id_strs), Verification.status == "matched")
+        .group_by(Run.user_id)
     ).all()
 
     return {user_id: count for user_id, count in rows}
@@ -93,16 +93,17 @@ def _latest_devices(db: Session, user_id_strs: list[str]) -> dict[str, str]:
 
 
 def _completed_courses(db: Session, user: User) -> list[dict]:
-    """이 유저가 완주한 코스 목록(코스명 포함, 최신순).
-
-    Stamp.course_id가 courses.id로 가는 FK라 단일 조인으로 코스명을 가져온다 —
-    스탬프를 먼저 뽑고 코스를 하나씩 다시 조회하는 N+1을 만들지 않는다.
+    """이 유저가 완주한 코스 목록(코스명 포함, 최신순). 같은 코스를 여러 번 완주했으면
+    처음 완주한 시각 하나만 — 예전 스탬프 기준 목록과 같은 모양이다.
     """
+    first_completed = func.min(Verification.completed_at)
     rows = db.execute(
-        select(Course.id, Course.name, Stamp.acquired_at)
-        .join(Course, Course.id == Stamp.course_id)
-        .where(Stamp.user_id == str(user.id))
-        .order_by(Stamp.acquired_at.desc())
+        select(Course.id, Course.name, first_completed)
+        .join(Verification, Verification.course_id == Course.id)
+        .join(Run, Run.id == Verification.run_id)
+        .where(Run.user_id == str(user.id), Verification.status == "matched")
+        .group_by(Course.id, Course.name)
+        .order_by(first_completed.desc())
     ).all()
 
     return [

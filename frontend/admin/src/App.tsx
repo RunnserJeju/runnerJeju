@@ -8,6 +8,7 @@ import HomeCurationPage from './pages/HomeCurationPage'
 import LogsPage from './pages/LogsPage'
 import NoticeListPage from './pages/NoticeListPage'
 import PartnerListPage from './pages/PartnerListPage'
+import StampListPage from './pages/StampListPage'
 import UsersPage from './pages/UsersPage'
 
 // 차트 라이브러리(recharts)가 커서 대시보드를 열 때만 내려받는다.
@@ -23,6 +24,7 @@ type Page =
   | 'home'
   | 'courses'
   | 'partners'
+  | 'stamps'
   | 'notices'
   | 'dashboard'
   | 'course-stats'
@@ -48,6 +50,7 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
       { key: 'home', label: '홈 구성' },
       { key: 'courses', label: '코스' },
       { key: 'partners', label: '협력업체' },
+      { key: 'stamps', label: '스탬프' },
       { key: 'notices', label: '공지사항' },
     ],
   },
@@ -139,6 +142,9 @@ export default function App() {
           )}
           {page === 'partners' && (
             <PartnerListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'stamps' && (
+            <StampListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
           )}
           {page === 'notices' && (
             <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />

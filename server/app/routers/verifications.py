@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import stamp_rules
 from app import verification as verification_logic
 from app.db import get_db
 from app.deps import current_user_id
@@ -15,11 +16,17 @@ router = APIRouter(tags=["verifications"])
 
 
 def _earned_stamp_id(db: Session, user_id: str, course_id: uuid.UUID) -> uuid.UUID | None:
-    stamp = db.execute(
-        select(Stamp).where(Stamp.user_id == user_id, Stamp.course_id == course_id)
-    ).scalar_one_or_none()
+    """이 코스 완주로 받는 스탬프 중 사용자가 가진 것. 여러 개면 처음 것."""
+    definition_ids = [d.id for d in stamp_rules.course_stamp_definitions(db, course_id)]
+    if not definition_ids:
+        return None
 
-    return stamp.id if stamp else None
+    return db.execute(
+        select(Stamp.id)
+        .where(Stamp.user_id == user_id, Stamp.stamp_definition_id.in_(definition_ids))
+        .order_by(Stamp.acquired_at)
+        .limit(1)
+    ).scalar_one_or_none()
 
 
 def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
@@ -39,18 +46,6 @@ def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
         "completed_at": verification.completed_at,
         "earned_stamp_id": stamp_id,
     }
-
-
-def _issue_stamp(db: Session, user_id: str, run: Run, course: Course) -> None:
-    """완주 스탬프 발급. 같은 코스를 다시 완주해도 스탬프는 하나만 유지한다."""
-    existing = db.execute(
-        select(Stamp).where(Stamp.user_id == user_id, Stamp.course_id == course.id)
-    ).scalar_one_or_none()
-
-    if existing is not None:
-        return
-
-    db.add(Stamp(user_id=user_id, course_id=course.id, run_id=run.id))
 
 
 @router.post("/runs/{run_id}/verification", response_model=VerificationOut, status_code=201)
@@ -103,7 +98,7 @@ def request_verification(
     db.add(record)
 
     if outcome.status == "matched":
-        _issue_stamp(db, user_id, run, course)
+        stamp_rules.on_course_completed(db, user_id, run, course.id)
 
     db.commit()
     db.refresh(record)

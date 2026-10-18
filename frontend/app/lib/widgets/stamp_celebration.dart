@@ -190,7 +190,7 @@ class _StampCelebrationState extends State<_StampCelebration>
                     child: Transform.translate(
                       offset: Offset(0, 16 * (1 - _caption.value)),
                       child: _Caption(
-                        courseName: widget.stamp.courseName,
+                        courseName: widget.stamp.name,
                         onClose: () => Navigator.of(context).pop(),
                       ),
                     ),

@@ -272,9 +272,9 @@ class CourseListItem(BaseModel):
     # 대표 썸네일 public URL. 전용 엔드포인트로만 설정/삭제된다(등록·수정 폼과 별개).
     thumbnail_url: str | None
 
-    # 이 코스 완주 시 주는 스탬프 도안 public URL. 스탬프 앨범이 코스 목록만으로
-    # 잠긴 칸(미획득)의 목표 도안까지 그릴 수 있게 코스 응답에 함께 내린다.
-    stamp_image_url: str | None
+    # 이 코스 완주 스탬프의 도안(스탬프 종류에서 가져옴). 옛 앱 스탬프 탭 호환용 —
+    # 새 앱은 GET /stamp-definitions를 쓴다(#71).
+    stamp_image_url: str | None = None
 
     completed_count: int
     is_completed_by_me: bool
@@ -403,13 +403,63 @@ class VerificationOut(BaseModel):
 # --- 스탬프 --------------------------------------------------------------
 
 
+class StampDefinitionOut(BaseModel):
+    """스탬프 종류. 앱 스탬프 탭이 잠긴 칸까지 그리는 데 쓴다."""
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    image_url: str | None
+    condition_type: str
+    # condition_type이 course_complete일 때 그 코스. 앱이 칸을 누르면 코스 안내로 보낸다.
+    course_id: uuid.UUID | None
+    sort_order: int
+
+
 class StampOut(BaseModel):
     id: uuid.UUID
-    course_id: uuid.UUID
-    course_name: str
-    acquired_at: datetime
+    stamp_definition_id: uuid.UUID
+    name: str
+    description: str | None
     image_url: str | None
+    condition_type: str
+    course_id: uuid.UUID | None
+    acquired_at: datetime
     record_id: uuid.UUID | None
+    # 옛 앱 호환. course_name은 스탬프 이름과 같다.
+    course_name: str
+
+
+class StampDefinitionCreate(BaseModel):
+    """스탬프 종류 등록·수정(운영툴). 도안은 전용 엔드포인트로 올린다."""
+
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = None
+    condition_type: str
+    condition_params: dict = Field(default_factory=dict)
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class StampDefinitionUpdate(StampDefinitionCreate):
+    """수정(PATCH /admin/stamps/{id}). 작성과 같은 필드로 전체를 교체한다."""
+
+
+class AdminStampDefinitionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    image_url: str | None
+    condition_type: str
+    condition_params: dict
+    is_active: bool
+    sort_order: int
+    # 이 스탬프를 받은 사람 수.
+    issued_count: int = 0
+    created_at: datetime
+    updated_at: datetime
 
 
 # --- 공지사항 -------------------------------------------------------------

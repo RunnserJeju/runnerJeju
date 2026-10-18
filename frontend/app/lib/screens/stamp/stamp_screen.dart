@@ -9,7 +9,8 @@ import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/stamp_badge.dart';
 
-/// 스탬프함. 전체 코스를 카드 그리드로 깔고, 완주분은 색상·미완주는 흑백.
+/// 스탬프함. 스탬프 종류 전체를 카드 그리드로 깔고, 받은 것은 색상·못 받은 것은 흑백.
+/// 스탬프는 코스와 분리됐다(#71) — 코스 완주 스탬프면 코스 정보를 곁들인다.
 class StampScreen extends StatefulWidget {
   const StampScreen({super.key});
 
@@ -30,21 +31,29 @@ class _StampScreenState extends State<StampScreen> {
     _future = _buildSlots();
   }
 
-  /// 내 스탬프와 전체 코스를 함께 불러 코스별 슬롯 목록으로 합친다.
-  /// 순서는 코스 카탈로그 순, 코스 목록에 없는 스탬프(삭제된 코스 등)는 뒤에.
+  /// 스탬프 종류·내 스탬프·코스를 함께 불러 슬롯 목록으로 합친다.
+  /// 순서는 스탬프 종류 순(서버 정렬), 목록에 없는 스탬프(숨긴 종류 등)는 뒤에.
   Future<List<_StampSlot>> _buildSlots() async {
+    final definitionsFuture = Services.instance.stamp.loadDefinitions();
     final stampsFuture = Services.instance.stamp.loadMyStamps();
     final coursesFuture = Services.instance.course.loadCourses();
+    final definitions = await definitionsFuture;
     final stamps = await stampsFuture;
     final courses = await coursesFuture;
 
-    final byCourse = {for (final s in stamps) s.courseId: s};
-    final courseIds = courses.map((c) => c.id).toSet();
+    final byDefinition = {for (final s in stamps) s.definitionId: s};
+    final courseById = {for (final c in courses) c.id: c};
+    final definitionIds = definitions.map((d) => d.id).toSet();
 
     return [
-      for (final c in courses) _StampSlot.fromCourse(c, byCourse[c.id]),
+      for (final d in definitions)
+        _StampSlot.fromDefinition(
+          d,
+          byDefinition[d.id],
+          courseById[d.courseId],
+        ),
       for (final s in stamps)
-        if (!courseIds.contains(s.courseId)) _StampSlot.fromStamp(s),
+        if (!definitionIds.contains(s.definitionId)) _StampSlot.fromStamp(s),
     ];
   }
 
@@ -53,7 +62,9 @@ class _StampScreenState extends State<StampScreen> {
     await _future.catchError((_) => <_StampSlot>[]);
   }
 
-  void _showStampDetail(RunStamp stamp) {
+  /// 받은 스탬프는 도안·획득일, 못 받은 스탬프는 이름과 획득 조건 안내.
+  void _showStampDetail(_StampSlot slot) {
+    final stamp = slot.stamp;
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
@@ -62,12 +73,27 @@ class _StampScreenState extends State<StampScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              StampBadge(stamp: stamp, size: 132),
-              const SizedBox(height: 16),
-              Text(
-                '${Formatters.date(stamp.acquiredAt)} 완주',
-                style: Theme.of(sheetContext).textTheme.bodyMedium,
+              StampBadge(
+                stamp: stamp,
+                name: slot.name,
+                acquired: slot.acquired,
+                size: 132,
               ),
+              if (slot.description case final description?) ...[
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(sheetContext).textTheme.bodyMedium,
+                ),
+              ],
+              if (stamp != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  '${Formatters.date(stamp.acquiredAt)} 획득',
+                  style: Theme.of(sheetContext).textTheme.bodyMedium,
+                ),
+              ],
             ],
           ),
         ),
@@ -87,8 +113,8 @@ class _StampScreenState extends State<StampScreen> {
             snapshot: snapshot,
             onRetry: _refresh,
             isEmpty: (slots) => slots.isEmpty,
-            emptyTitle: '아직 스탬프 코스가 없어요',
-            emptyMessage: '코스가 등록되면 스탬프를 모을 수 있어요',
+            emptyTitle: '아직 스탬프가 없어요',
+            emptyMessage: '스탬프가 등록되면 모을 수 있어요',
             emptyIcon: Icons.workspace_premium_outlined,
             builder: (context, slots) => _StampBody(
               slots: slots,
@@ -111,7 +137,7 @@ class _StampBody extends StatelessWidget {
 
   final List<_StampSlot> slots;
   final Future<void> Function() onRefresh;
-  final void Function(RunStamp stamp) onTapStamp;
+  final void Function(_StampSlot slot) onTapStamp;
 
   @override
   Widget build(BuildContext context) {
@@ -139,8 +165,8 @@ class _StampBody extends StatelessWidget {
           dividerColor: AppColors.lineSoft,
           tabs: [
             Tab(text: '전체'),
-            Tab(text: '완주'),
-            Tab(text: '미완주'),
+            Tab(text: '획득'),
+            Tab(text: '미획득'),
           ],
         ),
         Expanded(
@@ -152,19 +178,19 @@ class _StampBody extends StatelessWidget {
                   slots: slots,
                   onRefresh: onRefresh,
                   onTapStamp: onTapStamp,
-                  emptyText: '아직 스탬프 코스가 없어요',
+                  emptyText: '아직 스탬프가 없어요',
                 ),
                 _StampGrid(
                   slots: acquired,
                   onRefresh: onRefresh,
                   onTapStamp: onTapStamp,
-                  emptyText: '아직 완주한 코스가 없어요',
+                  emptyText: '아직 받은 스탬프가 없어요',
                 ),
                 _StampGrid(
                   slots: unacquired,
                   onRefresh: onRefresh,
                   onTapStamp: onTapStamp,
-                  emptyText: '모든 코스를 완주했어요!',
+                  emptyText: '모든 스탬프를 모았어요!',
                 ),
               ],
             ),
@@ -175,7 +201,7 @@ class _StampBody extends StatelessWidget {
   }
 }
 
-/// 제목 + "N개 완주 · M개 미완주" 요약.
+/// 제목 + "N개 획득 · M개 미획득" 요약.
 class _Header extends StatelessWidget {
   const _Header({required this.acquired, required this.total});
 
@@ -214,7 +240,7 @@ class _Header extends StatelessWidget {
                     color: AppColors.accent,
                   ),
                 ),
-                TextSpan(text: ' 완주 · ${total - acquired}개 미완주'),
+                TextSpan(text: ' 획득 · ${total - acquired}개 미획득'),
               ],
             ),
           ),
@@ -234,7 +260,7 @@ class _StampGrid extends StatelessWidget {
 
   final List<_StampSlot> slots;
   final Future<void> Function() onRefresh;
-  final void Function(RunStamp stamp) onTapStamp;
+  final void Function(_StampSlot slot) onTapStamp;
   final String emptyText;
 
   @override
@@ -270,8 +296,8 @@ class _StampGrid extends StatelessWidget {
                   final slot = slots[index];
                   return _StampCard(
                     slot: slot,
-                    onTap: slot.acquired
-                        ? () => onTapStamp(slot.stamp!)
+                    onTap: slot.acquired || slot.description != null
+                        ? () => onTapStamp(slot)
                         : null,
                   );
                 },
@@ -283,7 +309,7 @@ class _StampGrid extends StatelessWidget {
   }
 }
 
-/// 흰 카드 하나: 도안 + 코스명 + 지역·거리 + 난이도 + (완주 시) 완주일.
+/// 흰 카드 하나: 도안 + 이름 + (코스 스탬프면) 지역·거리·난이도 + (획득 시) 획득일.
 class _StampCard extends StatelessWidget {
   const _StampCard({required this.slot, this.onTap});
 
@@ -315,7 +341,7 @@ class _StampCard extends StatelessWidget {
               _StampImage(url: slot.imageUrl, acquired: acquired),
               const SizedBox(height: 10),
               Text(
-                slot.courseName,
+                slot.name,
                 maxLines: 1,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
@@ -355,7 +381,7 @@ class _StampCard extends StatelessWidget {
   }
 }
 
-/// 원형 스탬프 도안. 완주면 DB 이미지, 미완주면 회색 도안을 반투명으로.
+/// 원형 스탬프 도안. 받았으면 DB 이미지, 못 받았으면 회색 도안을 반투명으로.
 ///
 /// 미완주를 DB 이미지의 흑백 처리로 그리지 않는 이유: 난이도별 도안 색이 달라
 /// 흑백으로 바꾸면 진하기가 제각각이다(빨강이 제일 진함).
@@ -407,47 +433,50 @@ class _Fallback extends StatelessWidget {
   }
 }
 
-/// 스탬프 그리드 한 칸. 코스 하나 = 슬롯 하나이며, 대응 스탬프가 있으면 완주.
+/// 스탬프 그리드 한 칸. 스탬프 종류 하나 = 슬롯 하나이며, 받은 스탬프가 있으면 획득.
 class _StampSlot {
   const _StampSlot({
-    required this.courseId,
-    required this.courseName,
+    required this.name,
     required this.acquired,
     required this.imageUrl,
+    this.description,
     this.stamp,
     this.region,
     this.distanceKm,
     this.difficulty,
   });
 
-  factory _StampSlot.fromCourse(RunningCourse course, RunStamp? stamp) =>
-      _StampSlot(
-        courseId: course.id,
-        courseName: stamp?.courseName ?? course.name,
-        acquired: stamp != null,
-        // 발급된 도안이 우선, 없으면 코스에 설정된 목표 도안.
-        imageUrl: stamp?.imageUrl ?? course.stampImageUrl,
-        stamp: stamp,
-        region: _regionOf(course.address),
-        distanceKm: course.distanceKmLabel,
-        difficulty: course.difficulty,
-      );
+  /// [course]는 코스 완주 스탬프일 때 그 코스(숨긴 코스면 null).
+  factory _StampSlot.fromDefinition(
+    StampDefinition definition,
+    RunStamp? stamp,
+    RunningCourse? course,
+  ) => _StampSlot(
+    name: definition.name,
+    acquired: stamp != null,
+    imageUrl: definition.imageUrl,
+    description: definition.description,
+    stamp: stamp,
+    region: course == null ? null : _regionOf(course.address),
+    distanceKm: course?.distanceKmLabel,
+    difficulty: course?.difficulty,
+  );
 
   factory _StampSlot.fromStamp(RunStamp stamp) => _StampSlot(
-    courseId: stamp.courseId,
-    courseName: stamp.courseName,
+    name: stamp.name,
     acquired: true,
     imageUrl: stamp.imageUrl,
+    description: stamp.description,
     stamp: stamp,
   );
 
-  final String courseId;
-  final String courseName;
+  final String name;
   final bool acquired;
   final String? imageUrl;
+  final String? description;
   final RunStamp? stamp;
 
-  /// 코스 메타. 코스 목록에 없는 스탬프는 null이라 카드에서 숨긴다.
+  /// 코스 메타. 코스 완주 스탬프가 아니면 null이라 카드에서 숨긴다.
   final String? region;
   final String? distanceKm;
   final CourseDifficulty? difficulty;

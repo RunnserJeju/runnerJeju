@@ -149,13 +149,6 @@ class Course(Base):
     # 채우고, 코스 등록/수정(GPX·메타데이터)은 이 컬럼을 건드리지 않는다.
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
-    # 이 코스를 완주하면 주는 스탬프 도안(Supabase Storage public URL). 스탬프는
-    # 코스에 1:1로 종속돼서 도안을 코스에 둔다. 발급된 스탬프(stamps)는 이 값을
-    # 조회 시 참조하므로(라이브 참조), 운영자가 나중에 도안을 넣거나 바꿔도 이미
-    # 완주한 사람에게까지 반영된다. 전용 엔드포인트(PUT/DELETE
-    # /courses/{id}/stamp-image)가 채운다.
-    stamp_image_url: Mapped[str | None] = mapped_column(String(500), default=None)
-
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
     # 업로드한 GPX 파일 바이트 그대로. path는 리샘플본이라 원본 점이 남지 않아서
@@ -175,8 +168,6 @@ class Course(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-
-    stamps: Mapped[list["Stamp"]] = relationship(back_populates="course")
 
     # 이 코스에 연결된 협력업체(순서대로). 목록 응답이 코스마다 업체를 따로 조회하지
     # 않게 selectin으로 한 번에 불러온다(링크 → 업체는 CoursePartner.partner가 join).
@@ -352,31 +343,69 @@ class Verification(Base):
     course: Mapped[Course] = relationship()
 
 
+class StampDefinition(Base):
+    """스탬프 종류. 도전과제처럼 "조건 종류 + 조건 값"을 데이터로 갖는다.
+
+    판정 코드는 조건 종류마다 한 번만 쓴다(app/stamp_rules.py). 새 스탬프가 기존
+    종류로 표현되면 행만 추가하면 되고, 새로운 종류의 조건이 생길 때만 코드를 더한다.
+    코스는 조건 값의 하나일 뿐이라 외래키로 묶지 않는다 — 코스를 지우면 그 코스를
+    조건으로 가진 스탬프는 노출을 끈다(admin/courses).
+    """
+
+    __tablename__ = "stamp_definitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(100))
+    # 획득 조건 안내. 앱이 스탬프 상세·빙고 칸에 그대로 보여준다.
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    # 도안(Supabase Storage public URL). PUT/DELETE /admin/stamps/{id}/image가 채운다.
+    # 발급 기록은 이 값을 조회 시 참조하므로 도안을 바꾸면 이미 딴 스탬프에도 반영된다.
+    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    # 'course_complete' {"course_id": str} | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
+    condition_type: Mapped[str] = mapped_column(String(30))
+    condition_params: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    # 지우지 않고 끈다 — 발급 기록이 이 행을 가리킨다.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Stamp(Base):
-    """코스 완주 스탬프. 검증이 matched일 때만 발급된다."""
+    """사용자가 받은 스탬프(발급 기록). 스탬프 종류당 한 번만 받는다."""
 
     __tablename__ = "stamps"
-    __table_args__ = (UniqueConstraint("user_id", "course_id", name="uq_stamp_user_course"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "stamp_definition_id", name="uq_stamp_user_definition"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
-    course_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("courses.id"), index=True
+    stamp_definition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("stamp_definitions.id"), index=True
     )
+    # 달려서 받은 스탬프면 그 러닝. 운영자 지급 등은 None.
     run_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("runs.id"), default=None
     )
-
-    # 스탬프 도안은 이 행이 아니라 코스(courses.stamp_image_url)에 있다 — 코스당
-    # 하나이고 운영자가 설정하는 값이라, 완주 인스턴스마다 복제하지 않고 조회 시
-    # course에서 라이브로 가져온다(stamps 라우터 _to_out 참고).
     acquired_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
-    course: Mapped[Course] = relationship(back_populates="stamps")
+    definition: Mapped[StampDefinition] = relationship(lazy="joined")
 
 
 class Favorite(Base):

@@ -12,6 +12,7 @@ DB 없이 라우터 함수를 직접 부르고 Session은 FakeSession으로 흉�
 
 import io
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -20,8 +21,9 @@ from pydantic import ValidationError
 
 from app import geocoding, storage
 from app.admin import courses as admin_courses_router
+from app.admin import stamps as admin_stamps_router
 from app.deps import ClientContext
-from app.models import Course, CoursePartner, Partner, Stamp
+from app.models import Course, CoursePartner, Partner, Stamp, StampDefinition
 from app.routers import courses as courses_router
 from app.routers import stamps as stamps_router
 from app.schemas import CourseUpdate, Facility, PartnerPayload
@@ -169,10 +171,11 @@ class TestToSummary:
             restrooms=[],
             estimated_time_min=75,
             thumbnail_url="https://example.com/a.png",
-            stamp_image_url="https://example.com/stamp.png",
         )
 
-        summary = courses_router._to_summary(course, 0, False)
+        summary = courses_router._to_summary(
+            course, 0, False, "https://example.com/stamp.png"
+        )
 
         assert summary["parkings"] == [PARKING]
         assert summary["restrooms"] == []
@@ -796,8 +799,47 @@ class TestReplaceCourseGpx:
         assert exc_info.value.status_code == 422
 
 
-class TestCourseStampImage:
-    """스탬프 도안 등록/수정/삭제. 썸네일과 같은 패턴이되 스탬프 전용 버킷을 쓴다."""
+class _StampFakeSession:
+    """스탬프 도안 엔드포인트가 부르는 것만: get, execute(발급 수 집계), commit, refresh."""
+
+    def __init__(self, definition: StampDefinition | None):
+        self._definition = definition
+
+    def get(self, _model, stamp_id):
+        if self._definition is not None and self._definition.id == stamp_id:
+            return self._definition
+        return None
+
+    def execute(self, _stmt):
+        return _GpxReplaceResult(has_activity=False)
+
+    def commit(self):
+        pass
+
+    def refresh(self, _obj):
+        pass
+
+
+def _definition(**overrides) -> StampDefinition:
+    now = datetime.now(timezone.utc)
+    fields = dict(
+        id=uuid.uuid4(),
+        name="사계 해안",
+        description=None,
+        image_url=None,
+        condition_type="course_complete",
+        condition_params={"course_id": str(uuid.uuid4())},
+        is_active=True,
+        sort_order=0,
+        created_at=now,
+        updated_at=now,
+    )
+    fields.update(overrides)
+    return StampDefinition(**fields)
+
+
+class TestStampImage:
+    """스탬프 도안 등록/삭제. 도안은 스탬프 종류에 있고 스탬프 전용 버킷을 쓴다(#71)."""
 
     def _patch_storage(self, monkeypatch, *, url="https://cdn/stamp-new.png"):
         deleted: list[str] = []
@@ -813,100 +855,97 @@ class TestCourseStampImage:
         )
         return deleted, buckets
 
-    def test_sets_stamp_image_when_none(self, monkeypatch):
+    def test_sets_image_when_none(self, monkeypatch):
         deleted, buckets = self._patch_storage(monkeypatch)
-        course = _course(stamp_image_url=None)
-        db = UpdateFakeSession(course)
+        definition = _definition()
 
-        result = admin_courses_router.set_course_stamp_image(course.id, FakeUpload(), db)
+        result = admin_stamps_router.set_stamp_image(
+            definition.id, FakeUpload(), _StampFakeSession(definition)
+        )
 
-        assert course.stamp_image_url == "https://cdn/stamp-new.png"
-        assert result["stamp_image_url"] == "https://cdn/stamp-new.png"
+        assert definition.image_url == "https://cdn/stamp-new.png"
+        assert result.image_url == "https://cdn/stamp-new.png"
         assert deleted == []
-        # 스탬프 전용 버킷에 올린다(썸네일·배너와 분리).
         assert buckets == [storage.SUPABASE_STAMP_BUCKET]
 
     def test_replaces_url_but_keeps_old_file(self, monkeypatch):
-        # 도안은 여러 코스가 공유할 수 있어 옛 파일을 지우지 않는다.
         deleted, _ = self._patch_storage(monkeypatch)
-        course = _course(stamp_image_url="https://cdn/stamp-old.png")
-        db = UpdateFakeSession(course)
+        definition = _definition(image_url="https://cdn/stamp-old.png")
 
-        admin_courses_router.set_course_stamp_image(course.id, FakeUpload(), db)
+        admin_stamps_router.set_stamp_image(
+            definition.id, FakeUpload(), _StampFakeSession(definition)
+        )
 
-        assert course.stamp_image_url == "https://cdn/stamp-new.png"
+        assert definition.image_url == "https://cdn/stamp-new.png"
         assert deleted == []
 
     def test_rejects_non_image_type(self, monkeypatch):
         self._patch_storage(monkeypatch)
-        course = _course(stamp_image_url=None)
-        db = UpdateFakeSession(course)
+        definition = _definition()
 
         with pytest.raises(HTTPException) as exc_info:
-            admin_courses_router.set_course_stamp_image(
-                course.id, FakeUpload(content_type="application/pdf"), db
+            admin_stamps_router.set_stamp_image(
+                definition.id,
+                FakeUpload(content_type="application/pdf"),
+                _StampFakeSession(definition),
             )
 
         assert exc_info.value.status_code == 422
-        assert course.stamp_image_url is None
+        assert definition.image_url is None
 
-    def test_set_404_when_course_missing(self, monkeypatch):
+    def test_404_when_missing(self, monkeypatch):
         self._patch_storage(monkeypatch)
-        db = UpdateFakeSession(None)
 
         with pytest.raises(HTTPException) as exc_info:
-            admin_courses_router.set_course_stamp_image(uuid.uuid4(), FakeUpload(), db)
+            admin_stamps_router.set_stamp_image(
+                uuid.uuid4(), FakeUpload(), _StampFakeSession(None)
+            )
 
         assert exc_info.value.status_code == 404
 
     def test_delete_clears_url_but_keeps_file(self, monkeypatch):
         deleted, _ = self._patch_storage(monkeypatch)
-        course = _course(stamp_image_url="https://cdn/stamp-old.png")
-        db = UpdateFakeSession(course)
+        definition = _definition(image_url="https://cdn/stamp-old.png")
 
-        result = admin_courses_router.delete_course_stamp_image(course.id, db)
+        result = admin_stamps_router.delete_stamp_image(
+            definition.id, _StampFakeSession(definition)
+        )
 
-        assert course.stamp_image_url is None
-        assert result["stamp_image_url"] is None
+        assert definition.image_url is None
+        assert result.image_url is None
         assert deleted == []
-
-    def test_delete_is_noop_when_already_none(self, monkeypatch):
-        deleted, _ = self._patch_storage(monkeypatch)
-        course = _course(stamp_image_url=None)
-        db = UpdateFakeSession(course)
-
-        admin_courses_router.delete_course_stamp_image(course.id, db)
-
-        assert deleted == []
-
-    def test_delete_404_when_course_missing(self, monkeypatch):
-        self._patch_storage(monkeypatch)
-        db = UpdateFakeSession(None)
-
-        with pytest.raises(HTTPException) as exc_info:
-            admin_courses_router.delete_course_stamp_image(uuid.uuid4(), db)
-
-        assert exc_info.value.status_code == 404
 
 
 class TestStampToOut:
-    def test_sources_image_from_course(self):
-        # 스탬프 응답의 도안은 stamps 행이 아니라 코스에서 라이브로 온다.
-        course = _course(name="사계 해안", stamp_image_url="https://cdn/stamp.png")
-        stamp = Stamp(id=uuid.uuid4(), user_id="u", course_id=course.id, course=course)
+    def test_sources_fields_from_definition(self):
+        # 이름·도안은 발급 기록이 아니라 스탬프 종류에서 라이브로 온다.
+        course_id = uuid.uuid4()
+        definition = _definition(
+            name="사계 해안",
+            image_url="https://cdn/stamp.png",
+            condition_params={"course_id": str(course_id)},
+        )
+        stamp = Stamp(
+            id=uuid.uuid4(),
+            user_id="u",
+            stamp_definition_id=definition.id,
+            definition=definition,
+        )
 
         out = stamps_router._to_out(stamp)
 
         assert out["image_url"] == "https://cdn/stamp.png"
+        assert out["name"] == "사계 해안"
         assert out["course_name"] == "사계 해안"
-        assert out["course_id"] == course.id
+        assert out["course_id"] == course_id
 
-    def test_image_none_when_course_has_no_design(self):
-        course = _course(stamp_image_url=None)
-        stamp = Stamp(id=uuid.uuid4(), user_id="u", course_id=course.id, course=course)
+    def test_course_id_none_for_manual(self):
+        definition = _definition(condition_type="manual", condition_params={})
+        stamp = Stamp(id=uuid.uuid4(), user_id="u", definition=definition)
 
         out = stamps_router._to_out(stamp)
 
+        assert out["course_id"] is None
         assert out["image_url"] is None
 
 

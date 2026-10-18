@@ -4,31 +4,31 @@ import '../models/run_stamp.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 
-/// 완주 스탬프 도안. 획득/미획득 두 상태를 그린다.
+/// 스탬프 도안. 획득/미획득 두 상태를 그린다.
 ///
-/// 획득이면 색상 도안 + 코스명 + (기본 도안 한정) 획득일, 미획득이면 회색 도안을
+/// 획득이면 색상 도안 + 스탬프 이름 + (기본 도안 한정) 획득일, 미획득이면 회색 도안을
 /// 흐릿하게(난이도별 색 도안을 흑백 처리하면 진하기가 제각각이라 회색 도안을
 /// 따로 쓴다). [stamp]가 있으면 도안/획득일 출처로 쓰고, 미획득처럼
-/// 스탬프가 없을 땐 [courseName]/[acquired]만으로 그린다.
+/// 스탬프가 없을 땐 [name]/[acquired]만으로 그린다.
 class StampBadge extends StatelessWidget {
   const StampBadge({
     super.key,
     this.stamp,
-    this.courseName,
+    this.name,
     this.acquired,
     this.size = 104,
     this.onTap,
     this.showLabel = true,
   }) : assert(
-         stamp != null || courseName != null,
-         'stamp 또는 courseName 중 하나는 있어야 한다',
+         stamp != null || name != null,
+         'stamp 또는 name 중 하나는 있어야 한다',
        );
 
   /// 획득 스탬프. 도안 이미지·획득일 출처. 미획득이면 null일 수 있다.
   final RunStamp? stamp;
 
-  /// 코스명. 없으면 [stamp]에서 가져온다.
-  final String? courseName;
+  /// 스탬프 이름. 없으면 [stamp]에서 가져온다.
+  final String? name;
 
   /// 획득 여부. 없으면 [stamp] 유무로 판단한다.
   final bool? acquired;
@@ -39,10 +39,10 @@ class StampBadge extends StatelessWidget {
   final double size;
   final VoidCallback? onTap;
 
-  /// 코스명 라벨을 그릴지. 팝업처럼 문구를 따로 두는 곳에서 끈다.
+  /// 이름 라벨을 그릴지. 팝업처럼 문구를 따로 두는 곳에서 끈다.
   final bool showLabel;
 
-  String get _name => courseName ?? stamp!.courseName;
+  String get _name => name ?? stamp!.name;
   bool get _isAcquired => acquired ?? (stamp != null);
 
   /// 원 안에 그릴 도안 URL. 획득한 스탬프의 도안.
