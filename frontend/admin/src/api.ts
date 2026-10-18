@@ -383,6 +383,65 @@ export function listParticipations(id: string): Promise<Participation[]> {
   return request(`/admin/running-weeks/${id}/participations`)
 }
 
+// --- 이벤트 -------------------------------------------------------------
+
+/** 커뮤니티 이벤트. 그림(선택) + 게시글. 본문 링크는 앱에서 눌러 열 수 있다. */
+export interface CommunityEvent {
+  id: string
+  title: string
+  body: string
+  image_url: string | null
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CommunityEventPayload {
+  title: string
+  body: string
+  starts_at: string | null
+  ends_at: string | null
+  is_active: boolean
+  sort_order: number
+}
+
+export function listEvents(): Promise<CommunityEvent[]> {
+  return request('/admin/events')
+}
+
+export function createEvent(payload: CommunityEventPayload): Promise<CommunityEvent> {
+  return request('/admin/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateEvent(id: string, payload: CommunityEventPayload): Promise<CommunityEvent> {
+  return request(`/admin/events/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteEvent(id: string): Promise<void> {
+  return request(`/admin/events/${id}`, { method: 'DELETE' })
+}
+
+export function setEventImage(id: string, file: File): Promise<CommunityEvent> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/events/${id}/image`, { method: 'PUT', body: form })
+}
+
+export function deleteEventImage(id: string): Promise<CommunityEvent> {
+  return request(`/admin/events/${id}/image`, { method: 'DELETE' })
+}
+
 // --- 공지 ---------------------------------------------------------------
 
 /** 전체 목록(예약·만료 포함). 공개 GET /notices는 노출 중인 것만 주고 앱 JWT가 필요하다. */

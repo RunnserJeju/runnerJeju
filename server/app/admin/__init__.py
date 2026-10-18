@@ -13,9 +13,9 @@ from fastapi import APIRouter, Depends
 from app.admin import (
     coupons,
     courses,
+    events,
     geo,
     home,
-    missions,
     notices,
     partners,
     running_weeks,
@@ -32,7 +32,7 @@ admin_router = APIRouter(
 )
 admin_router.include_router(courses.router)
 admin_router.include_router(notices.router)
-admin_router.include_router(missions.router)
+admin_router.include_router(events.router)
 admin_router.include_router(stamps.router)
 admin_router.include_router(running_weeks.router)
 admin_router.include_router(users.router)

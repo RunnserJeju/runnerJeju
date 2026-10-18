@@ -1,6 +1,6 @@
 """회원 조회 운영자 라우터 테스트 — 목록/상세와 완주 집계·N+1 회피 로직.
 
-DB 없이 Session의 최소 인터페이스만 흉내내는 fake를 쓴다(test_missions.py와 같은
+DB 없이 Session의 최소 인터페이스만 흉내내는 fake를 쓴다(test_notices.py와 같은
 방침). SQL 자체(정렬·offset·조인)는 fake로 검증하지 않으므로, 배치 집계/조인
 매핑·provider 파생·404·응답 shape 같은 파이썬 로직을 본다. require_admin_session
 권한 검사는 함수 직접 호출로 우회되므로 test_admin_auth.py에서 따로 검증한다.

@@ -13,6 +13,7 @@ from app.routers import (
     auth,
     coupons,
     courses,
+    events,
     favorites,
     home,
     notices,
@@ -61,6 +62,7 @@ app.include_router(user_logs.router)
 app.include_router(notices.router)
 app.include_router(partners.router)
 app.include_router(home.router)
+app.include_router(events.router)
 app.include_router(running_weeks.router)
 
 # 운영자 전용. 로그인 라우터(admin_auth_router)는 가드 밖, 나머지(admin_router)는

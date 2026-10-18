@@ -545,36 +545,34 @@ class RunningWeekParticipation(Base):
     )
 
 
-class Mission(Base):
-    """이벤트 미션. 운영자가 참여 기간·달성 조건·리워드·내용을 설정한다.
+class Event(Base):
+    """커뮤니티 이벤트. 그림 한 장(선택)과 게시글이다(#70).
 
-    달성 조건(condition)과 리워드(reward)는 자유 텍스트다 — 자동 판정(런타임)은
-    아직 없고, 운영자가 서술하면 앱이 그대로 보여주는 단계다. 자동 판정이
-    필요해지면 그때 condition을 타입+목표값으로 구조화한다.
+    운영툴에서 등록한다. 본문에 붙여 넣은 링크(https://...)나 [글자](https://...)는
+    앱이 눌러서 열 수 있게 그린다. 노출 규칙은 공지와 같다 — starts_at/ends_at은 null이면
+    "제한 없음"이고 is_active로 따로 끌 수 있다.
+
+    옛 missions(이벤트 미션, 앱 노출 없이 데이터 0건)를 0033에서 이 테이블로 바꿨다.
     """
 
-    __tablename__ = "missions"
+    __tablename__ = "events"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
+    # Supabase Storage public URL. PUT/DELETE /admin/events/{id}/image로 관리.
+    image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
-    # 자유 텍스트. 예) "제주 동부 코스 3개 완주" / "굿즈 + 포인트 500".
-    condition: Mapped[str] = mapped_column(String(500))
-    reward: Mapped[str] = mapped_column(String(500))
-
-    # 참여 기간. 둘 다 nullable이고 null은 "제한 없음"이다(공지와 같은 규칙).
     starts_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
     ends_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
-
-    # 노출 on/off(기간과 별개)와 정렬. 배너와 같은 방식이다.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 앱 목록 정렬. 작을수록 위, 같으면 최신순.
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
