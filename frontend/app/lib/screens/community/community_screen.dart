@@ -8,6 +8,7 @@ import '../../models/community_event.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/linked_text.dart';
 import '../../widgets/section_title.dart';
 import 'event_detail_screen.dart';
 
@@ -173,13 +174,11 @@ class _EventCard extends StatelessWidget {
   final CommunityEvent event;
   final VoidCallback onTap;
 
-  /// 목록에서는 링크 문법을 걷어 글자만 보인다. [신청하기](https://…) → 신청하기
-  static final _markdownLink = RegExp(r'\[([^\]\n]+)\]\((https?://[^\s)]+)\)');
-
   @override
   Widget build(BuildContext context) {
     final imageUrl = event.imageUrl;
-    final preview = event.body.replaceAllMapped(_markdownLink, (m) => m[1]!);
+    // 목록에서는 링크 문법을 걷어 글자만 보인다.
+    final preview = LinkedText.plainText(event.body);
 
     return Material(
       color: Colors.white,

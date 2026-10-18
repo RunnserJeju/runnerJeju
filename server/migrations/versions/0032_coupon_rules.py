@@ -75,8 +75,8 @@ def upgrade() -> None:
         """
         INSERT INTO coupons (id, name, benefit, description, trigger_type)
         VALUES
-          (gen_random_uuid(), '운영자 지급 쿠폰', '혜택을 입력해 주세요', NULL, 'manual'),
-          (gen_random_uuid(), '코스 완주 쿠폰', '혜택을 입력해 주세요',
+          (gen_random_uuid(), '운영자 지급 쿠폰', '협력 업체에서 혜택을 확인해주세요', NULL, 'manual'),
+          (gen_random_uuid(), '코스 완주 쿠폰', '협력 업체에서 혜택을 확인해주세요',
            '코스를 완주하면 받는 쿠폰이에요.', 'course_complete')
         """
     )

@@ -741,8 +741,8 @@ class UserListOut(BaseModel):
 
 # --- 쿠폰 (운영자 + 앱) ----------------------------------------------------
 # 템플릿(coupons) + 발급 인스턴스(user_coupons). 템플릿 행은 코드가 심고 운영툴은 수정만
-# 한다. 발급분은 템플릿을 라이브 참조(수정 즉시 반영). 상태는 used_at으로, '만료'는
-# valid_until로 계산한다.
+# 한다. 발급분은 템플릿을 라이브 참조(수정 즉시 반영). 상태는 used_at(사용) ·
+# expired_at(만료, 서버가 알아챈 시점에 저장) · valid_until(아직 저장 전인 만료)로 계산한다.
 
 CouponStatus = Literal["available", "used", "expired"]
 CouponTriggerType = Literal["manual", "course_complete"]

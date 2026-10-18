@@ -78,7 +78,8 @@ def _coupon(**over) -> Coupon:
 
 def _uc(**over) -> UserCoupon:
     fields = dict(id=uuid.uuid4(), coupon_id=uuid.uuid4(), user_id="u1",
-                  issued_at=NOW, used_at=None, used_partner_id=None, grant_key=None)
+                  issued_at=NOW, used_at=None, expired_at=None, used_partner_id=None,
+                  grant_key=None)
     fields.update(over)
     return UserCoupon(**fields)
 
@@ -108,6 +109,9 @@ class TestEffectiveStatus:
     def test_used_wins_over_expired(self):
         # 사용완료면 만료보다 우선(이미 썼으니).
         assert app_coupons._effective_status(NOW, PAST, NOW) == "used"
+
+    def test_stored_expired_at(self):
+        assert app_coupons._effective_status(None, None, NOW, PAST) == "expired"
 
 
 # --- 운영자: 목록 ---------------------------------------------------------
@@ -181,7 +185,8 @@ class TestMyCoupons:
         free, limited = _coupon(name="아무데나"), _coupon(name="한 곳만")
         partner = uuid.uuid4()
         rows = [(_uc(coupon_id=free.id), free), (_uc(coupon_id=limited.id), limited)]
-        db = SeqFake([_Result(rows), _Result([(limited.id, partner)])])
+        # 첫 execute는 만료 표시 UPDATE.
+        db = SeqFake([_Result([]), _Result(rows), _Result([(limited.id, partner)])])
 
         result = app_coupons.my_coupons(db=db, user_id="u1")
 
@@ -194,7 +199,9 @@ class TestMyCoupons:
         coupon = _coupon()
         partner = _partner(name="바다카페")
         rows = [(_uc(coupon_id=coupon.id, used_at=NOW, used_partner_id=partner.id), coupon)]
-        db = SeqFake([_Result(rows), _Result([]), _Result([(partner.id, "바다카페")])])
+        db = SeqFake(
+            [_Result([]), _Result(rows), _Result([]), _Result([(partner.id, "바다카페")])]
+        )
 
         result = app_coupons.my_coupons(db=db, user_id="u1")
 
@@ -282,16 +289,30 @@ class TestUseCoupon:
             )
         assert exc.value.status_code == 409
 
-    def test_409_when_expired(self):
+    def test_410_when_expired_and_marks_expired(self):
+        # 유효기간이 지났으면 expired_at을 남기고(UPDATE + commit) 410.
         coupon, partner = _coupon(valid_until=PAST), _partner()
         uc = _uc(user_id="u1", coupon_id=coupon.id)
-        db = _use_db(uc, coupon, partner)
+        db = SeqFake([_Result([(uc, coupon)]), _Result([], rowcount=1)], gets={Partner: partner})
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
                 uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
             )
-        assert exc.value.status_code == 409
+        assert exc.value.status_code == 410
+        assert db.committed is True
+
+    def test_410_when_already_marked_expired(self):
+        coupon, partner = _coupon(), _partner()
+        uc = _uc(user_id="u1", coupon_id=coupon.id, expired_at=PAST)
+        db = SeqFake([_Result([(uc, coupon)])], gets={Partner: partner})
+
+        with pytest.raises(HTTPException) as exc:
+            app_coupons.use_coupon(
+                uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+            )
+        assert exc.value.status_code == 410
+        assert db.committed is False
 
     def test_409_when_concurrent_race_loses(self):
         # 조건부 UPDATE 영향 행 0 → 동시에 다른 요청이 먼저 사용 처리 → 409.

@@ -3,6 +3,9 @@
 유저가 발급받은 쿠폰을 보고, 업체 이름을 검색해 고른 뒤 "사용하기"로 이용완료 처리한다.
 업체 코드는 따로 없다 — 어느 업체에서 썼는지만 남겨 이용률에 쓴다. 혜택·유효기간은
 템플릿(coupons)을 라이브 참조한다. 운영자 쪽 수정/지급/현황은 app/admin/coupons.py.
+
+만료: 유효기간이 지난 쿠폰은 목록에서 빼고 expired_at을 남긴다. 사용하려 하면 410으로
+알리고 역시 expired_at을 남긴다 — 앱은 410을 받으면 그 쿠폰을 목록에서 치운다.
 """
 
 import uuid
@@ -21,14 +24,35 @@ router = APIRouter(tags=["coupons"])
 
 
 def _effective_status(
-    used_at: datetime | None, valid_until: datetime | None, now: datetime
+    used_at: datetime | None,
+    valid_until: datetime | None,
+    now: datetime,
+    expired_at: datetime | None = None,
 ) -> str:
-    """발급 쿠폰의 유효 상태. used_at·valid_until에서 계산한다(저장하지 않음)."""
+    """발급 쿠폰의 유효 상태. 사용이 만료보다 우선(이미 썼으니)."""
     if used_at is not None:
         return "used"
-    if valid_until is not None and valid_until < now:
+    if expired_at is not None or (valid_until is not None and valid_until < now):
         return "expired"
     return "available"
+
+
+def _mark_expired(db: Session, user_id: str, now: datetime) -> None:
+    """유효기간이 지난 내 미사용 쿠폰에 expired_at을 남긴다. 커밋은 호출한 쪽이 한다."""
+    stale = (
+        select(UserCoupon.id)
+        .join(Coupon, Coupon.id == UserCoupon.coupon_id)
+        .where(
+            UserCoupon.user_id == user_id,
+            UserCoupon.used_at.is_(None),
+            UserCoupon.expired_at.is_(None),
+            Coupon.valid_until.isnot(None),
+            Coupon.valid_until < now,
+        )
+    )
+    db.execute(
+        update(UserCoupon).where(UserCoupon.id.in_(stale)).values(expired_at=now)
+    )
 
 
 def _allowed_partner_ids(
@@ -74,7 +98,9 @@ def _rows_to_out(db: Session, rows: list) -> list[dict]:
             "issued_at": uc.issued_at,
             "used_at": uc.used_at,
             "valid_until": coupon.valid_until,
-            "status": _effective_status(uc.used_at, coupon.valid_until, now),
+            "status": _effective_status(
+                uc.used_at, coupon.valid_until, now, uc.expired_at
+            ),
             "partner_ids": allowed.get(coupon.id),
             "used_partner_name": names.get(uc.used_partner_id),
         }
@@ -98,11 +124,16 @@ def my_coupons(
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ):
-    """내 쿠폰 목록(최신순). 혜택·유효기간은 템플릿을 단일 조인으로 라이브 참조한다."""
+    """내 쿠폰 목록(최신순). 만료된 쿠폰은 expired_at을 남기고 목록에서 뺀다.
+    혜택·유효기간은 템플릿을 단일 조인으로 라이브 참조한다."""
+    now = datetime.now(timezone.utc)
+    _mark_expired(db, user_id, now)
+    db.commit()
+
     rows = db.execute(
         select(UserCoupon, Coupon)
         .join(Coupon, Coupon.id == UserCoupon.coupon_id)
-        .where(UserCoupon.user_id == user_id)
+        .where(UserCoupon.user_id == user_id, UserCoupon.expired_at.is_(None))
         .order_by(UserCoupon.issued_at.desc())
     ).all()
     return _rows_to_out(db, list(rows))
@@ -130,15 +161,24 @@ def use_coupon(
 
     쿠폰에 업체 제한이 있으면 그 안의 업체만 받는다. 동시에 두 번 눌러도 한 번만
     처리되도록, used_at이 아직 비어 있을 때만 채우는 조건부 UPDATE로 원자 처리한다
-    (영향 행 0 → 이미 사용 → 409).
+    (영향 행 0 → 이미 사용 → 409). 유효기간이 지났으면 expired_at을 남기고 410.
     """
     uc, coupon = _mine_or_404(db, user_coupon_id, user_id)
     if uc.used_at is not None:
         raise HTTPException(status_code=409, detail="이미 사용한 쿠폰이에요.")
 
     now = datetime.now(timezone.utc)
-    if coupon.valid_until is not None and coupon.valid_until < now:
-        raise HTTPException(status_code=409, detail="유효기간이 지난 쿠폰이에요.")
+    if uc.expired_at is not None or (
+        coupon.valid_until is not None and coupon.valid_until < now
+    ):
+        if uc.expired_at is None:
+            db.execute(
+                update(UserCoupon)
+                .where(UserCoupon.id == user_coupon_id, UserCoupon.used_at.is_(None))
+                .values(expired_at=now)
+            )
+            db.commit()
+        raise HTTPException(status_code=410, detail="유효기간이 지난 쿠폰이에요.")
 
     partner = db.get(Partner, payload.partner_id)
     if partner is None:

@@ -56,6 +56,20 @@ class Coupon {
   bool allows(String partnerId) =>
       partnerIds == null || partnerIds!.contains(partnerId);
 
+  /// 서버가 만료로 알린 뒤의 모습. 목록을 다시 받기 전에 화면이 쓴다.
+  Coupon asExpired() => Coupon(
+    id: id,
+    name: name,
+    benefit: benefit,
+    issuedAt: issuedAt,
+    status: CouponStatus.expired,
+    description: description,
+    usedAt: usedAt,
+    validUntil: validUntil,
+    partnerIds: partnerIds,
+    usedPartnerName: usedPartnerName,
+  );
+
   factory Coupon.fromJson(Map<String, dynamic> json) => Coupon(
     id: json['id'].toString(),
     name: json['name'] as String,

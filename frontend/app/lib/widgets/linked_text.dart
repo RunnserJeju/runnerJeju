@@ -19,16 +19,37 @@ class LinkedText extends StatefulWidget {
 
   @override
   State<LinkedText> createState() => _LinkedTextState();
-}
 
-class _LinkedTextState extends State<LinkedText> {
+  /// 본문에서 링크 문법을 걷어 글자만 남긴다. 목록 미리보기처럼 누를 수 없는
+  /// 자리에서 쓴다. [신청하기](https://…) → 신청하기. 맨 주소는 그대로 둔다.
+  static String plainText(String text) =>
+      text.replaceAllMapped(_pattern, (m) => m[1] ?? m[0]!);
+
   // [글자](주소) 또는 맨 주소. 주소는 http(s)만 받는다.
   static final _pattern = RegExp(
     r'\[([^\]\n]+)\]\((https?://[^\s)]+)\)|(https?://[^\s<>"]+)',
   );
+}
 
-  // 문장 끝 마침표·쉼표·닫는 괄호는 주소가 아니다.
-  static final _trailing = RegExp(r'[.,!?;:)\]]+$');
+class _LinkedTextState extends State<LinkedText> {
+  // 문장 끝 마침표·쉼표·닫는 괄호는 주소가 아니다. 괄호는 짝이 안 맞을 때만 뗀다 —
+  // 위키 문서 제목처럼 주소 자체가 ")"로 끝나는 경우가 있다.
+  static final _trailing = RegExp(r'[.,!?;:\])]+$');
+
+  static String _stripTrailing(String raw) {
+    var url = raw.replaceFirst(_trailing, '');
+    final cut = raw.substring(url.length);
+    // 뗀 꼬리 앞쪽의 ")"는, 주소 안의 "("보다 ")"가 적은 동안 되돌린다.
+    var opens = '('.allMatches(url).length;
+    var closes = ')'.allMatches(url).length;
+    var i = 0;
+    while (i < cut.length && cut[i] == ')' && closes < opens) {
+      url += ')';
+      closes++;
+      i++;
+    }
+    return url;
+  }
 
   final List<TapGestureRecognizer> _recognizers = [];
 
@@ -73,7 +94,7 @@ class _LinkedTextState extends State<LinkedText> {
   List<InlineSpan> _spans(String text) {
     final spans = <InlineSpan>[];
     var cursor = 0;
-    for (final match in _pattern.allMatches(text)) {
+    for (final match in LinkedText._pattern.allMatches(text)) {
       if (match.start > cursor) {
         spans.add(TextSpan(text: text.substring(cursor, match.start)));
       }
@@ -81,7 +102,7 @@ class _LinkedTextState extends State<LinkedText> {
         spans.add(_link(label, match.group(2)!));
       } else {
         final raw = match.group(3)!;
-        final url = raw.replaceFirst(_trailing, '');
+        final url = _stripTrailing(raw);
         spans.add(_link(url, url));
         // 떼어 낸 문장부호는 일반 글자로 돌려준다.
         if (url.length < raw.length) {

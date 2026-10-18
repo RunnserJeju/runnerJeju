@@ -738,8 +738,9 @@ class CouponPartner(Base):
 class UserCoupon(Base):
     """유저에게 발급된 쿠폰 한 장. 템플릿(coupons)을 라이브 참조한다.
 
-    상태는 used_at 하나로 표현한다 — null이면 미사용(사용가능/만료), 값이 있으면
-    사용완료. '만료'는 저장하지 않고 coupons.valid_until로 계산한다.
+    used_at이 있으면 사용완료, expired_at이 있으면 만료, 둘 다 없으면 사용 가능.
+    만료는 coupons.valid_until이 지난 걸 서버가 알아챈 시점(내 쿠폰 조회·사용 시도)에
+    expired_at으로 남긴다. 그 전이라도 valid_until이 지났으면 만료로 취급한다.
 
     user_id는 Stamp/Run/Favorite과 같게 토큰 sub(문자열)를 담는다(FK 아님).
     """
@@ -762,6 +763,9 @@ class UserCoupon(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    expired_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
     # 어느 업체에서 썼는지. 업체가 지워지면 None으로 남는다.

@@ -4,6 +4,7 @@ import '../../exceptions/app_exception.dart';
 import '../../models/coupon.dart';
 import '../../models/course_partner.dart';
 import '../../models/user_log.dart';
+import '../../services/coupon_service.dart';
 import '../../services/service_locator.dart';
 import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
@@ -13,7 +14,8 @@ import '../../widgets/partner_category_tile.dart';
 /// 쿠폰 사용: 업체 이름을 검색해 고르고 "사용하기"를 누른다.
 ///
 /// 업체 코드 같은 건 없다 — 유저 폰을 업체에 보여주고 업체 이름을 골라 사용 처리하면
-/// 끝이다. 되돌릴 수 없으므로 확인을 한 번 거친다. 성공하면 사용된 쿠폰을 결과로 돌려준다.
+/// 끝이다. 되돌릴 수 없으므로 확인을 한 번 거친다. 성공하면 사용된 쿠폰을, 서버가
+/// 만료라고 하면 만료 상태의 쿠폰을 결과로 돌려준다 — 둘 다 목록에서 빠질 쿠폰이다.
 class CouponUseScreen extends StatefulWidget {
   const CouponUseScreen({super.key, required this.coupon});
 
@@ -100,6 +102,12 @@ class _CouponUseScreenState extends State<CouponUseScreen> {
       );
       if (!mounted) return;
       Navigator.of(context).pop(used);
+    } on CouponExpiredException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+      Navigator.of(context).pop(widget.coupon.asExpired());
     } on AppException catch (e) {
       if (!mounted) return;
       setState(() => _using = false);

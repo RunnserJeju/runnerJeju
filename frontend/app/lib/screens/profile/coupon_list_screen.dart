@@ -37,9 +37,10 @@ class _CouponListScreenState extends State<CouponListScreen> {
     await _future.catchError((_) => <Coupon>[]);
   }
 
+  /// 사용했거나 만료로 판명나면 목록을 다시 받는다 — 둘 다 서버 목록이 달라진다.
   Future<void> _openDetail(Coupon coupon) async {
-    final used = await showCouponDetail(context, coupon);
-    if (used != null && mounted) _refresh();
+    final changed = await showCouponDetail(context, coupon);
+    if (changed != null && mounted) _refresh();
   }
 
   @override
@@ -60,7 +61,7 @@ class _CouponListScreenState extends State<CouponListScreen> {
             emptyIcon: Icons.confirmation_number_outlined,
             emptyActionLabel: null,
             builder: (context, coupons) {
-              // 쓸 수 있는 것부터, 그다음 사용·만료.
+              // 쓸 수 있는 것부터, 그다음 사용한 것. 만료는 서버가 목록에서 뺀다.
               final available = coupons.where((c) => c.isAvailable).toList();
               final done = coupons.where((c) => !c.isAvailable).toList();
               return ListView(
@@ -119,7 +120,7 @@ class _Heading extends StatelessWidget {
 }
 
 /// 쿠폰 상세 시트. 쓸 수 있는 쿠폰이면 "사용하기"로 업체 검색 화면을 연다.
-/// 사용에 성공하면 사용된 쿠폰을 돌려주고, 아니면 null.
+/// 사용했거나 만료로 판명나면 그 쿠폰을 돌려주고, 아니면 null.
 Future<Coupon?> showCouponDetail(BuildContext context, Coupon coupon) {
   return showModalBottomSheet<Coupon>(
     context: context,
@@ -135,10 +136,10 @@ class _CouponDetailSheet extends StatelessWidget {
   final Coupon coupon;
 
   Future<void> _use(BuildContext context) async {
-    final used = await Navigator.of(context).push<Coupon>(
+    final changed = await Navigator.of(context).push<Coupon>(
       MaterialPageRoute(builder: (_) => CouponUseScreen(coupon: coupon)),
     );
-    if (used != null && context.mounted) Navigator.of(context).pop(used);
+    if (changed != null && context.mounted) Navigator.of(context).pop(changed);
   }
 
   @override

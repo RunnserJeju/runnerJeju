@@ -8,8 +8,9 @@
 """
 
 import uuid
+from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Coupon, UserCoupon
@@ -26,10 +27,16 @@ def course_grant_key(course_id: uuid.UUID) -> str:
 
 
 def active_coupon(db: Session, trigger_type: str) -> Coupon | None:
-    """이 조건으로 지급 중인 쿠폰. 심은 행이 하나뿐이라 첫 것을 쓴다."""
+    """이 조건으로 지급 중인 쿠폰. 꺼졌거나 유효기간이 지났으면 None. 심은 행이 하나뿐이라
+    첫 것을 쓴다."""
+    now = datetime.now(timezone.utc)
     return db.execute(
         select(Coupon)
-        .where(Coupon.trigger_type == trigger_type, Coupon.is_active.is_(True))
+        .where(
+            Coupon.trigger_type == trigger_type,
+            Coupon.is_active.is_(True),
+            or_(Coupon.valid_until.is_(None), Coupon.valid_until > now),
+        )
         .order_by(Coupon.created_at)
         .limit(1)
     ).scalar_one_or_none()

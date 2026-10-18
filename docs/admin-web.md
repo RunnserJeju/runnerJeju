@@ -161,9 +161,9 @@
 
 - **지급 조건**: `manual`(운영자가 회원 골라 지급) / `course_complete`(아무 코스나 완주 인증이 통과하면 한 장, 코스마다 1회 — `user_coupons.grant_key = "course:{course_id}"` 유니크). 새 조건(빙고 줄·블랙아웃 등)은 규칙 함수 + 행을 심는 마이그레이션을 같이 더한다. 운영툴에 생성·삭제는 없다 — 만들어 봤자 지급할 방법이 없어서.
 - **사용 업체**: `coupon_partners`(쿠폰 ↔ 업체). 행이 없으면 모든 업체 허용. 앱은 업체 **이름 검색**으로 골라 `POST /me/coupons/{id}/use {partner_id}` — 업체 코드 없음. 서버는 제한 안의 업체인지 확인하고 `user_coupons.used_partner_id`에 남긴다(업체 목록의 "쿠폰 사용" 수, 발급 현황의 사용 업체).
-- **상태**: `used_at` 하나로 — null=미사용, 값=사용완료. 만료는 `valid_until < now`로 계산. `is_active`는 자동 지급을 끄는 스위치이고 이미 발급된 쿠폰은 그대로 쓸 수 있다.
+- **상태**: `used_at`(사용) · `expired_at`(만료). 만료는 서버가 알아챈 시점(내 쿠폰 조회, 사용 시도)에 `expired_at`을 남기고(`0034`), 앱 목록에서는 뺀다. 만료 쿠폰을 쓰려 하면 410. 자동 지급도 템플릿 `valid_until`이 지났으면 멈춘다. `is_active`는 자동 지급 스위치이고 이미 발급된 쿠폰은 그대로 쓸 수 있다.
 - **인증 응답**: `VerificationOut.earned_coupon_id` — 앱이 스탬프 연출 뒤 쿠폰 획득 연출에 쓴다.
-- **앱 API** (`/me/coupons`): `GET`(목록, `partner_ids` null=모든 업체) · `GET /{id}` · `POST /{id}/use`(조건부 UPDATE로 중복 사용 방지).
+- **앱 API** (`/me/coupons`): `GET`(목록, 만료 제외, `partner_ids` null=모든 업체) · `GET /{id}` · `POST /{id}/use`(조건부 UPDATE로 중복 사용 방지, 만료면 410).
 - **안 한 것**: 회수(revoke)·per-issuance 만료·복권/룰렛 연출·빙고 쿠폰.
 
 ## 목표 서버 구조

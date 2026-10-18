@@ -35,12 +35,15 @@ def _load_coupon_or_404(db: Session, coupon_id: uuid.UUID) -> Coupon:
 
 
 def _effective_status(
-    used_at: datetime | None, valid_until: datetime | None, now: datetime
+    used_at: datetime | None,
+    valid_until: datetime | None,
+    now: datetime,
+    expired_at: datetime | None = None,
 ) -> str:
-    """발급 쿠폰의 유효 상태. used_at·valid_until에서 계산한다(저장하지 않음)."""
+    """발급 쿠폰의 유효 상태. 사용이 만료보다 우선(이미 썼으니)."""
     if used_at is not None:
         return "used"
-    if valid_until is not None and valid_until < now:
+    if expired_at is not None or (valid_until is not None and valid_until < now):
         return "expired"
     return "available"
 
@@ -227,7 +230,9 @@ def list_issued(
             "issued_at": uc.issued_at,
             "used_at": uc.used_at,
             "used_partner_name": partner_name.get(uc.used_partner_id),
-            "status": _effective_status(uc.used_at, coupon.valid_until, now),
+            "status": _effective_status(
+                uc.used_at, coupon.valid_until, now, uc.expired_at
+            ),
         }
         for uc in rows
     ]
