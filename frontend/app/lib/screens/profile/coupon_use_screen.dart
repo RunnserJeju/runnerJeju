@@ -77,7 +77,7 @@ class _CouponUseScreenState extends State<CouponUseScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('${partner.name}에서 사용할까요?'),
-        content: const Text('사용 처리하면 되돌릴 수 없어요.\n업체 직원이 보는 앞에서 눌러 주세요.'),
+        content: const Text('사용 처리하면 되돌릴 수 없어요.\n업체 직원이 누르지 않으면 적용이 어렵습니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),

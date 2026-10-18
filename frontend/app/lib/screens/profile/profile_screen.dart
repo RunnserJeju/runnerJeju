@@ -39,9 +39,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _future = _ProfileData.load();
   }
 
+  /// 기다리지 않고 바로 끝낸다 — 로딩은 FutureBuilder의 전체 스피너가 보여주므로,
+  /// 당겨서 새로고침 원까지 남겨 두면 스피너가 둘이 된다.
   Future<void> _refresh() async {
     setState(_load);
-    await _future.catchError((_) => _ProfileData.empty);
   }
 
   Future<void> _logout() async {
@@ -140,12 +141,6 @@ class _ProfileData {
   final List<RunRecord> recentRuns;
   final List<RunningCourse> favorites;
   final List<RunningProgram> programs;
-
-  static const empty = _ProfileData(
-    recentRuns: [],
-    favorites: [],
-    programs: [],
-  );
 
   static Future<_ProfileData> load() async {
     final results = await Future.wait([
