@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app import config_guard, schema_guard
 from app.admin import admin_auth_router, admin_router
-from app.db import SessionLocal, engine
+from app.db import engine
 from app.routers import (
     auth,
     coupons,
@@ -37,14 +37,6 @@ async def lifespan(app: FastAPI):
 
     # 개발과 운영이 같은 이미지라 로그로 구분할 수단이 없으면 사고가 늦게 발견된다.
     print(f"▶ DB {config_guard.describe_database(engine)}", flush=True)
-
-    # 러닝위크 참가 정보는 1년 보관 후 폐기한다. 별도 스케줄러가 없어 기동 때 정리한다
-    # (운영 웹 참가자 조회 때도 한 번 더). 실패해도 서비스는 띄운다.
-    try:
-        with SessionLocal() as db:
-            running_weeks.purge_expired_participations(db)
-    except Exception as exc:  # noqa: BLE001 — 정리 실패가 기동을 막으면 안 된다.
-        print(f"▶ 러닝위크 참가 정보 정리 실패: {exc}", flush=True)
     yield
 
 

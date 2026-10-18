@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app import storage
 from app.db import get_db
 from app.models import RunningWeek, RunningWeekParticipation, StampDefinition
-from app.routers.running_weeks import purge_expired_participations
 from app.schemas import (
     AdminParticipationOut,
     AdminRunningWeekOut,
@@ -129,9 +128,8 @@ def set_bingo(week_id: uuid.UUID, payload: BingoUpdate, db: Session = Depends(ge
     response_model=list[AdminParticipationOut],
 )
 def list_participations(week_id: uuid.UUID, db: Session = Depends(get_db)):
-    """참가자 목록(신청순). 보관 기간이 지난 행은 먼저 지운다."""
+    """참가자 목록(신청순)."""
     _load_or_404(db, week_id)
-    purge_expired_participations(db)
     return list(
         db.execute(
             select(RunningWeekParticipation)

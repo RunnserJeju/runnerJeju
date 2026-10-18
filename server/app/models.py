@@ -508,10 +508,9 @@ class RunningWeek(Base):
 class RunningWeekParticipation(Base):
     """러닝위크 참가 신청. 사용자·회차당 하나이고, 수정은 아직 없다.
 
-    이름·연락처는 개인정보라 동의를 받고, 신청일로부터 1년 뒤 폐기한다(expires_at).
-    폐기는 서버 기동 때와 운영 웹 참가자 조회 때 지난 행을 지우는 것으로 처리한다
-    (running_weeks.purge_expired_participations). 폼 항목이 회차마다 바뀔 수 있어
-    어떤 폼으로 받았는지 form_version을 남긴다.
+    이름·연락처는 개인정보라 동의를 받고, 신청일로부터 1년 뒤 폐기한다. 폐기는 아직
+    자동이 아니다 — expires_at이 지난 행을 운영자가 DB에서 직접 지운다. 폼 항목이
+    회차마다 바뀔 수 있어 어떤 폼으로 받았는지 form_version을 남긴다.
     """
 
     __tablename__ = "running_week_participations"

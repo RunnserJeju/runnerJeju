@@ -518,7 +518,7 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>참가자</h3>
-      <p className="muted">개인정보라 신청일로부터 1년이 지나면 서버가 지워요.</p>
+      <p className="muted">개인정보라 신청일로부터 1년이 지나면 폐기해야 해요(폐기 예정일 열 참고).</p>
       {error && <div className="error">{error}</div>}
       {rows == null && !error && <p className="muted">불러오는 중…</p>}
       {rows && rows.length === 0 && <p className="muted">아직 참가자가 없어요.</p>}
@@ -533,6 +533,7 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
                 <th>성별</th>
                 <th>나이</th>
                 <th>거주지</th>
+                <th>폐기 예정</th>
               </tr>
             </thead>
             <tbody>
@@ -544,6 +545,7 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
                   <td>{GENDER_LABEL[r.gender]}</td>
                   <td>{r.age}</td>
                   <td>{RESIDENCE_LABEL[r.residence]}</td>
+                  <td className="muted">{formatDateTime(r.expires_at)}</td>
                 </tr>
               ))}
             </tbody>

@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,7 @@ from app.schemas import (
 
 router = APIRouter(tags=["running-weeks"])
 
-# 참가 정보 보관 기간. 동의 문구(앱 참가 폼)와 같아야 한다.
+# 참가 정보 보관 기간. 동의 문구(앱 참가 폼)와 같아야 한다. 지난 행은 운영자가 직접 지운다.
 PARTICIPATION_RETENTION = timedelta(days=365)
 
 
@@ -99,17 +99,6 @@ def bingo_for(db: Session, week: RunningWeek, user_id: str) -> dict | None:
         "cells": cells,
         "completed_lines": completed_lines([cell["acquired"] for cell in cells]),
     }
-
-
-def purge_expired_participations(db: Session) -> int:
-    """보관 기간(1년)이 지난 참가 정보를 지운다. 지운 행 수."""
-    result = db.execute(
-        delete(RunningWeekParticipation).where(
-            RunningWeekParticipation.expires_at < datetime.now(timezone.utc)
-        )
-    )
-    db.commit()
-    return result.rowcount or 0
 
 
 def _participated(db: Session, week_id: uuid.UUID, user_id: str) -> bool:

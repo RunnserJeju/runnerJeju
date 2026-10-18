@@ -213,7 +213,7 @@ class _BingoView extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          '코스 칸을 누르면 그 코스 안내로 가요. 러닝위크 전에 받은 스탬프도 채워져요.',
+          '코스 칸을 누르면 그 코스 안내로 가요.',
           style: TextStyle(
             fontSize: 12,
             height: 1.5,
@@ -253,7 +253,8 @@ class _BingoCellTile extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 stamp?.name ?? '',
-                maxLines: 2,
+                // 한 줄로 고정한다. 두 줄이 되면 위 도안이 그만큼 작아져 칸마다 크기가 달라진다.
+                maxLines: 1,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
