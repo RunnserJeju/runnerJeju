@@ -15,6 +15,7 @@ import {
 } from '../api'
 import { STAMP_SPEC, validateStampImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
+import SearchSelect from '../components/SearchSelect'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -66,7 +67,7 @@ export default function StampListPage({ onUnauthorized }: Props) {
         <h2>스탬프</h2>
         <button onClick={() => setEditing('new')}>+ 스탬프 추가</button>
       </div>
-      <p className="muted" style={{ marginTop: -12 }}>
+      <p className="muted page-desc">
         코스를 등록하면 그 코스의 완주 스탬프가 자동으로 하나 생겨요. 이름·도안은 여기서 고쳐요.
       </p>
       {error && <div className="error">{error}</div>}
@@ -241,18 +242,13 @@ function StampModal({
         {values.condition_type === 'course_complete' && (
           <div className="field">
             <label htmlFor="stamp-course">코스</label>
-            <select
+            <SearchSelect
               id="stamp-course"
               value={values.condition_params.course_id ?? ''}
-              onChange={(e) => set({ condition_params: { course_id: e.target.value } })}
-            >
-              <option value="">코스 선택</option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.name}
-                </option>
-              ))}
-            </select>
+              options={courses.map((course) => ({ id: course.id, label: course.name }))}
+              onSelect={(id) => set({ condition_params: { course_id: id } })}
+              emptyText="등록된 코스가 없어요"
+            />
           </div>
         )}
         <div className="field">

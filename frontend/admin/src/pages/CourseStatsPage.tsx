@@ -90,7 +90,7 @@ export default function CourseStatsPage({ onUnauthorized }: Props) {
           CSV 다운로드
         </button>
       </div>
-      <p className="muted">
+      <p className="muted page-desc">
         누적 기준이에요. 열 제목을 누르면 그 기준으로 정렬돼요. 미완주 = 코스 러닝 중 검증 미통과.
       </p>
       {error && <div className="error">{error}</div>}

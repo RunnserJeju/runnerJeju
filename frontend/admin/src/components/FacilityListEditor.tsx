@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ApiError, geocode, type GeocodeResult } from '../api'
 
@@ -23,6 +23,12 @@ interface Props {
 /** 주차장/화장실 목록 편집기. 주소를 적고 "좌표 확인"으로 카카오 지오코딩(/admin/geo/geocode)을
  * 거쳐 좌표를 채운다 — 서버가 좌표 없는 시설을 422로 거르기 때문에 필수 절차다. */
 export default function FacilityListEditor({ label, items, onChange }: Props) {
+  // 행마다 고정 key. 인덱스를 key로 쓰면 앞 행을 지울 때 주소 후보 같은 행 상태가 다른 행으로 옮겨 간다.
+  const nextKey = useRef(0)
+  const keys = useRef<number[]>([])
+  while (keys.current.length < items.length) keys.current.push(nextKey.current++)
+  keys.current.length = items.length
+
   return (
     <div className="field">
       <label>
@@ -31,10 +37,13 @@ export default function FacilityListEditor({ label, items, onChange }: Props) {
       </label>
       {items.map((item, index) => (
         <FacilityRow
-          key={index}
+          key={keys.current[index]}
           item={item}
           onChange={(next) => onChange(items.map((f, i) => (i === index ? next : f)))}
-          onRemove={() => onChange(items.filter((_, i) => i !== index))}
+          onRemove={() => {
+            keys.current.splice(index, 1)
+            onChange(items.filter((_, i) => i !== index))
+          }}
         />
       ))}
       <button
@@ -60,6 +69,9 @@ function FacilityRow({
   const [candidates, setCandidates] = useState<GeocodeResult[] | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [looking, setLooking] = useState(false)
+  // 좌표 확인 응답을 기다리는 동안 폼의 다른 칸이 바뀌어도, 응답은 최신 값 위에 반영한다.
+  const latest = useRef({ item, onChange })
+  latest.current = { item, onChange }
 
   const lookup = async () => {
     const address = item.address.trim()
@@ -87,8 +99,8 @@ function FacilityRow({
   }
 
   const pick = (result: GeocodeResult) => {
-    onChange({
-      ...item,
+    latest.current.onChange({
+      ...latest.current.item,
       address: result.road_address ?? result.address,
       lat: result.lat,
       lng: result.lng,

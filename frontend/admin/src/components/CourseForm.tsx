@@ -88,8 +88,8 @@ export function validate(
 
   // 소수 첫째 자리까지(서버 Numeric(5,1)). '8.3'은 되고 '8.35'는 안 된다.
   const distanceKm = Number(values.distanceKm)
-  if (!/^\d+(\.\d)?$/.test(values.distanceKm.trim()) || distanceKm < 0.1) {
-    return { ok: false, message: '거리(km)는 0.1 이상, 소수 첫째 자리까지 입력해 주세요. 예: 8.3' }
+  if (!/^\d+(\.\d)?$/.test(values.distanceKm.trim()) || distanceKm < 0.1 || distanceKm > 9999.9) {
+    return { ok: false, message: '거리(km)는 0.1~9999.9, 소수 첫째 자리까지 입력해 주세요. 예: 8.3' }
   }
 
   const difficulty = Number(values.difficulty)

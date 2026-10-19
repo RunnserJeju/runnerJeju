@@ -48,14 +48,22 @@ export default function UsersPage({ onUnauthorized }: Props) {
   )
 
   useEffect(() => {
+    // 검색·페이지를 연달아 바꾸면 늦게 온 옛 응답이 새 목록을 덮을 수 있어 버린다.
+    let stale = false
     setUsers(null)
     listUsers(keyword, PAGE_SIZE, page * PAGE_SIZE)
       .then((result) => {
+        if (stale) return
         setUsers(result.items)
         setTotal(result.total)
         setError(null)
       })
-      .catch(handleError)
+      .catch((err) => {
+        if (!stale) handleError(err)
+      })
+    return () => {
+      stale = true
+    }
   }, [keyword, page, handleError])
 
   const openDetail = (id: string) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ApiError, geocode, type GeocodeResult, type Partner, type PartnerPayload } from '../api'
 
@@ -140,12 +140,15 @@ export default function PartnerForm({ values, onChange }: Props) {
   const [candidates, setCandidates] = useState<GeocodeResult[] | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [looking, setLooking] = useState(false)
+  // 좌표 확인 응답을 기다리는 동안 다른 칸을 고쳐도, 응답은 최신 값 위에 반영한다.
+  const latest = useRef({ values, onChange })
+  latest.current = { values, onChange }
 
   // 주차장/화장실(FacilityListEditor)과 같은 카카오 지오코딩. 주소가 선택이라 좌표는
   // 직접 입력해도 된다 — 확인은 좌표를 채워 주는 도우미일 뿐 필수 절차가 아니다.
   const pick = (result: GeocodeResult) => {
-    onChange({
-      ...values,
+    latest.current.onChange({
+      ...latest.current.values,
       address: result.road_address ?? result.address,
       lat: String(result.lat),
       lng: String(result.lng),
@@ -182,6 +185,7 @@ export default function PartnerForm({ values, onChange }: Props) {
           <label htmlFor="partner-name">이름</label>
           <input
             id="partner-name"
+            maxLength={200}
             value={values.name}
             onChange={(e) => set('name', e.target.value)}
           />
@@ -214,6 +218,7 @@ export default function PartnerForm({ values, onChange }: Props) {
           <div className="field" style={{ flex: 2 }}>
             <input
               id="partner-address"
+              maxLength={300}
               value={values.address}
               onChange={(e) => set('address', e.target.value)}
             />
@@ -272,8 +277,10 @@ export default function PartnerForm({ values, onChange }: Props) {
         <label htmlFor="partner-benefit">
           혜택 <span className="hint">선택 — 예: 러너 인증 시 아메리카노 10% 할인</span>
         </label>
-        <input
+        <textarea
           id="partner-benefit"
+          rows={6}
+          maxLength={500}
           value={values.benefit}
           onChange={(e) => set('benefit', e.target.value)}
         />
@@ -304,6 +311,7 @@ export default function PartnerForm({ values, onChange }: Props) {
         </label>
         <input
           id="partner-instagram"
+          maxLength={200}
           value={values.instagram}
           onChange={(e) => set('instagram', e.target.value)}
         />

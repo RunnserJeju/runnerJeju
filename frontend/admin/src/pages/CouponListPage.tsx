@@ -76,9 +76,8 @@ export default function CouponListPage({ onUnauthorized }: Props) {
       <div className="page-head">
         <h2>쿠폰</h2>
       </div>
-      <p className="muted" style={{ marginTop: -12 }}>
-        쿠폰 종류는 지급 조건과 함께 코드로 정해져 있어요. 여기서는 이름·혜택·사용 가능 업체를
-        고치고, 운영자 지급 쿠폰은 회원을 골라 직접 줘요.
+      <p className="muted page-desc">
+        등록된 쿠폰의 혜택 내용, 상태, 유효기간 등을 편집합니다. 
       </p>
       {error && <div className="error">{error}</div>}
       {coupons == null && !error && <p className="muted">불러오는 중…</p>}
@@ -105,7 +104,7 @@ export default function CouponListPage({ onUnauthorized }: Props) {
                 <td>{TRIGGER_LABEL[coupon.trigger_type] ?? coupon.trigger_type}</td>
                 <td>
                   <span className={`badge ${coupon.is_active ? 'live' : 'expired'}`}>
-                    {coupon.is_active ? '지급 중' : '꺼짐'}
+                    {coupon.is_active ? '활성화' : '비활성화'}
                   </span>
                 </td>
                 <td className="muted">{partnerLabel(coupon)}</td>
@@ -313,7 +312,7 @@ function CouponEditForm({
               checked={values.isActive}
               onChange={(e) => set({ isActive: e.target.checked })}
             />{' '}
-            지급 중
+            활성화
             <span className="hint">
               러닝위크 기간에만 켜 주세요. 켜져 있을 때만 자동 지급돼요. 이미 받은 쿠폰은 꺼도 그대로 쓸 수 있어요
             </span>

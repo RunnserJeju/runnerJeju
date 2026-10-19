@@ -100,10 +100,21 @@ export default function StatsPage({ onUnauthorized }: Props) {
   const rangeValid = Boolean(from && to && from <= to)
   useEffect(() => {
     if (!rangeValid) return
+    // 기간을 연달아 바꾸면 늦게 온 옛 응답이 새 기간 그래프를 덮을 수 있어 버린다.
+    let stale = false
     setDaily(null)
     getMetric(dailyMetric, { from, to, group_by: 'day' })
-      .then(setDaily)
-      .catch(handleError)
+      .then((points) => {
+        if (stale) return
+        setDaily(points)
+        setError(null)
+      })
+      .catch((err) => {
+        if (!stale) handleError(err)
+      })
+    return () => {
+      stale = true
+    }
   }, [from, to, rangeValid, dailyMetric, handleError])
 
   const selectTab = (next: (typeof DAILY_TABS)[number]) => {
@@ -232,7 +243,9 @@ export default function StatsPage({ onUnauthorized }: Props) {
           {from} ~ {to} {dailyLabel} 합계 <strong>{periodTotal.toLocaleString()}</strong>
         </p>
         {!rangeValid ? (
-          <p className="error">시작일이 종료일보다 늦어요.</p>
+          <p className="error">
+            {!from || !to ? '시작일과 종료일을 모두 골라 주세요.' : '시작일이 종료일보다 늦어요.'}
+          </p>
         ) : daily == null ? (
           <p className="muted">불러오는 중…</p>
         ) : (

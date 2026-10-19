@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 
-import { ApiError, getMe, logout, type AdminIdentity } from './api'
+import { ApiError, getMe, logout, setUnauthorizedHandler, type AdminIdentity } from './api'
 import AuthPage from './pages/AuthPage'
 import CouponListPage from './pages/CouponListPage'
 import CourseListPage from './pages/CourseListPage'
@@ -85,6 +85,10 @@ export default function App() {
     )
   }
   useEffect(checkSession, [])
+  useEffect(() => {
+    setUnauthorizedHandler(() => setAuth({ status: 'anon' }))
+    return () => setUnauthorizedHandler(null)
+  }, [])
 
   if (auth.status === 'checking') {
     return <div className="auth-page"><p className="muted">확인 중…</p></div>

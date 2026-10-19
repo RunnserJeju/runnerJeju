@@ -123,6 +123,14 @@ export class ApiError extends Error {
   }
 }
 
+/** 세션이 만료돼 401이 오면 부를 콜백(App이 로그인 화면으로 보낸다). 모달·하위 컴포넌트처럼
+ * onUnauthorized를 받지 않는 곳에서도 로그인 화면으로 돌아가게 하려고 여기서 한 번에 처리한다. */
+let unauthorizedHandler: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // credentials: 세션 쿠키(HttpOnly)를 요청에 실어 보낸다. 인증 정보는 쿠키가
   // 전부이고 JS는 토큰을 만지지 않는다 — 옛 API 키 헤더 방식을 대체했다.
@@ -133,9 +141,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
       const body = await response.json()
       if (typeof body.detail === 'string') detail = body.detail
+      // 입력 검증 실패(422)는 detail이 배열이다. 첫 항목의 칸 이름과 사유를 보여 준다.
+      else if (Array.isArray(body.detail) && body.detail[0]?.msg) {
+        const first = body.detail[0]
+        const field = Array.isArray(first.loc) ? first.loc[first.loc.length - 1] : null
+        detail = field ? `${field}: ${first.msg}` : first.msg
+      }
     } catch {
       // JSON이 아니면 기본 메시지를 쓴다.
     }
+    // 로그인·세션확인 자체의 401은 "로그인 안 됨"이라는 정상 응답이다.
+    if (response.status === 401 && !path.startsWith('/admin/auth/')) unauthorizedHandler?.()
     throw new ApiError(response.status, detail)
   }
 
