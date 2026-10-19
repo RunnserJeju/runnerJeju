@@ -41,7 +41,7 @@ body {
 }
 
 main {
-  max-width: 880px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }
@@ -141,6 +141,15 @@ textarea {
   border-radius: 8px;
   background: #fff;
   width: 100%;
+}
+
+/* 위 width: 100%가 체크박스에도 걸리면 글자와 떨어져 줄 가운데로 밀린다. */
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+  padding: 0;
+  margin: 0 4px 0 0;
+  vertical-align: middle;
 }
 
 textarea {
@@ -290,9 +299,11 @@ tbody tr:hover {
   background: #fafbfc;
 }
 
+/* 옆 글자가 길어져 줄이 늘어도 썸네일은 줄어들지 않는다(flex 안에서 크기 고정). */
 .thumb {
   width: 48px;
   height: 48px;
+  flex-shrink: 0;
   object-fit: cover;
   border-radius: 8px;
   background: var(--paper);
@@ -324,6 +335,7 @@ tbody tr:hover {
 }
 
 .thumb.banner {
+  flex-shrink: 1;
   width: 100%;
   max-width: 480px;
   height: auto;
@@ -408,11 +420,19 @@ tbody tr:hover {
   margin-top: 20px;
 }
 
+/* 오른쪽 버튼 유무와 상관없이 같은 높이 — 메뉴를 옮겨도 제목·설명 위치가 튀지 않는다. */
 .page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
   margin: 8px 0 20px;
+}
+
+/* 제목 아래 한 줄 설명. */
+.page-desc {
+  margin-top: -12px;
 }
 
 .page-head h2 {
@@ -464,7 +484,7 @@ tbody tr:hover {
   border: 1px solid var(--line);
   border-radius: 14px;
   width: 100%;
-  max-width: 720px;
+  max-width: 960px;
   max-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
@@ -780,4 +800,67 @@ button.link {
   justify-content: center;
   gap: 12px;
   margin-top: 16px;
+}
+
+/* 검색 가능한 고르기(PartnerPicker). 입력칸 아래로 후보 목록이 펼쳐진다. */
+.combobox {
+  position: relative;
+}
+
+.combobox-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.combobox-list li {
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.combobox-list li.active {
+  background: var(--paper);
+}
+
+.combobox-list li.muted {
+  cursor: default;
+}
+
+/* 숫자·짧은 값 열. 폭이 모자라도 머리글과 값을 한 줄로 둔다. */
+th.nowrap,
+td.nowrap {
+  white-space: nowrap;
+}
+
+.combobox-list li.selected {
+  font-weight: 700;
+}
+
+/* 고른 항목 한 줄(PartnerPicker): 이름과 ↑↓·제외 버튼을 세로 가운데로 맞춘다. */
+.picked-row {
+  padding: 8px 12px;
+}
+
+.picked-row .row {
+  align-items: center;
+}
+
+.picked-row .row > button {
+  margin-bottom: 0;
+}
+
+.picked-name {
+  flex: 1;
+  min-width: 0;
 }

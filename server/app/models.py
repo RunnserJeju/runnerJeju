@@ -203,6 +203,9 @@ class Partner(Base):
     instagram: Mapped[str | None] = mapped_column(String(200), default=None)
     # 예) "러너 인증 시 아메리카노 10% 할인". 쿠폰 혜택처럼 자유 텍스트다.
     benefit: Mapped[str | None] = mapped_column(String(500), default=None)
+    # 쿠폰 사용 번호(숫자 4자리, 업체마다 다름). 직원이 유저 폰에 입력하면 이 업체에서
+    # 쓴 것으로 처리된다. 비어 있으면 이 업체에서는 쿠폰을 쓸 수 없다. 앱에 내려가지 않는다.
+    coupon_pin: Mapped[str | None] = mapped_column(String(4), unique=True, default=None)
 
     # 아직 정해지지 않은 부가 정보(영업시간·업종·이미지 등)를 담는 자리. 형태가
     # 굳어지면 컬럼으로 승격한다(user_log.detail과 같은 전략).
@@ -701,8 +704,9 @@ class Coupon(Base):
 
     # 'manual' | 'course_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
     trigger_type: Mapped[str] = mapped_column(String(30), default="manual")
-    # 끄면 자동 지급이 멈춘다. 이미 발급된 쿠폰은 그대로 쓸 수 있다.
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 켜져 있을 때만 자동 지급한다. 기본 꺼짐 — 러닝위크 기간에 운영자가 켠다.
+    # 이미 발급된 쿠폰은 꺼도 그대로 쓸 수 있다.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

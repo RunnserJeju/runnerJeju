@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ApiError, geocode, type GeocodeResult, type Partner, type PartnerPayload } from '../api'
 
@@ -11,6 +11,7 @@ export interface PartnerFormValues {
   comment: string
   instagram: string
   benefit: string
+  couponPin: string
   /** detail(JSONB) 원문. 형태가 정해지지 않아 JSON 객체를 그대로 편집한다. */
   detail: string
 }
@@ -24,6 +25,7 @@ export function emptyPartnerValues(): PartnerFormValues {
     comment: '',
     instagram: '',
     benefit: '',
+    couponPin: '',
     detail: '{}',
   }
 }
@@ -37,6 +39,7 @@ export function valuesFromPartner(partner: Partner): PartnerFormValues {
     comment: partner.comment ?? '',
     instagram: partner.instagram ?? '',
     benefit: partner.benefit ?? '',
+    couponPin: partner.coupon_pin ?? '',
     detail: JSON.stringify(partner.detail ?? {}, null, 2),
   }
 }
@@ -55,6 +58,11 @@ export function validatePartner(
   }
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     return { ok: false, message: '좌표 범위가 올바르지 않아요. 위도와 경도가 바뀌지 않았는지 확인해 주세요.' }
+  }
+
+  const couponPin = values.couponPin.trim()
+  if (couponPin && !/^\d{4}$/.test(couponPin)) {
+    return { ok: false, message: '쿠폰 번호는 숫자 4자리여야 해요.' }
   }
 
   let detail: Record<string, unknown>
@@ -77,6 +85,7 @@ export function validatePartner(
       comment: optional(values.comment),
       instagram: optional(values.instagram),
       benefit: optional(values.benefit),
+      coupon_pin: couponPin || null,
       detail,
     },
   }
@@ -131,12 +140,15 @@ export default function PartnerForm({ values, onChange }: Props) {
   const [candidates, setCandidates] = useState<GeocodeResult[] | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [looking, setLooking] = useState(false)
+  // 좌표 확인 응답을 기다리는 동안 다른 칸을 고쳐도, 응답은 최신 값 위에 반영한다.
+  const latest = useRef({ values, onChange })
+  latest.current = { values, onChange }
 
   // 주차장/화장실(FacilityListEditor)과 같은 카카오 지오코딩. 주소가 선택이라 좌표는
   // 직접 입력해도 된다 — 확인은 좌표를 채워 주는 도우미일 뿐 필수 절차가 아니다.
   const pick = (result: GeocodeResult) => {
-    onChange({
-      ...values,
+    latest.current.onChange({
+      ...latest.current.values,
       address: result.road_address ?? result.address,
       lat: String(result.lat),
       lng: String(result.lng),
@@ -173,6 +185,7 @@ export default function PartnerForm({ values, onChange }: Props) {
           <label htmlFor="partner-name">이름</label>
           <input
             id="partner-name"
+            maxLength={200}
             value={values.name}
             onChange={(e) => set('name', e.target.value)}
           />
@@ -205,6 +218,7 @@ export default function PartnerForm({ values, onChange }: Props) {
           <div className="field" style={{ flex: 2 }}>
             <input
               id="partner-address"
+              maxLength={300}
               value={values.address}
               onChange={(e) => set('address', e.target.value)}
             />
@@ -263,10 +277,31 @@ export default function PartnerForm({ values, onChange }: Props) {
         <label htmlFor="partner-benefit">
           혜택 <span className="hint">선택 — 예: 러너 인증 시 아메리카노 10% 할인</span>
         </label>
-        <input
+        <textarea
           id="partner-benefit"
+          rows={6}
+          maxLength={500}
           value={values.benefit}
           onChange={(e) => set('benefit', e.target.value)}
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor="partner-coupon-pin">
+          쿠폰 번호{' '}
+          <span className="hint">
+            숫자 4자리, 업체마다 달라야 해요 — 직원이 손님 폰에 입력하면 쿠폰이 사용돼요. 비우면 이
+            업체에서 쿠폰을 못 써요
+          </span>
+        </label>
+        <input
+          id="partner-coupon-pin"
+          inputMode="numeric"
+          maxLength={4}
+          placeholder="0000"
+          value={values.couponPin}
+          onChange={(e) => set('couponPin', e.target.value.replace(/\D/g, ''))}
+          style={{ width: 120 }}
         />
       </div>
 
@@ -276,6 +311,7 @@ export default function PartnerForm({ values, onChange }: Props) {
         </label>
         <input
           id="partner-instagram"
+          maxLength={200}
           value={values.instagram}
           onChange={(e) => set('instagram', e.target.value)}
         />

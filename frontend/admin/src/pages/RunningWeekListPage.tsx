@@ -17,6 +17,7 @@ import {
   type StampDefinition,
 } from '../api'
 import Modal from '../components/Modal'
+import SearchSelect from '../components/SearchSelect'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -91,7 +92,7 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
         <h2>러닝위크</h2>
         <button onClick={() => setEditing('new')}>+ 회차 추가</button>
       </div>
-      <p className="muted" style={{ marginTop: -12 }}>
+      <p className="muted page-desc">
         공개 기간 안이면 앱 커뮤니티 상단에 배너가 뜨고, 누르면 러닝위크 화면이 열려요.
       </p>
       {error && <div className="error">{error}</div>}
@@ -391,6 +392,13 @@ function BingoSection({
   const [saving, setSaving] = useState(false)
 
   const active = stamps.filter((s) => s.is_active)
+  const stampOptions = [
+    { id: '', label: '비우기' },
+    ...stamps.map((stamp) => ({
+      id: stamp.id,
+      label: stamp.is_active ? stamp.name : `${stamp.name} (숨김)`,
+    })),
+  ]
 
   const randomFill = () => {
     setError(null)
@@ -436,21 +444,17 @@ function BingoSection({
         }}
       >
         {cells.map((id, index) => (
-          <select
+          <SearchSelect
             key={index}
             value={id}
             title={`${index + 1}번 칸`}
-            onChange={(e) =>
-              setCells((prev) => prev.map((cell, i) => (i === index ? e.target.value : cell)))
+            placeholder={`${index + 1}번 칸`}
+            options={stampOptions}
+            onSelect={(picked) =>
+              setCells((prev) => prev.map((cell, i) => (i === index ? picked : cell)))
             }
-          >
-            <option value="">{index + 1}번 칸</option>
-            {stamps.map((stamp) => (
-              <option key={stamp.id} value={stamp.id}>
-                {stamp.is_active ? stamp.name : `${stamp.name} (숨김)`}
-              </option>
-            ))}
-          </select>
+            emptyText="스탬프가 없어요"
+          />
         ))}
       </div>
       {error && <div className="error">{error}</div>}

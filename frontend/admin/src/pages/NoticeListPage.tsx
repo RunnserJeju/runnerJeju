@@ -65,8 +65,8 @@ export default function NoticeListPage({ onUnauthorized }: Props) {
         <h2>공지사항</h2>
         <button onClick={() => setCreating(true)}>+ 공지 추가</button>
       </div>
-      <p className="muted" style={{ marginTop: -12 }}>
-        이미지를 올린 공지는 앱 홈 상단 배너로도 실려요.
+      <p className="muted page-desc">
+        이미지가 없는 공지는 앱 홈에 표시되지 않습니다. 
       </p>
       {error && <div className="error">{error}</div>}
       {notices == null && !error && <p className="muted">불러오는 중…</p>}

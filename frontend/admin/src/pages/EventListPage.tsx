@@ -84,7 +84,7 @@ export default function EventListPage({ onUnauthorized }: Props) {
         <h2>이벤트</h2>
         <button onClick={() => setEditing('new')}>+ 이벤트 추가</button>
       </div>
-      <p className="muted" style={{ marginTop: -12 }}>
+      <p className="muted page-desc">
         앱 커뮤니티 탭의 이벤트 목록에 보여요. 본문에 붙여 넣은 링크는 앱에서 눌러 열 수 있어요.
       </p>
       {error && <div className="error">{error}</div>}

@@ -166,6 +166,8 @@ class PartnerPayload(BaseModel):
     comment: str | None = None
     instagram: str | None = Field(default=None, max_length=200)
     benefit: str | None = Field(default=None, max_length=500)
+    # 쿠폰 사용 번호. 숫자 4자리, 업체끼리 겹치면 409. 비우면 이 업체에서 쿠폰을 못 쓴다.
+    coupon_pin: str | None = Field(default=None, pattern=r"^\d{4}$")
     # 형태 미정인 부가 정보. 서버는 내용을 해석하지 않는다.
     detail: dict = Field(default_factory=dict)
 
@@ -207,6 +209,8 @@ class PartnerOut(PartnerSummary):
     course_count: int
     # 이 업체에서 사용된 쿠폰 수(업체 이용률).
     coupon_used_count: int = 0
+    # 쿠폰 사용 번호. 운영 웹에만 실린다(PartnerSummary에는 없음).
+    coupon_pin: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -755,7 +759,7 @@ class CouponUpdate(BaseModel):
     benefit: str = Field(min_length=1, max_length=500)
     description: str | None = None
     valid_until: datetime | None = None
-    is_active: bool = True
+    is_active: bool = False
     # 쓸 수 있는 업체. 비우면 모든 업체.
     partner_ids: list[uuid.UUID] = Field(default_factory=list)
 
@@ -820,9 +824,9 @@ class MyCouponOut(BaseModel):
 
 
 class CouponUseRequest(BaseModel):
-    """쿠폰 사용. 앱이 업체 이름 검색으로 고른 업체를 보낸다."""
+    """쿠폰 사용. 업체 직원이 입력한 업체 고유 번호(Partner.coupon_pin)를 보낸다."""
 
-    partner_id: uuid.UUID
+    pin: str = Field(pattern=r"^\d{4}$")
 
 
 class UserLogIn(BaseModel):

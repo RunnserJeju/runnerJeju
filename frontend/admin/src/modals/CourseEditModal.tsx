@@ -44,13 +44,18 @@ export default function CourseEditModal({ courseId, initialNotice, onClose, onCh
       )
   }, [courseId])
 
-  // 저장 성공 시 서버 응답으로 화면 상태를 갈아끼운다 — 다음 저장의 기준값이 된다.
-  const applySaved = (saved: Course, message: string) => {
+  // 경로·썸네일 저장. 아직 저장 안 한 메타데이터 입력은 건드리지 않는다.
+  const applyMedia = (saved: Course, message: string) => {
     setCourse(saved)
-    setValues(valuesFromCourse(saved))
     setNotice(message)
     onChanged()
     bodyRef.current?.scrollTo({ top: 0 })
+  }
+
+  // 메타데이터 저장 성공 시 서버 응답으로 입력값도 갈아끼운다 — 다음 저장의 기준값이 된다.
+  const applySaved = (saved: Course, message: string) => {
+    applyMedia(saved, message)
+    setValues(valuesFromCourse(saved))
   }
 
   return (
@@ -74,8 +79,8 @@ export default function CourseEditModal({ courseId, initialNotice, onClose, onCh
             }}
             onSaved={applySaved}
           />
-          <GpxSection courseId={courseId} onSaved={applySaved} />
-          <ThumbnailSection course={course} onSaved={applySaved} />
+          <GpxSection courseId={courseId} onSaved={applyMedia} />
+          <ThumbnailSection course={course} onSaved={applyMedia} />
         </>
       )}
     </Modal>

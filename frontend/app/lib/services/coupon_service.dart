@@ -32,11 +32,11 @@ class CouponService {
     }
   }
 
-  /// 고른 업체에서 사용 처리. 서버가 거절 이유(이미 사용·만료·업체 제한)를 문장으로
-  /// 주면 그대로 보여준다.
-  Future<Coupon> useCoupon(String couponId, {required String partnerId}) async {
+  /// 업체 쿠폰 번호로 사용 처리. 서버가 거절 이유(번호 불일치·이미 사용·만료·업체
+  /// 제한)를 문장으로 주면 그대로 보여준다.
+  Future<Coupon> useCoupon(String couponId, {required String pin}) async {
     try {
-      return await _couponApi.useCoupon(couponId, partnerId: partnerId);
+      return await _couponApi.useCoupon(couponId, pin: pin);
     } on DioException catch (e) {
       if (e.response?.statusCode == 410) throw CouponExpiredException(e);
       throw AppException(_serverMessage(e) ?? '쿠폰 사용에 실패했어요.', e);

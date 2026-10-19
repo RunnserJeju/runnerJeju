@@ -19,11 +19,11 @@ class CouponApi {
     return Coupon.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// 고른 업체에서 사용(이용완료) 처리. 사용된 쿠폰을 돌려준다.
-  Future<Coupon> useCoupon(String couponId, {required String partnerId}) async {
+  /// 업체 쿠폰 번호로 사용(이용완료) 처리. 사용된 쿠폰을 돌려준다.
+  Future<Coupon> useCoupon(String couponId, {required String pin}) async {
     final response = await _client.dio.post(
       '/me/coupons/$couponId/use',
-      data: {'partner_id': partnerId},
+      data: {'pin': pin},
     );
     return Coupon.fromJson(response.data as Map<String, dynamic>);
   }

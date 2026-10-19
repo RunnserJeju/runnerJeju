@@ -12,6 +12,7 @@ import {
   type HomeCurationItem,
   type Partner,
 } from '../api'
+import SearchSelect from '../components/SearchSelect'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -54,7 +55,7 @@ export default function HomeCurationPage({ onUnauthorized }: Props) {
       <div className="page-head">
         <h2>홈 구성</h2>
       </div>
-      <p className="muted" style={{ marginTop: -12 }}>
+      <p className="muted page-desc">
         앱 홈에 띄울 코스와 협력업체를 고르고 순서를 정해요. 저장하면 앱을 새로 열거나 당겨서
         새로고침할 때 반영돼요. 아무것도 고르지 않으면 그 섹션은 앱 홈에서 숨겨져요.
       </p>
@@ -134,7 +135,7 @@ function snapshot(items: HomeCurationItem[]): string {
   return JSON.stringify(items.map((item) => [item.id, item.describe?.trim() || null]))
 }
 
-/** 한 섹션의 편집기: 고른 목록(설명·순서 이동·빼기) + 추가 드롭다운 + 저장. */
+/** 한 섹션의 편집기: 고른 목록(설명·순서 이동·제외) + 추가 검색창 + 저장. */
 function HomeSection<T extends { id: string }>({
   title,
   noun,
@@ -224,7 +225,6 @@ function HomeSection<T extends { id: string }>({
                     <textarea
                       rows={2}
                       value={entry.describe ?? ''}
-                      placeholder="큐레이션 설명 (선택)"
                       onChange={(e) =>
                         change(
                           picked.map((p, i) => (i === index ? { ...p, describe: e.target.value } : p)),
@@ -254,7 +254,7 @@ function HomeSection<T extends { id: string }>({
                         className="danger small"
                         onClick={() => change(picked.filter((p) => p.id !== entry.id))}
                       >
-                        빼기
+                        제외
                       </button>
                     </div>
                   </td>
@@ -267,22 +267,11 @@ function HomeSection<T extends { id: string }>({
 
       <div className="field" style={{ marginTop: 16 }}>
         <label>{noun} 추가</label>
-        <select
-          value=""
-          disabled={candidates.length === 0}
-          onChange={(e) => {
-            if (e.target.value) {
-              change([...picked, { id: e.target.value, describe: null, detail: {} }])
-            }
-          }}
-        >
-          <option value="">{candidates.length === 0 ? `추가할 ${noun}이 없어요` : '선택'}</option>
-          {candidates.map((item) => (
-            <option key={item.id} value={item.id}>
-              {optionLabel(item)}
-            </option>
-          ))}
-        </select>
+        <SearchSelect
+          options={candidates.map((item) => ({ id: item.id, label: optionLabel(item) }))}
+          onSelect={(id) => change([...picked, { id, describe: null, detail: {} }])}
+          emptyText={`추가할 ${noun}이 없어요`}
+        />
       </div>
 
       {error && <div className="error">{error}</div>}

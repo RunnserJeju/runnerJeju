@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { ApiError, listPartners, type Partner } from '../api'
+import SearchSelect from './SearchSelect'
 
 interface Props {
   selectedIds: string[]
@@ -20,7 +21,6 @@ export default function PartnerPicker({
 }: Props) {
   const [partners, setPartners] = useState<Partner[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState('')
 
   useEffect(() => {
     listPartners()
@@ -50,9 +50,9 @@ export default function PartnerPicker({
       {selectedIds.map((id, index) => {
         const partner = byId.get(id)
         return (
-          <div key={id} className="facility">
+          <div key={id} className="facility picked-row">
             <div className="row">
-              <div className="field" style={{ flex: 2 }}>
+              <div className="picked-name">
                 <strong>{partner?.name ?? (partners ? '(삭제된 업체)' : '불러오는 중…')}</strong>
                 {partner?.address && <span className="muted"> · {partner.address}</span>}
               </div>
@@ -77,39 +77,22 @@ export default function PartnerPicker({
                 className="danger small"
                 onClick={() => onChange(selectedIds.filter((selected) => selected !== id))}
               >
-                빼기
+                제외
               </button>
             </div>
           </div>
         )
       })}
       {partners && (
-        <div className="row row-actions">
-          <div className="field" style={{ flex: 2 }}>
-            <select value={pending} onChange={(event) => setPending(event.target.value)}>
-              <option value="">
-                {available.length === 0 ? '추가할 업체가 없어요' : '업체 선택'}
-              </option>
-              {available.map((partner) => (
-                <option key={partner.id} value={partner.id}>
-                  {partner.name}
-                  {partner.address ? ` (${partner.address})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            className="secondary small"
-            disabled={!pending}
-            onClick={() => {
-              onChange([...selectedIds, pending])
-              setPending('')
-            }}
-          >
-            + 연결
-          </button>
-        </div>
+        <SearchSelect
+          options={available.map((partner) => ({
+            id: partner.id,
+            label: partner.name,
+            sub: partner.address,
+          }))}
+          onSelect={(id) => onChange([...selectedIds, id])}
+          emptyText="추가할 업체가 없어요"
+        />
       )}
     </div>
   )

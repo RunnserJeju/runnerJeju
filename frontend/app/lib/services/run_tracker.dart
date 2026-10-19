@@ -480,8 +480,10 @@ class RunTracker extends ChangeNotifier {
   }
 
   /// 직전 확정점에서 여기까지가 사람이 뛸 수 없는 속도인지. 시각이 없으면
-  /// 판단할 수 없으므로 통과시킨다.
+  /// 판단할 수 없으므로 통과시킨다. 시뮬레이션은 배속으로 돌려 늘 이 속도를
+  /// 넘으므로 보지 않는다.
   bool _isImplausibleJump(GeoPoint anchor, GeoPoint point, double moved) {
+    if (!_isRealGps) return false;
     final from = anchor.recordedAt;
     final to = point.recordedAt;
     if (from == null || to == null) return false;

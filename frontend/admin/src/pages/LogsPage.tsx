@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   ApiError,
@@ -9,6 +9,7 @@ import {
   type UserLogRow,
 } from '../api'
 import Modal from '../components/Modal'
+import SearchSelect from '../components/SearchSelect'
 
 interface Props {
   onUnauthorized: () => void
@@ -44,11 +45,17 @@ export default function LogsPage({ onUnauthorized }: Props) {
     listLogNames().then(setLogNames).catch(handleError)
   }, [handleError])
 
+  // 필터가 바뀌면 그 전에 보낸 요청(첫 페이지·더 보기)의 응답은 버린다.
+  const generation = useRef(0)
+
   useEffect(() => {
+    const current = ++generation.current
     setRows(null)
     setCursor(null)
+    setLoadingMore(false)
     listUserLogs(applied)
       .then((page) => {
+        if (current !== generation.current) return
         setRows(page.items)
         setCursor(page.next_cursor)
         setError(null)
@@ -58,14 +65,18 @@ export default function LogsPage({ onUnauthorized }: Props) {
 
   const loadMore = () => {
     if (!cursor || loadingMore) return
+    const current = generation.current
     setLoadingMore(true)
     listUserLogs(applied, cursor)
       .then((page) => {
+        if (current !== generation.current) return
         setRows((prev) => [...(prev ?? []), ...page.items])
         setCursor(page.next_cursor)
       })
       .catch(handleError)
-      .finally(() => setLoadingMore(false))
+      .finally(() => {
+        if (current === generation.current) setLoadingMore(false)
+      })
   }
 
   const set = (key: keyof UserLogFilter, value: string) =>
@@ -97,24 +108,20 @@ export default function LogsPage({ onUnauthorized }: Props) {
         <div className="row">
           <div className="field">
             <label htmlFor="log-name">로그 이름</label>
-            <select
+            <SearchSelect
               id="log-name"
               value={draft.log_name ?? ''}
-              onChange={(e) => set('log_name', e.target.value)}
-            >
-              <option value="">전체</option>
-              {logGroups.map((group) => (
-                <optgroup key={group} label={group}>
-                  {logNames
+              placeholder="전체"
+              options={[
+                { id: '', label: '전체' },
+                ...logGroups.flatMap((group) =>
+                  logNames
                     .filter((n) => n.group === group)
-                    .map((n) => (
-                      <option key={n.name} value={n.name}>
-                        {n.label} ({n.name})
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </select>
+                    .map((n) => ({ id: n.name, label: n.label, sub: `${group} · ${n.name}` })),
+                ),
+              ]}
+              onSelect={(name) => set('log_name', name)}
+            />
           </div>
           <div className="field">
             <label htmlFor="log-user">회원 id</label>
