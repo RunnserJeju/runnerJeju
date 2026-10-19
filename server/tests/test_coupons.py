@@ -210,12 +210,12 @@ class TestMyCoupons:
 
 
 def _use_db(uc, coupon, partner, *, allowed=(), rowcount=1):
-    """use_coupon이 부르는 순서: 내 쿠폰 조회 → get(Partner) → 업체 제한 → 조건부 UPDATE."""
+    """use_coupon이 부르는 순서: 내 쿠폰 조회 → 번호로 업체 조회 → 업체 제한 → 조건부 UPDATE."""
     row = [(uc, coupon)] if uc is not None else []
+    found = [partner] if partner is not None else []
     links = [(coupon.id, pid) for pid in allowed] if coupon is not None else []
     return SeqFake(
-        [_Result(row), _Result(links), _Result([], rowcount=rowcount)],
-        gets={Partner: partner},
+        [_Result(row), _Result(found), _Result(links), _Result([], rowcount=rowcount)]
     )
 
 
@@ -226,7 +226,7 @@ class TestUseCoupon:
         db = _use_db(uc, coupon, partner)
 
         result = app_coupons.use_coupon(
-            uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+            uc.id, CouponUseRequest(pin="1234"), db=db, user_id="u1"
         )
 
         assert result["status"] == "used"
@@ -240,7 +240,7 @@ class TestUseCoupon:
         db = _use_db(uc, coupon, partner, allowed=[partner.id])
 
         result = app_coupons.use_coupon(
-            uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+            uc.id, CouponUseRequest(pin="1234"), db=db, user_id="u1"
         )
         assert result["status"] == "used"
         assert result["partner_ids"] == [partner.id]
@@ -252,21 +252,27 @@ class TestUseCoupon:
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
-                uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+                uc.id, CouponUseRequest(pin="1234"), db=db, user_id="u1"
             )
         assert exc.value.status_code == 400
         assert db.committed is False
 
-    def test_404_when_partner_missing(self):
+    def test_400_when_pin_matches_no_partner(self):
         coupon = _coupon()
         uc = _uc(user_id="u1", coupon_id=coupon.id)
         db = _use_db(uc, coupon, None)
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
-                uc.id, CouponUseRequest(partner_id=uuid.uuid4()), db=db, user_id="u1"
+                uc.id, CouponUseRequest(pin="0000"), db=db, user_id="u1"
             )
-        assert exc.value.status_code == 404
+        assert exc.value.status_code == 400
+        assert db.committed is False
+
+    @pytest.mark.parametrize("pin", ["123", "12345", "12a4", ""])
+    def test_request_requires_four_digits(self, pin):
+        with pytest.raises(ValidationError):
+            CouponUseRequest(pin=pin)
 
     def test_404_when_not_mine(self):
         # 소유 조건은 쿼리 WHERE에 있다 — 남의 것이면 행이 안 나온다.
@@ -274,7 +280,7 @@ class TestUseCoupon:
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
-                uuid.uuid4(), CouponUseRequest(partner_id=uuid.uuid4()), db=db, user_id="u1"
+                uuid.uuid4(), CouponUseRequest(pin="1234"), db=db, user_id="u1"
             )
         assert exc.value.status_code == 404
 
@@ -285,7 +291,7 @@ class TestUseCoupon:
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
-                uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+                uc.id, CouponUseRequest(pin="1234"), db=db, user_id="u1"
             )
         assert exc.value.status_code == 409
 
@@ -293,11 +299,11 @@ class TestUseCoupon:
         # 유효기간이 지났으면 expired_at을 남기고(UPDATE + commit) 410.
         coupon, partner = _coupon(valid_until=PAST), _partner()
         uc = _uc(user_id="u1", coupon_id=coupon.id)
-        db = SeqFake([_Result([(uc, coupon)]), _Result([], rowcount=1)], gets={Partner: partner})
+        db = SeqFake([_Result([(uc, coupon)]), _Result([], rowcount=1)])
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
-                uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+                uc.id, CouponUseRequest(pin="1234"), db=db, user_id="u1"
             )
         assert exc.value.status_code == 410
         assert db.committed is True
@@ -305,11 +311,11 @@ class TestUseCoupon:
     def test_410_when_already_marked_expired(self):
         coupon, partner = _coupon(), _partner()
         uc = _uc(user_id="u1", coupon_id=coupon.id, expired_at=PAST)
-        db = SeqFake([_Result([(uc, coupon)])], gets={Partner: partner})
+        db = SeqFake([_Result([(uc, coupon)])])
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
-                uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+                uc.id, CouponUseRequest(pin="1234"), db=db, user_id="u1"
             )
         assert exc.value.status_code == 410
         assert db.committed is False
@@ -322,7 +328,7 @@ class TestUseCoupon:
 
         with pytest.raises(HTTPException) as exc:
             app_coupons.use_coupon(
-                uc.id, CouponUseRequest(partner_id=partner.id), db=db, user_id="u1"
+                uc.id, CouponUseRequest(pin="1234"), db=db, user_id="u1"
             )
         assert exc.value.status_code == 409
 

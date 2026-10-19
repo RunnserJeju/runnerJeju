@@ -1,7 +1,7 @@
 """앱(공개) 쿠폰 API — 내 쿠폰 목록/한 장 + 사용(이용완료).
 
-유저가 발급받은 쿠폰을 보고, 업체 이름을 검색해 고른 뒤 "사용하기"로 이용완료 처리한다.
-업체 코드는 따로 없다 — 어느 업체에서 썼는지만 남겨 이용률에 쓴다. 혜택·유효기간은
+유저가 발급받은 쿠폰을 보고, 업체 직원이 업체 고유 4자리 번호(Partner.coupon_pin)를
+입력하면 이용완료 처리한다. 번호로 업체를 찾아 어느 업체에서 썼는지 남긴다(이용률). 혜택·유효기간은
 템플릿(coupons)을 라이브 참조한다. 운영자 쪽 수정/지급/현황은 app/admin/coupons.py.
 
 만료: 유효기간이 지난 쿠폰은 목록에서 빼고 expired_at을 남긴다. 사용하려 하면 410으로
@@ -157,9 +157,9 @@ def use_coupon(
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ):
-    """내 쿠폰 한 장을 고른 업체에서 사용(이용완료) 처리한다.
+    """내 쿠폰 한 장을 입력한 번호의 업체에서 사용(이용완료) 처리한다.
 
-    쿠폰에 업체 제한이 있으면 그 안의 업체만 받는다. 동시에 두 번 눌러도 한 번만
+    번호에 맞는 업체가 없으면 400. 쿠폰에 업체 제한이 있으면 그 안의 업체만 받는다. 동시에 두 번 눌러도 한 번만
     처리되도록, used_at이 아직 비어 있을 때만 채우는 조건부 UPDATE로 원자 처리한다
     (영향 행 0 → 이미 사용 → 409). 유효기간이 지났으면 expired_at을 남기고 410.
     """
@@ -180,9 +180,11 @@ def use_coupon(
             db.commit()
         raise HTTPException(status_code=410, detail="유효기간이 지난 쿠폰이에요.")
 
-    partner = db.get(Partner, payload.partner_id)
+    partner = db.execute(
+        select(Partner).where(Partner.coupon_pin == payload.pin)
+    ).scalar_one_or_none()
     if partner is None:
-        raise HTTPException(status_code=404, detail="협력업체를 찾을 수 없어요.")
+        raise HTTPException(status_code=400, detail="번호가 맞지 않아요. 다시 확인해 주세요.")
     allowed = _allowed_partner_ids(db, {coupon.id}).get(coupon.id)
     if allowed is not None and partner.id not in allowed:
         raise HTTPException(status_code=400, detail="이 쿠폰을 쓸 수 없는 업체예요.")

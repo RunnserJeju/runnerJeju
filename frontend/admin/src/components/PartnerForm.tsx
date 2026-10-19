@@ -11,6 +11,7 @@ export interface PartnerFormValues {
   comment: string
   instagram: string
   benefit: string
+  couponPin: string
   /** detail(JSONB) 원문. 형태가 정해지지 않아 JSON 객체를 그대로 편집한다. */
   detail: string
 }
@@ -24,6 +25,7 @@ export function emptyPartnerValues(): PartnerFormValues {
     comment: '',
     instagram: '',
     benefit: '',
+    couponPin: '',
     detail: '{}',
   }
 }
@@ -37,6 +39,7 @@ export function valuesFromPartner(partner: Partner): PartnerFormValues {
     comment: partner.comment ?? '',
     instagram: partner.instagram ?? '',
     benefit: partner.benefit ?? '',
+    couponPin: partner.coupon_pin ?? '',
     detail: JSON.stringify(partner.detail ?? {}, null, 2),
   }
 }
@@ -55,6 +58,11 @@ export function validatePartner(
   }
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     return { ok: false, message: '좌표 범위가 올바르지 않아요. 위도와 경도가 바뀌지 않았는지 확인해 주세요.' }
+  }
+
+  const couponPin = values.couponPin.trim()
+  if (couponPin && !/^\d{4}$/.test(couponPin)) {
+    return { ok: false, message: '쿠폰 번호는 숫자 4자리여야 해요.' }
   }
 
   let detail: Record<string, unknown>
@@ -77,6 +85,7 @@ export function validatePartner(
       comment: optional(values.comment),
       instagram: optional(values.instagram),
       benefit: optional(values.benefit),
+      coupon_pin: couponPin || null,
       detail,
     },
   }
@@ -267,6 +276,25 @@ export default function PartnerForm({ values, onChange }: Props) {
           id="partner-benefit"
           value={values.benefit}
           onChange={(e) => set('benefit', e.target.value)}
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor="partner-coupon-pin">
+          쿠폰 번호{' '}
+          <span className="hint">
+            숫자 4자리, 업체마다 달라야 해요 — 직원이 손님 폰에 입력하면 쿠폰이 사용돼요. 비우면 이
+            업체에서 쿠폰을 못 써요
+          </span>
+        </label>
+        <input
+          id="partner-coupon-pin"
+          inputMode="numeric"
+          maxLength={4}
+          placeholder="0000"
+          value={values.couponPin}
+          onChange={(e) => set('couponPin', e.target.value.replace(/\D/g, ''))}
+          style={{ width: 120 }}
         />
       </div>
 

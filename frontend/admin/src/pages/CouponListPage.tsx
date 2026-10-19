@@ -314,7 +314,9 @@ function CouponEditForm({
               onChange={(e) => set({ isActive: e.target.checked })}
             />{' '}
             지급 중
-            <span className="hint">끄면 새로 지급되지 않아요. 이미 받은 쿠폰은 그대로 쓸 수 있어요</span>
+            <span className="hint">
+              러닝위크 기간에만 켜 주세요. 켜져 있을 때만 자동 지급돼요. 이미 받은 쿠폰은 꺼도 그대로 쓸 수 있어요
+            </span>
           </label>
         </div>
         {error && <div className="error">{error}</div>}

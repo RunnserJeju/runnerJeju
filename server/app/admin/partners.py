@@ -61,9 +61,26 @@ def _to_out(partner: Partner, course_count: int, coupon_used_count: int = 0) -> 
         detail=partner.detail or {},
         course_count=course_count,
         coupon_used_count=coupon_used_count,
+        coupon_pin=partner.coupon_pin,
         created_at=partner.created_at,
         updated_at=partner.updated_at,
     )
+
+
+def _check_pin_free(
+    db: Session, pin: str | None, partner_id: uuid.UUID | None = None
+) -> None:
+    """쿠폰 번호는 업체마다 달라야 한다(겹치면 어느 업체에서 썼는지 못 가린다)."""
+    if pin is None:
+        return
+    query = select(Partner.name).where(Partner.coupon_pin == pin)
+    if partner_id is not None:
+        query = query.where(Partner.id != partner_id)
+    taken = db.execute(query).scalar()
+    if taken is not None:
+        raise HTTPException(
+            status_code=409, detail=f"'{taken}'에서 이미 쓰는 쿠폰 번호예요."
+        )
 
 
 def _apply(partner: Partner, payload: PartnerPayload) -> None:
@@ -75,6 +92,7 @@ def _apply(partner: Partner, payload: PartnerPayload) -> None:
     partner.comment = (payload.comment or "").strip() or None
     partner.instagram = (payload.instagram or "").strip() or None
     partner.benefit = (payload.benefit or "").strip() or None
+    partner.coupon_pin = payload.coupon_pin
     partner.detail = payload.detail
 
 
@@ -94,6 +112,7 @@ def list_partners(db: Session = Depends(get_db)):
 @router.post("/partners", response_model=PartnerOut, status_code=201)
 def create_partner(payload: PartnerPayload, db: Session = Depends(get_db)):
     """협력업체를 등록한다. (관리자 전용 — 라우터 레벨에서 강제)"""
+    _check_pin_free(db, payload.coupon_pin)
     partner = Partner()
     _apply(partner, payload)
 
@@ -113,6 +132,7 @@ def update_partner(
     """협력업체를 수정한다(전체 교체). 연결된 모든 코스에 바로 반영된다.
     (관리자 전용 — 라우터 레벨에서 강제)"""
     partner = _load_partner_or_404(db, partner_id)
+    _check_pin_free(db, payload.coupon_pin, partner.id)
     _apply(partner, payload)
 
     db.commit()
