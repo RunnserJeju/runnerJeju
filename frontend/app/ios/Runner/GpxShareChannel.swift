@@ -3,23 +3,17 @@
 //  Runner
 //
 //  코스 GPX를 다른 앱으로 넘긴다. Flutter(CourseService)와 짝이고, 채널 이름은
-//  안드로이드 다운로드 채널과 같다. 메서드: openInGpxApp · share.
-//  .gpx는 기기마다 com.topografix.gpx 또는 public.gpx(iOS 27+)로 인식되어,
-//  넘길 때 형식을 직접 붙인다.
+//  안드로이드 다운로드 채널과 같다. 메서드: share.
+//  파일 URL을 그대로 넘긴다 — 파일 앱의 공유와 같은 방식이라 가민 등이 받는다.
+//  (열기 메뉴나 형식을 직접 붙인 NSItemProvider로는 가민이 받지 못했다.)
 //
 
 import Flutter
 import UIKit
 
-final class GpxShareChannel: NSObject, UIDocumentInteractionControllerDelegate {
+final class GpxShareChannel {
   static let name = "runners_jeju/downloads"
   private static let shared = GpxShareChannel()
-
-  private static let topografixType = "com.topografix.gpx"
-  private static let systemType = "public.gpx"
-
-  // 메뉴가 떠 있는 동안 붙잡아 둬야 한다. 놓으면 메뉴가 바로 닫힌다.
-  private var documentController: UIDocumentInteractionController?
 
   static func register(with messenger: FlutterBinaryMessenger) {
     FlutterMethodChannel(name: name, binaryMessenger: messenger)
@@ -30,47 +24,34 @@ final class GpxShareChannel: NSObject, UIDocumentInteractionControllerDelegate {
         }
         let url = URL(fileURLWithPath: path)
         switch call.method {
-        case "openInGpxApp": result(shared.openInGpxApp(url))
         case "share": result(shared.share(url))
         default: result(FlutterMethodNotImplemented)
         }
       }
   }
 
-  /// GPX를 받는다고 선언한 앱만 보여준다. 그런 앱이 없으면 false.
-  private func openInGpxApp(_ url: URL) -> Bool {
-    guard let view = topViewController()?.view else { return false }
-    let controller = UIDocumentInteractionController(url: url)
-    controller.uti = Self.topografixType
-    controller.delegate = self
-    documentController = controller
-    let shown = controller.presentOpenInMenu(from: anchor(in: view), in: view, animated: true)
-    if !shown { documentController = nil }
-    return shown
-  }
-
-  /// 공유 시트. 파일 하나를 두 GPX 형식으로 함께 등록해, 어느 쪽을 받는 앱이든 고를 수 있게 한다.
+  /// 공유 시트. GPX 앱들과 '파일에 저장'이 함께 뜬다.
   private func share(_ url: URL) -> Bool {
     guard let presenter = topViewController() else { return false }
-    let provider = NSItemProvider()
-    provider.suggestedName = url.deletingPathExtension().lastPathComponent
-    for type in [Self.topografixType, Self.systemType] {
-      provider.registerFileRepresentation(
-        forTypeIdentifier: type, fileOptions: [], visibility: .all
-      ) { completion in
-        completion(url, false, nil)
-        return nil
-      }
-    }
-    let sheet = UIActivityViewController(activityItems: [provider], applicationActivities: nil)
+    let shared = (try? copyToTemporary(url)) ?? url
+    let sheet = UIActivityViewController(activityItems: [shared], applicationActivities: nil)
     sheet.popoverPresentationController?.sourceView = presenter.view
     sheet.popoverPresentationController?.sourceRect = anchor(in: presenter.view)
     presenter.present(sheet, animated: true)
     return true
   }
 
-  func documentInteractionControllerDidDismissOpenInMenu(_ controller: UIDocumentInteractionController) {
-    documentController = nil
+  /// Library/Caches(Flutter getTemporaryDirectory)에 둔 파일은 다른 앱으로 넘길 때
+  /// 시스템(sharingd)이 읽지 못해 가민·순토가 아예 실행되지 않았다
+  /// ("does not have read access to document"). tmp로 옮겨서 넘긴다.
+  private func copyToTemporary(_ url: URL) throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("gpx-share", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let target = directory.appendingPathComponent(url.lastPathComponent)
+    try? FileManager.default.removeItem(at: target)
+    try FileManager.default.copyItem(at: url, to: target)
+    return target
   }
 
   private func anchor(in view: UIView) -> CGRect {

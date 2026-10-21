@@ -340,25 +340,25 @@ class RunningScreenState extends State<RunningScreen> {
   /// 먼저 보낼 곳을 고르게 한다.
   /// - 안드로이드: 깔린 워치 앱으로 열기 · 기기에 저장 · 다른 앱으로 보내기.
   ///   저장이 안 되는 구형 안드로이드는 공유 시트로 넘어간다.
-  /// - iOS: 설치 앱을 알 수 없어, GPX 앱 목록으로 열기 · 공유 시트(파일에 저장 포함).
+  /// - iOS: 고를 것 없이 바로 공유 시트. 가민·순토도 파일에 저장도 거기서 한다.
+  ///   ('열기' 메뉴로는 가민 등이 파일을 받지 못했다.)
   Future<void> _downloadSelectedGpx() async {
     final course = _selected;
     if (course == null || _downloadingGpx) return;
 
-    final apps = await Services.instance.course.installedGpxApps();
-    if (!mounted) return;
-    final destination = await _askGpxDestination(apps);
-    if (destination == null || !mounted) return;
+    _GpxDestination? destination;
+    if (!Platform.isIOS) {
+      final apps = await Services.instance.course.installedGpxApps();
+      if (!mounted) return;
+      destination = await _askGpxDestination(apps);
+      if (destination == null || !mounted) return;
+    }
     setState(() => _downloadingGpx = true);
 
     try {
       final file = await Services.instance.course.downloadGpx(course);
-      if (Platform.isIOS) {
-        if (!destination.gpxApps) {
-          await Services.instance.course.shareGpxOnIOS(file);
-        } else if (!await Services.instance.course.openInGpxApps(file)) {
-          if (mounted) _showMessage('GPX 파일을 열 수 있는 앱이 없어요.');
-        }
+      if (destination == null) {
+        await Services.instance.course.shareGpxOnIOS(file);
         return;
       }
       final app = destination.app;
@@ -404,50 +404,29 @@ class RunningScreenState extends State<RunningScreen> {
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: Platform.isIOS
-              ? [
-                  ListTile(
-                    leading: const Icon(Icons.watch_rounded),
-                    title: const Text('GPX 앱에서 열기'),
-                    subtitle: const Text('가민·순토 등 GPX를 여는 앱'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.gpxApps()),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.ios_share_rounded),
-                    title: const Text('파일에 저장 / 공유하기'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.share()),
-                  ),
-                ]
-              : [
-                  for (final app in apps)
-                    ListTile(
-                      leading: const Icon(Icons.watch_rounded),
-                      title: Text('${app.label}로 열기'),
-                      subtitle: Text(app.description),
-                      onTap: () => Navigator.of(
-                        sheetContext,
-                      ).pop(_GpxDestination.app(app)),
-                    ),
-                  ListTile(
-                    leading: const Icon(Icons.download_rounded),
-                    title: const Text('기기에 저장'),
-                    subtitle: const Text('다운로드 폴더에 저장해요'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.save()),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.share_rounded),
-                    title: const Text('다른 앱으로 보내기'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.share()),
-                  ),
-                ],
+          children: [
+            for (final app in apps)
+              ListTile(
+                leading: const Icon(Icons.watch_rounded),
+                title: Text('${app.label}로 열기'),
+                subtitle: Text(app.description),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(_GpxDestination.app(app)),
+              ),
+            ListTile(
+              leading: const Icon(Icons.download_rounded),
+              title: const Text('기기에 저장'),
+              subtitle: const Text('다운로드 폴더에 저장해요'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(const _GpxDestination.save()),
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_rounded),
+              title: const Text('다른 앱으로 보내기'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(const _GpxDestination.share()),
+            ),
+          ],
         ),
       ),
     );
@@ -650,7 +629,10 @@ class RunningScreenState extends State<RunningScreen> {
 
     writeLog(
       LogName.partnerPreviewOpen,
-      detail: {LogKeys.partnerId: partner.id, LogKeys.source: LogSource.detail.name},
+      detail: {
+        LogKeys.partnerId: partner.id,
+        LogKeys.source: LogSource.detail.name,
+      },
     );
     unawaited(
       showPartnerDetailModal(
@@ -1354,12 +1336,10 @@ class _StatusPill extends StatelessWidget {
 /// GPX다운 선택지. [app]이 있으면 그 워치 앱으로(안드로이드), [gpxApps]면 GPX 앱
 /// 목록으로(iOS) 연다.
 class _GpxDestination {
-  const _GpxDestination.app(GpxApp this.app) : save = false, gpxApps = false;
-  const _GpxDestination.gpxApps() : app = null, save = false, gpxApps = true;
-  const _GpxDestination.save() : app = null, save = true, gpxApps = false;
-  const _GpxDestination.share() : app = null, save = false, gpxApps = false;
+  const _GpxDestination.app(GpxApp this.app) : save = false;
+  const _GpxDestination.save() : app = null, save = true;
+  const _GpxDestination.share() : app = null, save = false;
 
   final GpxApp? app;
   final bool save;
-  final bool gpxApps;
 }

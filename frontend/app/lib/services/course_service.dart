@@ -65,14 +65,12 @@ class CourseService {
   Future<bool> saveGpxToDownloads(File file) async {
     if (!Platform.isAndroid) return false;
     try {
-      final saved = await _downloadsChannel.invokeMethod<bool>(
-        'saveToDownloads',
-        {
-          'path': file.path,
-          'name': file.uri.pathSegments.last,
-          'mimeType': 'application/gpx+xml',
-        },
-      );
+      final saved = await _downloadsChannel
+          .invokeMethod<bool>('saveToDownloads', {
+            'path': file.path,
+            'name': file.uri.pathSegments.last,
+            'mimeType': 'application/gpx+xml',
+          });
       return saved ?? false;
     } catch (e) {
       throw AppException('GPX 파일을 저장하지 못했어요.', e);
@@ -119,19 +117,7 @@ class CourseService {
     }
   }
 
-  /// iOS: GPX를 받는다고 선언한 앱(가민·순토 등) 목록을 띄운다. 그런 앱이 없으면 false.
-  Future<bool> openInGpxApps(File file) async {
-    try {
-      final shown = await _downloadsChannel.invokeMethod<bool>('openInGpxApp', {
-        'path': file.path,
-      });
-      return shown ?? false;
-    } catch (e) {
-      throw AppException('GPX 파일을 열지 못했어요.', e);
-    }
-  }
-
-  /// iOS: 공유 시트. share_plus와 달리 GPX 형식 두 가지를 함께 붙여 넘긴다.
+  /// iOS: 공유 시트. 가민·순토 등 GPX 앱과 '파일에 저장'이 함께 뜬다.
   Future<void> shareGpxOnIOS(File file) async {
     try {
       await _downloadsChannel.invokeMethod<bool>('share', {'path': file.path});
