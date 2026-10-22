@@ -13,7 +13,7 @@
 # 업로드는 매번 새 코스를 만든다 — 갱신이 아니다. 그래서 같은 명단을 두 번
 # 돌리면 코스가 두 벌 생긴다. 다시 올릴 때는 courses 테이블을 먼저 비울 것.
 #
-# 필수: file, name, distance_km, difficulty, address
+# 필수: file, name, distance_km, difficulty, category, address
 # 선택: tags, description, parkings, restrooms
 #
 # parkings/restrooms는 주소 목록이다(코스당 여러 개 가능). 좌표는 push 시점에
@@ -27,6 +27,7 @@
 #
 # distance_km은 왕복 기준 km 정수다(GPX 실측값이 아니라 명단에 적힌 안내값).
 # difficulty는 1=★, 2=★★, 3=★★★.
+# category는 art(아트런) / road(로드런) / trail(트레일런) / challenge(챌린지런).
 # tags는 쉼표로 구분한다 — 앱이 쪼개서 칩으로 보여준다.
 #
 # name은 명단 시트의 코스명을 그대로 쓴다(번호 접두사 포함).
@@ -56,6 +57,7 @@ courses:
     name: No.1 이호랜드 러닝코스
     distance_km: 7
     difficulty: 2
+    category: road
     tags: 해안도로,제주시
     address: 제주특별자치도 제주시 내도동 536-1
 
@@ -63,6 +65,7 @@ courses:
     name: No.2 도두봉 서해안로
     distance_km: 5
     difficulty: 1
+    category: road
     tags: 해안도로,제주시
     address: 제주 제주시 용담삼동 2396-16
 
@@ -70,6 +73,7 @@ courses:
     name: No.3 탑동 러닝 코스
     distance_km: 6
     difficulty: 1
+    category: road
     tags: 해안도로,제주시
     address: 제주 제주시 중앙로 2
 
@@ -77,6 +81,7 @@ courses:
     name: No4. 종달리 해안도로
     distance_km: 6
     difficulty: 1
+    category: road
     tags: 해안도로,제주시,동쪽
     address: 제주특별자치도 제주시 구좌읍 해맞이해안로 2281
 
@@ -84,6 +89,7 @@ courses:
     name: No5. 성산 오조포구 러닝코스
     distance_km: 7
     difficulty: 1
+    category: road
     tags: 제주시,동쪽
     address: 제주 서귀포시 성산읍 고성리 263
 
@@ -91,6 +97,7 @@ courses:
     name: No6. 위미 태웃개
     distance_km: 7
     difficulty: 2
+    category: road
     tags: 해안도로,서귀포,아이싱
     address: 제주 서귀포시 남원읍 태위로398번길 57 태웃개
 
@@ -98,6 +105,7 @@ courses:
     name: No7. 새연교
     distance_km: 7
     difficulty: 1
+    category: road
     tags: 서귀포,아이싱
     address: 제주 서귀포시 칠십리로 156-8 정모시쉼터
 
@@ -105,6 +113,7 @@ courses:
     name: No8. 외돌개
     distance_km: 7
     difficulty: 1
+    category: road
     tags: 서귀포
     address: 서귀포 칠십리 공원 주차장 서귀포시 서홍동 572
 
@@ -112,6 +121,7 @@ courses:
     name: No9. 중문
     distance_km: 7
     difficulty: 2
+    category: road
     tags: 서귀포
     address: 제주 서귀포시 중문관광로 154-17 더클리프 주차장
 
@@ -119,6 +129,7 @@ courses:
     name: No10. 사계 해안도로
     distance_km: 6
     difficulty: 2
+    category: road
     tags: 해안도로,서쪽,서귀포
     address: 송악산 주차장 서귀포시 대정읍 상모리 4165-123
     description: |
@@ -129,6 +140,7 @@ courses:
     name: No11. 노꼬메 오름 3peak
     distance_km: 8
     difficulty: 3
+    category: trail
     tags: 트레일러닝,제주시
     address: 궷물오름 주차장 (제주시 애월읍 유수암리 1191-2)
 
@@ -136,6 +148,7 @@ courses:
     name: No12. 오라올레길
     distance_km: 5
     difficulty: 2
+    category: trail
     tags: 트레일러닝,제주시
     address: 방선문 입구 (제주시 오라이동 3819-11)
 
@@ -143,6 +156,7 @@ courses:
     name: No13. 함덕 서우봉
     distance_km: 6
     difficulty: 2
+    category: trail
     tags: 트레일러닝,제주시,동쪽
     address: 제주시 조천읍 함덕리 산 4
 
@@ -150,6 +164,7 @@ courses:
     name: No14. 거슨세미오름 3peak
     distance_km: 6
     difficulty: 3
+    category: trail
     tags: 트레일러닝,제주시,동쪽
     address: 제주시 구좌읍 송당리 산 145
 
@@ -157,6 +172,7 @@ courses:
     name: No15. 머체왓 숲길
     distance_km: 6
     difficulty: 2
+    category: trail
     tags: 트레일러닝,서귀포
     address: 서귀포시 남원읍 서성로 755
 
@@ -164,6 +180,7 @@ courses:
     name: No16. 댕댕런
     distance_km: 4
     difficulty: 1
+    category: art
     tags: 아트런,제주시
     address: 제주시 탑동로 5
     description: |
@@ -173,6 +190,7 @@ courses:
     name: No17. 당근런
     distance_km: 4
     difficulty: 1
+    category: art
     tags: 아트런,제주시,동쪽
     address: 제주시 구좌읍 김녕리 2236
 
@@ -180,6 +198,7 @@ courses:
     name: No18. 하르방런
     distance_km: 4
     difficulty: 1
+    category: art
     tags: 아트런,서귀포
     address: 서귀포시 김정문화로 57
 
@@ -190,6 +209,7 @@ courses:
     name: No19. 우도런 10km
     distance_km: 10
     difficulty: 3
+    category: road
     tags: 서귀포,해안도로,아이싱
     address: 제주 제주시 우도면 우도해안길 70
 
@@ -197,6 +217,7 @@ courses:
     name: No19. 우도런 13km
     distance_km: 13
     difficulty: 3
+    category: road
     tags: 서귀포,해안도로,아이싱
     address: 제주 제주시 우도면 우도해안길 70
 
@@ -204,5 +225,6 @@ courses:
     name: No19. 우도런 13.7km (소머리오름)
     distance_km: 14
     difficulty: 3
+    category: road
     tags: 서귀포,해안도로,아이싱
     address: 제주 제주시 우도면 우도해안길 70

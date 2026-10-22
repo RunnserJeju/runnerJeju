@@ -26,6 +26,8 @@
 | `PUT /admin/courses/{id}/gpx` | 경로 교체 (기록 있으면 409 → `reset_records=true`) |
 | `PUT /admin/courses/{id}/thumbnail` | 썸네일 설정/교체 |
 | `DELETE /admin/courses/{id}/thumbnail` | 썸네일 제거 |
+| `POST /admin/courses/{id}/images` | 추가 이미지 한 장을 맨 뒤에 붙임(최대 10장, 썸네일과 같은 버킷) |
+| `PUT /admin/courses/{id}/images` | 추가 이미지 순서 바꾸기·빼기 `{image_urls}` — 지금 있는 URL로만, 빠진 것은 Storage에서도 삭제 |
 | `PUT /admin/courses/{id}/stamp-image` | 완주 스탬프 도안 설정/교체 |
 | `DELETE /admin/courses/{id}/stamp-image` | 스탬프 도안 제거 |
 | `GET /admin/notices` | 공지 전체 목록 (예약·만료 포함 — 관리용) |
@@ -76,6 +78,10 @@
 **썸네일 (전용 리소스)** — 이미지 파일 처리를 등록/수정 폼과 분리:
 - `PUT /courses/{id}/thumbnail` (multipart, `file`: jpg/png/webp, ≤8MB) — 설정/교체. 교체 시 옛 오브젝트 삭제. 응답은 `CourseSummary`.
 - `DELETE /courses/{id}/thumbnail` — `thumbnail_url`을 null로 + Storage 파일 삭제. 이미 없으면 no-op.
+
+**카테고리·추가 이미지 (2026-10-22, `0039`)**
+- `courses.category` 필수: `art`(아트런) / `road`(로드런) / `trail`(트레일런) / `challenge`(챌린지런). DB CHECK(`ck_courses_category`)로도 막는다. 값을 늘리면 `models.COURSE_CATEGORIES`·`schemas.CourseCategory`·CHECK(마이그레이션)·운영 웹 `COURSE_CATEGORY_LABEL`을 같이 바꾼다. 기존 코스는 태그로 채웠다 — `아트런` → art, `트레일러닝` → trail, 나머지 road. 태그는 그대로 둔다.
+- `courses.image_urls`(JSONB 목록, 순서대로): 썸네일 말고 더 보여 줄 이미지. 응답(`CourseListItem`)에 들어가지만 앱 화면은 후속 작업.
 - 등록도 이 엔드포인트로 올린다 → "처음 설정"과 "교체"가 같은 코드.
 
 **조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함.

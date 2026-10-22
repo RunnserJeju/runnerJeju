@@ -12,6 +12,8 @@ Difficulty = Annotated[int, Field(ge=1, le=3)]
 
 # 'public'=모두, 'admin'=role='admin'인 앱 사용자만(테스트 코스).
 CourseVisibility = Literal["public", "admin"]
+# 아트런·로드런·트레일런·챌린지런. models.COURSE_CATEGORIES와 같아야 한다.
+CourseCategory = Literal["art", "road", "trail", "challenge"]
 VerificationStatusName = Literal[
     "pending", "inProgress", "matched", "mismatched", "failed"
 ]
@@ -257,6 +259,7 @@ class CourseListItem(BaseModel):
     name: str
     distance_km: float
     difficulty: Difficulty
+    category: CourseCategory
 
     # "해안도로,제주시,동쪽" — 칩으로 쪼개는 건 클라이언트가 한다.
     tags: str | None
@@ -277,6 +280,8 @@ class CourseListItem(BaseModel):
 
     # 대표 썸네일 public URL. 전용 엔드포인트로만 설정/삭제된다(등록·수정 폼과 별개).
     thumbnail_url: str | None
+    # 썸네일 말고 더 보여 줄 이미지(순서대로). 전용 엔드포인트로만 바뀐다.
+    image_urls: list[str] = []
 
     # 이 코스 완주 스탬프의 도안(스탬프 종류에서 가져옴). 옛 앱 스탬프 탭 호환용 —
     # 새 앱은 GET /stamp-definitions를 쓴다(#71).
@@ -315,6 +320,7 @@ class CourseUpdate(BaseModel):
     # 소수 첫째 자리까지(DB Numeric(5,1)). 0.1 미만·9999.9 초과는 거절.
     distance_km: float = Field(ge=0.1, le=9999.9)
     difficulty: Difficulty
+    category: CourseCategory
     visibility: CourseVisibility
     address: str = Field(min_length=1)
     tags: str | None = None
@@ -326,14 +332,27 @@ class CourseUpdate(BaseModel):
     # 연결할 협력업체 id(보여줄 순서대로). 통째로 교체한다 — 빈 목록이면 전부 해제.
     partner_ids: list[uuid.UUID] = Field(default_factory=list)
 
-
-# --- 지오코딩 ------------------------------------------------------------
-
     @field_validator("distance_km")
     @classmethod
     def _round_distance(cls, value: float) -> float:
         # DB가 Numeric(5,1)로 반올림하기 전에 여기서 맞춰 응답과 저장값이 같게 한다.
         return round(value, 1)
+
+
+class CourseImagesUpdate(BaseModel):
+    """추가 이미지 순서 바꾸기·빼기(PUT /admin/courses/{id}/images). 지금 있는 URL로만."""
+
+    image_urls: list[str]
+
+    @field_validator("image_urls")
+    @classmethod
+    def _unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("같은 이미지가 두 번 들어 있어요.")
+        return value
+
+
+# --- 지오코딩 ------------------------------------------------------------
 
 
 class GeocodeResult(BaseModel):

@@ -49,11 +49,22 @@ export interface PartnerPayload {
 /** 공개 범위. null은 미설정(시드 스크립트로 올린 코스) — 앱에는 안 보인다. */
 export type CourseVisibility = 'public' | 'admin'
 
+/** 코스 카테고리. 서버 schemas.CourseCategory와 같아야 한다. */
+export type CourseCategory = 'art' | 'road' | 'trail' | 'challenge'
+
+export const COURSE_CATEGORY_LABEL: Record<CourseCategory, string> = {
+  art: '아트런',
+  road: '로드런',
+  trail: '트레일런',
+  challenge: '챌린지런',
+}
+
 export interface Course {
   id: string
   name: string
   distance_km: number
   difficulty: 1 | 2 | 3
+  category: CourseCategory
   visibility: CourseVisibility | null
   tags: string | null
   address: string
@@ -63,6 +74,8 @@ export interface Course {
   description: string | null
   estimated_time_min: number | null
   thumbnail_url: string | null
+  /** 썸네일 말고 더 보여 줄 이미지(순서대로). */
+  image_urls: string[]
   completed_count: number
 }
 
@@ -97,6 +110,7 @@ export interface CourseUpdatePayload {
   name: string
   distance_km: number
   difficulty: number
+  category: CourseCategory
   visibility: CourseVisibility
   address: string
   tags: string | null
@@ -194,6 +208,7 @@ export interface CourseCreateInput {
   name: string
   distanceKm: number
   difficulty: number
+  category: CourseCategory
   visibility: CourseVisibility
   address: string
   tags: string
@@ -209,6 +224,7 @@ export function createCourse(input: CourseCreateInput): Promise<Course> {
   form.set('file', input.file)
   form.set('distance_km', String(input.distanceKm))
   form.set('difficulty', String(input.difficulty))
+  form.set('category', input.category)
   form.set('visibility', input.visibility)
   form.set('address', input.address)
   if (input.name.trim()) form.set('name', input.name.trim())
@@ -254,6 +270,22 @@ export function setCourseThumbnail(id: string, file: File): Promise<Course> {
 
 export function deleteCourseThumbnail(id: string): Promise<Course> {
   return request(`/admin/courses/${id}/thumbnail`, { method: 'DELETE' })
+}
+
+/** 추가 이미지 한 장을 맨 뒤에 붙인다. */
+export function addCourseImage(id: string, file: File): Promise<Course> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/courses/${id}/images`, { method: 'POST', body: form })
+}
+
+/** 추가 이미지 순서 바꾸기·빼기. 지금 있는 URL로만(빠진 것은 서버가 지운다). */
+export function setCourseImages(id: string, imageUrls: string[]): Promise<Course> {
+  return request(`/admin/courses/${id}/images`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_urls: imageUrls }),
+  })
 }
 
 // --- 스탬프 -------------------------------------------------------------

@@ -43,6 +43,7 @@ export default function CourseCreateModal({ onClose, onCreated }: Props) {
         name: validated.data.name,
         distanceKm: validated.data.distanceKm,
         difficulty: validated.data.difficulty,
+        category: validated.data.category,
         visibility: validated.data.visibility,
         address: validated.data.address,
         tags: validated.data.tags,

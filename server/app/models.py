@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -99,6 +100,11 @@ class RefreshToken(Base):
     )
 
 
+# 코스 카테고리. 아트런·로드런·트레일런·챌린지런. 값을 늘리면 schemas.CourseCategory와
+# ck_courses_category(마이그레이션)도 같이 바꾼다.
+COURSE_CATEGORIES: tuple[str, ...] = ("art", "road", "trail", "challenge")
+
+
 class Course(Base):
     """관리자가 코스 명단(courses/courses.yaml)을 기준으로 올리는 러닝 코스.
 
@@ -107,12 +113,20 @@ class Course(Base):
     """
 
     __tablename__ = "courses"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('art', 'road', 'trail', 'challenge')", name="ck_courses_category"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
 
     name: Mapped[str] = mapped_column(String(200))
+
+    # 필수. COURSE_CATEGORIES 중 하나(DB CHECK로도 막는다). 태그와 별개로 코스를 크게 나눈다.
+    category: Mapped[str] = mapped_column(String(20))
 
     # 'public' | 'admin'. admin이면 role='admin'인 앱 사용자에게만 내려간다(테스트
     # 코스). 기본값 없음 — NULL은 공개가 아니라서 일반 사용자에게 보이지 않는다.
@@ -148,6 +162,10 @@ class Course(Base):
     # 전용 엔드포인트(PUT/DELETE /courses/{id}/thumbnail)가 업로드·교체·삭제하며
     # 채우고, 코스 등록/수정(GPX·메타데이터)은 이 컬럼을 건드리지 않는다.
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    # 썸네일 말고 더 보여 줄 이미지(public URL, 보여 줄 순서대로). 전용 엔드포인트
+    # (POST/PUT /admin/courses/{id}/images)만 바꾼다.
+    image_urls: Mapped[list] = mapped_column(JSONB, default=list)
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
