@@ -6,8 +6,9 @@ import 'package:flutter/material.dart';
 import '../models/notice.dart';
 import '../theme/app_theme.dart';
 
-/// 배너 가로:세로 비율. 시안(402×172)을 따른다.
-const _kBannerAspectRatio = 402 / 172;
+/// 배너 가로:세로 비율 21:9. 시안(402×172)과 사실상 같고, 제작 기준은 1680×720.
+/// 운영툴 업로드 검사(imageSpec.BANNER_SPEC)와 맞춰야 한다.
+const _kBannerAspectRatio = 7 / 3;
 
 /// 홈 상단 풀블리드 이미지 배너. 스와이프로 넘기고, 4초마다 자동으로도 넘어간다.
 ///

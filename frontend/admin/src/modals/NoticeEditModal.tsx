@@ -9,6 +9,7 @@ import {
   updateNotice,
   type Notice,
 } from '../api'
+import { BANNER_SPEC, validateBannerImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
 import NoticeForm, {
   validateNotice,
@@ -161,6 +162,11 @@ function ImageSection({
       return
     }
     setError(null)
+    const problem = await validateBannerImage(file)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setSaving(true)
     try {
       const saved = await setNoticeImage(notice.id, file)
@@ -189,7 +195,9 @@ function ImageSection({
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>배너 이미지</h3>
-      <p className="muted">올리면 앱 홈 상단 배너에 실리고, 누르면 이 공지가 열려요. 가로 3:1 권장.</p>
+      <p className="muted">
+        올리면 앱 홈 상단 배너에 실리고, 누르면 이 공지가 열려요. {BANNER_SPEC.hint}.
+      </p>
       {notice.image_url ? (
         <img className="thumb banner" src={notice.image_url} alt="현재 배너" />
       ) : (

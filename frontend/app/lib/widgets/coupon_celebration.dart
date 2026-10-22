@@ -33,10 +33,18 @@ class _CouponCelebration extends StatefulWidget {
 
 class _CouponCelebrationState extends State<_CouponCelebration>
     with SingleTickerProviderStateMixin {
-  static const _duration = Duration(milliseconds: 1500);
+  // 구간은 ms로 적는다. 전체 길이는 광택이 끝나는 시점.
+  static const _totalMs = 1770;
+  static const _riseMs = (0, 600);
+  static const _flipMs = (450, 1125);
+  static const _shineMs = (1020, 1770); // 0.75초
+  static const _captionMs = (1050, 1425);
 
-  /// 전체 진행(0~1) 중 티켓이 뒤집혀 앞면이 보이는 시점.
-  static const _revealAt = 0.55;
+  /// 티켓이 뒤집혀 앞면이 보이는 시점(진동).
+  static const _revealAt = 825 / _totalMs;
+
+  static Interval _interval((int, int) ms, Curve curve) =>
+      Interval(ms.$1 / _totalMs, ms.$2 / _totalMs, curve: curve);
 
   late final AnimationController _controller;
   bool _revealed = false;
@@ -53,27 +61,30 @@ class _CouponCelebrationState extends State<_CouponCelebration>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: _duration);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: _totalMs),
+    );
 
     _rise = Tween(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0, 0.4, curve: Curves.easeOutCubic),
+        curve: _interval(_riseMs, Curves.easeOutCubic),
       ),
     );
     _flip = Tween(begin: pi, end: 0.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.3, 0.75, curve: Curves.easeInOutBack),
+        curve: _interval(_flipMs, Curves.easeInOutBack),
       ),
     );
     _shine = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.68, 1, curve: Curves.easeInOut),
+      curve: _interval(_shineMs, Curves.easeInOut),
     );
     _caption = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.7, 0.95, curve: Curves.easeOutCubic),
+      curve: _interval(_captionMs, Curves.easeOutCubic),
     );
 
     _controller.addListener(_onTick);
@@ -181,12 +192,15 @@ class _TicketFront extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: const Alignment(-1, -0.6),
                         end: const Alignment(1, 0.6),
+                        // 넓은 은은한 띠 + 가운데 선명한 심.
                         colors: [
                           Colors.white.withValues(alpha: 0),
-                          Colors.white.withValues(alpha: 0.6),
+                          Colors.white.withValues(alpha: 0.4),
+                          Colors.white.withValues(alpha: 0.9),
+                          Colors.white.withValues(alpha: 0.4),
                           Colors.white.withValues(alpha: 0),
                         ],
-                        stops: const [0.4, 0.5, 0.6],
+                        stops: const [0.22, 0.4, 0.5, 0.6, 0.78],
                         // 빛줄기를 카드 왼쪽 밖(-1)에서 오른쪽 밖(+1)까지 민다.
                         transform: _SlideGradient(shine * 2 - 1),
                       ),
