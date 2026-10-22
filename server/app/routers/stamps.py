@@ -9,14 +9,17 @@ from app.deps import current_user_id, current_user_is_admin
 from app.models import Course, Stamp, StampDefinition
 from app.routers.courses import visible_courses
 from app.schemas import StampDefinitionOut, StampOut
-from app.stamp_rules import COURSE_COMPLETE
+from app.stamp_rules import COURSE_COMPLETE, RUNNING_WEEK_COURSE
+
+# 코스에 묶인 스탬프 종류. 앱이 코스 안내로 보내고, 숨긴 코스면 스탬프도 숨긴다.
+_COURSE_TYPES = (COURSE_COMPLETE, RUNNING_WEEK_COURSE)
 
 router = APIRouter(tags=["stamps"])
 
 
 def course_id_of(definition: StampDefinition) -> uuid.UUID | None:
-    """course_complete 스탬프의 코스. 그 밖의 종류는 None."""
-    if definition.condition_type != COURSE_COMPLETE:
+    """코스 완주·러닝위크 코스 스탬프의 코스. 그 밖의 종류는 None."""
+    if definition.condition_type not in _COURSE_TYPES:
         return None
     raw = (definition.condition_params or {}).get("course_id")
     try:
@@ -59,7 +62,7 @@ def list_stamp_definitions(
     db: Session = Depends(get_db),
     is_admin: bool = Depends(current_user_is_admin),
 ):
-    """스탬프 탭이 그릴 스탬프 종류(노출 중인 것). 숨긴 코스의 완주 스탬프는 뺀다."""
+    """스탬프 탭이 그릴 스탬프 종류(노출 중인 것). 숨긴 코스의 스탬프는 뺀다."""
     definitions = list(
         db.execute(
             select(StampDefinition)
@@ -82,7 +85,7 @@ def list_stamp_definitions(
     return [
         definition_to_out(d)
         for d in definitions
-        if d.condition_type != COURSE_COMPLETE or course_id_of(d) in visible
+        if d.condition_type not in _COURSE_TYPES or course_id_of(d) in visible
     ]
 
 

@@ -1,8 +1,8 @@
-"""러닝위크 도메인. 러닝위크 기간에만 도는 보상(쿠폰·빙고)은 전부 여기 진입점에서 시작한다.
+"""러닝위크 도메인. 러닝위크 기간에만 도는 보상(전용 스탬프·쿠폰·빙고)은 전부 여기 진입점
+(on_course_completed)에서 시작한다.
 
-- on_course_completed: 완주 인증 직후. 공개 중인 회차가 있을 때만 코스완료 쿠폰을 주고,
-  참가자면 빙고 보상까지 판정한다.
-- on_participated: 참가 신청 직후. 신청 전에 이미 채운 줄의 빙고 보상을 준다.
+- on_course_completed: 완주 인증 직후. 공개 중인 회차에 참가 신청한 사람에게만 그 회차 전용
+  코스 스탬프·코스완료 쿠폰·빙고 보상을 준다.
 
 쿠폰·스탬프 발급 규칙(app.coupon_rules, app.stamp_rules)과 빙고 계산(app.bingo)은 기간을
 모른다. 기간 판단은 이 모듈만 한다. 커밋은 부르는 쪽이 한다.
@@ -11,10 +11,10 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import bingo, coupon_rules
+from app import bingo, coupon_rules, stamp_rules
 from app.models import RunningWeek, RunningWeekParticipation
 
 
@@ -52,18 +52,19 @@ def participated(db: Session, week_id: uuid.UUID, user_id: str) -> bool:
     )
 
 
+def next_round(db: Session) -> int:
+    """새 회차 번호. 지금까지 가장 큰 회차 + 1."""
+    return (db.execute(select(func.max(RunningWeek.round))).scalar() or 0) + 1
+
+
 def on_course_completed(
     db: Session, user_id: str, course_id: uuid.UUID, run_id: uuid.UUID
 ) -> None:
-    """완주 인증이 통과했을 때. 러닝위크가 아니면 아무것도 하지 않는다."""
+    """완주 인증이 통과했을 때. 러닝위크가 아니거나 참가자가 아니면 아무것도 하지 않는다."""
     week = current_week(db)
-    if week is None:
+    if week is None or not participated(db, week.id, user_id):
         return
+    stamp_rules.on_running_week_course_completed(db, user_id, week.id, course_id, run_id)
     coupon_rules.on_course_completed(db, user_id, course_id, run_id)
-    if participated(db, week.id, user_id):
-        bingo.grant_rewards(db, user_id, week, run_id)
+    bingo.grant_rewards(db, user_id, week, run_id)
 
-
-def on_participated(db: Session, user_id: str, week: RunningWeek) -> None:
-    """참가 신청 직후. 신청 전에 채운 줄이 있으면 바로 준다."""
-    bingo.grant_rewards(db, user_id, week, run_id=None)

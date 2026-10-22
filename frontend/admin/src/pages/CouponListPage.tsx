@@ -32,7 +32,7 @@ const TRIGGER_LABEL: Record<CouponTriggerType, string> = {
 const TRIGGER_HINT: Record<CouponTriggerType, string> = {
   manual: '"지급" 탭에서 회원을 골라 직접 줘요.',
   course_complete:
-    '러닝위크 공개 중에 아무 코스나 완주 인증이 통과하면 자동으로 한 장. 코스마다 한 번.',
+    '러닝위크 참가자가 공개 기간에 아무 코스나 완주하면 자동으로 한 장. 코스마다 한 번.',
   bingo_complete:
     '러닝위크 빙고판 25칸을 다 채우면(=25개 코스 완주) 자동으로 한 장. 참가 신청한 사람만, 회차마다 한 번.',
 }

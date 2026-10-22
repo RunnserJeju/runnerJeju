@@ -26,6 +26,7 @@ interface Props {
 
 const CONDITION_LABEL: Record<StampConditionType, string> = {
   course_complete: '코스 완주',
+  running_week_course: '러닝위크 코스 완주',
   bingo_lines: '빙고 줄 완성',
   manual: '운영자 지급',
 }
@@ -68,8 +69,10 @@ export default function StampListPage({ onUnauthorized }: Props) {
 
   const courseName = (stamp: StampDefinition) =>
     courses.find((c) => c.id === stamp.condition_params.course_id)?.name ?? '(없는 코스)'
-  const weekTitle = (stamp: StampDefinition) =>
-    weeks.find((w) => w.id === stamp.condition_params.running_week_id)?.title ?? '(없는 회차)'
+  const weekLabel = (stamp: StampDefinition) => {
+    const week = weeks.find((w) => w.id === stamp.condition_params.running_week_id)
+    return week ? `${week.round}회 ${week.title}` : '(없는 회차)'
+  }
 
   return (
     <>
@@ -114,11 +117,16 @@ export default function StampListPage({ onUnauthorized }: Props) {
                   {stamp.condition_type === 'course_complete' && (
                     <div className="muted">{courseName(stamp)}</div>
                   )}
+                  {stamp.condition_type === 'running_week_course' && (
+                    <div className="muted">
+                      {courseName(stamp)} · {weekLabel(stamp)}
+                    </div>
+                  )}
                   {stamp.condition_type === 'bingo_lines' && (
                     <div className="muted">
                       {stamp.condition_params.lines}줄
                       {stamp.condition_params.lines === MAX_BINGO_LINES && ' (판 전체)'} ·{' '}
-                      {weekTitle(stamp)}
+                      {weekLabel(stamp)}
                     </div>
                   )}
                 </td>
@@ -192,16 +200,20 @@ function StampModal({
       setError('이름을 입력해 주세요.')
       return
     }
-    if (values.condition_type === 'course_complete' && !values.condition_params.course_id) {
+    const needsCourse =
+      values.condition_type === 'course_complete' || values.condition_type === 'running_week_course'
+    const needsWeek =
+      values.condition_type === 'running_week_course' || values.condition_type === 'bingo_lines'
+    if (needsCourse && !values.condition_params.course_id) {
       setError('완주할 코스를 골라 주세요.')
       return
     }
-    const { running_week_id, lines } = values.condition_params
+    const { course_id, running_week_id, lines } = values.condition_params
+    if (needsWeek && !running_week_id) {
+      setError('러닝위크 회차를 골라 주세요.')
+      return
+    }
     if (values.condition_type === 'bingo_lines') {
-      if (!running_week_id) {
-        setError('러닝위크 회차를 골라 주세요.')
-        return
-      }
       if (!lines || lines < 1 || lines > MAX_BINGO_LINES) {
         setError(`줄 수는 1~${MAX_BINGO_LINES} 사이로 입력해 주세요.`)
         return
@@ -213,10 +225,12 @@ function StampModal({
       description: values.description?.trim() || null,
       condition_params:
         values.condition_type === 'course_complete'
-          ? { course_id: values.condition_params.course_id }
-          : values.condition_type === 'bingo_lines'
-            ? { running_week_id, lines }
-            : {},
+          ? { course_id }
+          : values.condition_type === 'running_week_course'
+            ? { running_week_id, course_id }
+            : values.condition_type === 'bingo_lines'
+              ? { running_week_id, lines }
+              : {},
     }
     setSaving(true)
     try {
@@ -266,64 +280,74 @@ function StampModal({
             }
           >
             <option value="course_complete">{CONDITION_LABEL.course_complete}</option>
+            <option value="running_week_course">{CONDITION_LABEL.running_week_course}</option>
             <option value="bingo_lines">{CONDITION_LABEL.bingo_lines}</option>
             <option value="manual">{CONDITION_LABEL.manual}</option>
           </select>
           {values.condition_type === 'manual' && (
-            <div className="hint">운영자 지급 기능은 다음 작업이에요. 지금은 받을 방법이 없어요.</div>
+            <div className="hint">운영진이 데이터에 직접 넣어 지급해요(지금은 지급 계획 없음).</div>
           )}
         </div>
-        {values.condition_type === 'course_complete' && (
+        {(values.condition_type === 'running_week_course' ||
+          values.condition_type === 'bingo_lines') && (
           <div className="field">
-            <label htmlFor="stamp-course">코스</label>
+            <label htmlFor="stamp-week">러닝위크 회차</label>
+            <SearchSelect
+              id="stamp-week"
+              value={values.condition_params.running_week_id ?? ''}
+              options={weeks.map((week) => ({ id: week.id, label: `${week.round}회 ${week.title}` }))}
+              onSelect={(id) =>
+                set({ condition_params: { ...values.condition_params, running_week_id: id } })
+              }
+              emptyText="등록된 러닝위크가 없어요"
+            />
+          </div>
+        )}
+        {(values.condition_type === 'course_complete' ||
+          values.condition_type === 'running_week_course') && (
+          <div className="field">
+            <label htmlFor="stamp-course">
+              코스
+              {values.condition_type === 'running_week_course' && (
+                <span className="hint">참가 신청한 사람이 이 회차 공개 기간에 완주하면 받아요. 빙고 칸이 돼요</span>
+              )}
+            </label>
             <SearchSelect
               id="stamp-course"
               value={values.condition_params.course_id ?? ''}
               options={courses.map((course) => ({ id: course.id, label: course.name }))}
-              onSelect={(id) => set({ condition_params: { course_id: id } })}
+              onSelect={(id) =>
+                set({ condition_params: { ...values.condition_params, course_id: id } })
+              }
               emptyText="등록된 코스가 없어요"
             />
           </div>
         )}
         {values.condition_type === 'bingo_lines' && (
-          <>
-            <div className="field">
-              <label htmlFor="stamp-week">러닝위크 회차</label>
-              <SearchSelect
-                id="stamp-week"
-                value={values.condition_params.running_week_id ?? ''}
-                options={weeks.map((week) => ({ id: week.id, label: week.title }))}
-                onSelect={(id) =>
-                  set({ condition_params: { ...values.condition_params, running_week_id: id } })
-                }
-                emptyText="등록된 러닝위크가 없어요"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="stamp-lines">
-                줄 수{' '}
-                <span className="hint">
-                  이 회차 빙고판에서 몇 줄을 채우면 받는지. {MAX_BINGO_LINES}이면 판 전체(=25개 코스
-                  완주) 스페셜 스탬프. 참가 신청한 사람만 받아요
-                </span>
-              </label>
-              <input
-                id="stamp-lines"
-                type="number"
-                min={1}
-                max={MAX_BINGO_LINES}
-                value={values.condition_params.lines ?? ''}
-                onChange={(e) =>
-                  set({
-                    condition_params: {
-                      ...values.condition_params,
-                      lines: e.target.value ? Number(e.target.value) : undefined,
-                    },
-                  })
-                }
-              />
-            </div>
-          </>
+          <div className="field">
+            <label htmlFor="stamp-lines">
+              줄 수{' '}
+              <span className="hint">
+                이 회차 빙고판에서 몇 줄을 채우면 받는지. {MAX_BINGO_LINES}이면 판 전체(=25개 코스
+                완주) 스페셜 스탬프. 참가 신청한 사람만 받아요
+              </span>
+            </label>
+            <input
+              id="stamp-lines"
+              type="number"
+              min={1}
+              max={MAX_BINGO_LINES}
+              value={values.condition_params.lines ?? ''}
+              onChange={(e) =>
+                set({
+                  condition_params: {
+                    ...values.condition_params,
+                    lines: e.target.value ? Number(e.target.value) : undefined,
+                  },
+                })
+              }
+            />
+          </div>
         )}
         <div className="field">
           <label htmlFor="stamp-order">

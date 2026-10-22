@@ -402,12 +402,12 @@ class VerificationOut(BaseModel):
     detail: str | None
     completed_at: datetime | None
 
-    # 검증이 matched면 이때 발급된 스탬프 id. 앱은 이 값으로 스탬프를 조회한다.
+    # 이 러닝으로 새로 받은 코스 스탬프 id. 재완주라 새로 받은 게 없으면 None.
     earned_stamp_id: uuid.UUID | None = None
-    # 이 코스 완주로 받은 코스완료 쿠폰(user_coupon id). 쿠폰이 꺼져 있으면 None.
+    # 이 러닝으로 새로 받은 코스완료 쿠폰(user_coupon id). 없으면 None.
     earned_coupon_id: uuid.UUID | None = None
-    # 이 러닝으로 받은 빙고 스탬프(줄 수 순)와 스페셜 쿠폰(빙고판 완성).
-    earned_bingo_stamp_ids: list[uuid.UUID] = []
+    # 이 러닝으로 받은 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 스페셜 쿠폰(빙고판 완성).
+    earned_running_week_stamp_ids: list[uuid.UUID] = []
     earned_bingo_coupon_id: uuid.UUID | None = None
 
 
@@ -546,6 +546,8 @@ class RunningWeekParticipationCreate(BaseModel):
 class RunningWeekCreate(BaseModel):
     """운영툴 등록·수정. 배너 이미지와 빙고 배치는 전용 엔드포인트로 따로 바꾼다."""
 
+    # 회차. 등록 때 비우면 지금까지 가장 큰 회차 + 1, 수정 때 비우면 그대로.
+    round: int | None = Field(default=None, ge=1, le=999)
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     starts_at: datetime | None = None
@@ -580,6 +582,7 @@ class AdminRunningWeekOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    round: int
     title: str
     description: str | None
     image_url: str | None

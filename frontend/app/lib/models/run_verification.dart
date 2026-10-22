@@ -48,7 +48,7 @@ class RunVerification {
     this.completedAt,
     this.earnedStampId,
     this.earnedCouponId,
-    this.earnedBingoStampIds = const [],
+    this.earnedRunningWeekStampIds = const [],
     this.earnedBingoCouponId,
   });
 
@@ -71,8 +71,8 @@ class RunVerification {
   /// 이 코스 완주로 받은 코스완료 쿠폰 id. 쿠폰이 꺼져 있으면 null.
   final String? earnedCouponId;
 
-  /// 이 러닝으로 받은 빙고 스탬프 id(줄 수 순). 러닝위크 참가자만.
-  final List<String> earnedBingoStampIds;
+  /// 이 러닝으로 받은 러닝위크 스탬프 id. 코스 전용 스탬프 먼저, 빙고 스탬프는 줄 수 순.
+  final List<String> earnedRunningWeekStampIds;
 
   /// 이 러닝으로 빙고판을 다 채워 받은 스페셜 쿠폰 id.
   final String? earnedBingoCouponId;
@@ -94,8 +94,8 @@ class RunVerification {
             : DateTime.parse(json['completed_at'] as String),
         earnedStampId: json['earned_stamp_id']?.toString(),
         earnedCouponId: json['earned_coupon_id']?.toString(),
-        earnedBingoStampIds: [
-          for (final id in json['earned_bingo_stamp_ids'] as List? ?? const [])
+        earnedRunningWeekStampIds: [
+          for (final id in json['earned_running_week_stamp_ids'] as List? ?? const [])
             id.toString(),
         ],
         earnedBingoCouponId: json['earned_bingo_coupon_id']?.toString(),

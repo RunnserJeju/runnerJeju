@@ -15,26 +15,30 @@ from app.schemas import VerificationCreate, VerificationOut
 router = APIRouter(tags=["verifications"])
 
 
-def _earned_stamp_id(db: Session, user_id: str, course_id: uuid.UUID) -> uuid.UUID | None:
-    """이 코스 완주로 받는 스탬프 중 사용자가 가진 것. 여러 개면 처음 것."""
+# 팝업은 이번 러닝으로 새로 받은 것만 띄운다 — 같은 코스를 다시 완주해도 다시 뜨지 않게
+# 발급 기록의 run_id로 찾는다.
+
+
+def _earned_stamp_id(db: Session, run_id: uuid.UUID, course_id: uuid.UUID) -> uuid.UUID | None:
+    """이 러닝으로 받은 코스 스탬프. 여러 개면 처음 것."""
     definition_ids = [d.id for d in stamp_rules.course_stamp_definitions(db, course_id)]
     if not definition_ids:
         return None
 
     return db.execute(
         select(Stamp.id)
-        .where(Stamp.user_id == user_id, Stamp.stamp_definition_id.in_(definition_ids))
+        .where(Stamp.run_id == run_id, Stamp.stamp_definition_id.in_(definition_ids))
         .order_by(Stamp.acquired_at)
         .limit(1)
     ).scalar_one_or_none()
 
 
-def _earned_coupon_id(db: Session, user_id: str, course_id: uuid.UUID) -> uuid.UUID | None:
-    """이 코스 완주로 받은 코스완료 쿠폰. 여러 템플릿이면 처음 것."""
+def _earned_coupon_id(db: Session, run_id: uuid.UUID, course_id: uuid.UUID) -> uuid.UUID | None:
+    """이 러닝으로 받은 코스완료 쿠폰."""
     return db.execute(
         select(UserCoupon.id)
         .where(
-            UserCoupon.user_id == user_id,
+            UserCoupon.run_id == run_id,
             UserCoupon.grant_key == coupon_rules.course_grant_key(course_id),
         )
         .order_by(UserCoupon.issued_at)
@@ -42,14 +46,24 @@ def _earned_coupon_id(db: Session, user_id: str, course_id: uuid.UUID) -> uuid.U
     ).scalar_one_or_none()
 
 
-def _bingo_stamp_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
-    """이 러닝으로 받은 빙고 스탬프. 줄 수 순."""
+def _running_week_stamp_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
+    """이 러닝으로 받은 러닝위크 스탬프. 코스 전용 스탬프 먼저, 빙고 스탬프는 줄 수 순."""
     rows = db.execute(
-        select(Stamp.id, StampDefinition.condition_params)
+        select(Stamp.id, StampDefinition.condition_type, StampDefinition.condition_params)
         .join(StampDefinition, Stamp.stamp_definition_id == StampDefinition.id)
-        .where(Stamp.run_id == run_id, StampDefinition.condition_type == stamp_rules.BINGO_LINES)
+        .where(
+            Stamp.run_id == run_id,
+            StampDefinition.condition_type.in_(
+                (stamp_rules.RUNNING_WEEK_COURSE, stamp_rules.BINGO_LINES)
+            ),
+        )
     ).all()
-    return [stamp_id for stamp_id, params in sorted(rows, key=lambda r: int(r[1]["lines"]))]
+
+    def order(row) -> int:
+        _, condition_type, params = row
+        return 0 if condition_type == stamp_rules.RUNNING_WEEK_COURSE else int(params["lines"])
+
+    return [row[0] for row in sorted(rows, key=order)]
 
 
 def _bingo_coupon_id(db: Session, run_id: uuid.UUID) -> uuid.UUID | None:
@@ -64,11 +78,12 @@ def _bingo_coupon_id(db: Session, run_id: uuid.UUID) -> uuid.UUID | None:
     ).scalar_one_or_none()
 
 
-def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
+def _to_out(db: Session, verification: Verification) -> dict:
     matched = verification.status == "matched"
-    stamp_id = _earned_stamp_id(db, user_id, verification.course_id) if matched else None
-    coupon_id = _earned_coupon_id(db, user_id, verification.course_id) if matched else None
-    bingo_stamp_ids = _bingo_stamp_ids(db, verification.run_id) if matched else []
+    run_id = verification.run_id
+    stamp_id = _earned_stamp_id(db, run_id, verification.course_id) if matched else None
+    coupon_id = _earned_coupon_id(db, run_id, verification.course_id) if matched else None
+    week_stamp_ids = _running_week_stamp_ids(db, verification.run_id) if matched else []
     bingo_coupon_id = _bingo_coupon_id(db, verification.run_id) if matched else None
 
     return {
@@ -81,7 +96,7 @@ def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
         "completed_at": verification.completed_at,
         "earned_stamp_id": stamp_id,
         "earned_coupon_id": coupon_id,
-        "earned_bingo_stamp_ids": bingo_stamp_ids,
+        "earned_running_week_stamp_ids": week_stamp_ids,
         "earned_bingo_coupon_id": bingo_coupon_id,
     }
 
@@ -116,7 +131,7 @@ def request_verification(
     ).scalar_one_or_none()
 
     if existing is not None:
-        return _to_out(db, existing, user_id)
+        return _to_out(db, existing)
 
     # 러닝 경로만 구간으로 나눈다. 일시정지 동안 이동한 구간을 달린 것으로 세지
     # 않으려는 것이고(to_segments), 코스 경로는 끊기는 자리가 없다.
@@ -143,7 +158,7 @@ def request_verification(
     db.commit()
     db.refresh(record)
 
-    return _to_out(db, record, user_id)
+    return _to_out(db, record)
 
 
 @router.get("/verifications/{verification_id}", response_model=VerificationOut)
@@ -160,4 +175,4 @@ def get_verification(
     if record.run.user_id != user_id:
         raise HTTPException(status_code=404, detail="검증 정보를 찾을 수 없어요.")
 
-    return _to_out(db, record, user_id)
+    return _to_out(db, record)

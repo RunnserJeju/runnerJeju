@@ -37,7 +37,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
   /// 완주로 받은 코스완료 쿠폰. 스탬프 팝업이 닫힌 뒤 이어서 보여준다.
   Coupon? _earnedCoupon;
 
-  bool _bingoCelebrated = false;
+  bool _runningWeekCelebrated = false;
 
   /// 빙고판을 다 채워 받은 스페셜 쿠폰. 코스완료 쿠폰 아래에 같이 보여준다.
   Coupon? _bingoCoupon;
@@ -126,7 +126,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
       if (couponId != null && _earnedCoupon == null) {
         await _loadCoupon(couponId);
       }
-      await _celebrateBingo(verification);
+      await _celebrateRunningWeek(verification);
     } catch (e) {
       if (!mounted) return;
 
@@ -172,12 +172,12 @@ class _RunResultScreenState extends State<RunResultScreen> {
     }
   }
 
-  /// 빙고 스탬프(줄 수 순)와 스페셜 쿠폰을 코스 스탬프·쿠폰 팝업 뒤에 이어서 보여준다.
-  /// 재시도로 같은 검증을 다시 받아도 한 번만.
-  Future<void> _celebrateBingo(RunVerification verification) async {
-    if (_bingoCelebrated) return;
-    _bingoCelebrated = true;
-    for (final stampId in verification.earnedBingoStampIds) {
+  /// 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 스페셜 쿠폰을 코스 스탬프·쿠폰 팝업 뒤에
+  /// 이어서 보여준다. 재시도로 같은 검증을 다시 받아도 한 번만.
+  Future<void> _celebrateRunningWeek(RunVerification verification) async {
+    if (_runningWeekCelebrated) return;
+    _runningWeekCelebrated = true;
+    for (final stampId in verification.earnedRunningWeekStampIds) {
       try {
         final stamp = await Services.instance.stamp.loadStamp(stampId);
         if (!mounted) return;

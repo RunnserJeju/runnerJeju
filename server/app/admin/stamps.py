@@ -20,7 +20,7 @@ from app.schemas import (
     StampDefinitionCreate,
     StampDefinitionUpdate,
 )
-from app.stamp_rules import BINGO_LINES, COURSE_COMPLETE, CONDITION_TYPES
+from app.stamp_rules import BINGO_LINES, CONDITION_TYPES
 
 router = APIRouter(tags=["stamps"])
 
@@ -68,7 +68,7 @@ def _validated_params(db: Session, condition_type: str, params: dict) -> dict:
         raise HTTPException(status_code=422, detail=f"조건 값이 빠졌어요: {', '.join(missing)}")
 
     cleaned = {key: params[key] for key in required}
-    if condition_type == COURSE_COMPLETE:
+    if "course_id" in cleaned:
         try:
             course_id = uuid.UUID(str(cleaned["course_id"]))
         except ValueError:
@@ -76,19 +76,24 @@ def _validated_params(db: Session, condition_type: str, params: dict) -> dict:
         if db.get(Course, course_id) is None:
             raise HTTPException(status_code=422, detail="코스를 찾을 수 없어요.")
         cleaned["course_id"] = str(course_id)
-    if condition_type == BINGO_LINES:
+    if "running_week_id" in cleaned:
         try:
             week_id = uuid.UUID(str(cleaned["running_week_id"]))
-            lines = int(cleaned["lines"])
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=422, detail="회차나 줄 수 형식이 아니에요.") from None
+        except ValueError:
+            raise HTTPException(status_code=422, detail="회차 id 형식이 아니에요.") from None
         if db.get(RunningWeek, week_id) is None:
             raise HTTPException(status_code=422, detail="러닝위크 회차를 찾을 수 없어요.")
+        cleaned["running_week_id"] = str(week_id)
+    if condition_type == BINGO_LINES:
+        try:
+            lines = int(cleaned["lines"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail="줄 수 형식이 아니에요.") from None
         if not 1 <= lines <= MAX_BINGO_LINES:
             raise HTTPException(
                 status_code=422, detail=f"줄 수는 1~{MAX_BINGO_LINES} 사이여야 해요."
             )
-        cleaned = {"running_week_id": str(week_id), "lines": lines}
+        cleaned["lines"] = lines
     return cleaned
 
 

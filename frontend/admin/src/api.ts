@@ -259,9 +259,10 @@ export function deleteCourseThumbnail(id: string): Promise<Course> {
 // --- 스탬프 -------------------------------------------------------------
 
 /** 획득 조건 종류. 서버 app/stamp_rules.CONDITION_TYPES와 같아야 한다. */
-export type StampConditionType = 'course_complete' | 'bingo_lines' | 'manual'
+export type StampConditionType = 'course_complete' | 'running_week_course' | 'bingo_lines' | 'manual'
 
-/** 조건 값. course_complete {course_id} | bingo_lines {running_week_id, lines} | manual {}. */
+/** 조건 값. course_complete {course_id} | running_week_course {running_week_id, course_id}
+ * | bingo_lines {running_week_id, lines} | manual {}. */
 export interface StampConditionParams {
   course_id?: string
   running_week_id?: string
@@ -332,6 +333,8 @@ export const BINGO_CELLS = 25
 /** 러닝위크 회차. 공개 규칙은 공지와 같고, 공개 중이면 앱 커뮤니티 상단에 배너가 뜬다. */
 export interface RunningWeek {
   id: string
+  /** 회차(1, 2, …). 전용 스탬프를 구분하는 데이터이고 앱에는 안 보인다. */
+  round: number
   title: string
   description: string | null
   image_url: string | null
@@ -346,6 +349,8 @@ export interface RunningWeek {
 }
 
 export interface RunningWeekPayload {
+  /** 등록 때 비우면 서버가 다음 회차로 매긴다. */
+  round: number | null
   title: string
   description: string | null
   starts_at: string | null

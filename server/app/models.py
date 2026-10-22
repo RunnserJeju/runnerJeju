@@ -367,8 +367,9 @@ class StampDefinition(Base):
     # 발급 기록은 이 값을 조회 시 참조하므로 도안을 바꾸면 이미 딴 스탬프에도 반영된다.
     image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
-    # 'course_complete' {"course_id": str} | 'bingo_lines' {"running_week_id": str, "lines": int}
-    # | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
+    # 'course_complete' {"course_id": str}
+    # | 'running_week_course' {"running_week_id": str, "course_id": str} (러닝위크 기간에 그 코스 완주)
+    # | 'bingo_lines' {"running_week_id": str, "lines": int} | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
     condition_type: Mapped[str] = mapped_column(String(30))
     condition_params: Mapped[dict] = mapped_column(JSONB, default=dict)
 
@@ -475,8 +476,9 @@ class RunningWeek(Base):
     노출 규칙은 공지와 같다 — starts_at/ends_at은 null이면 "제한 없음", is_active로
     따로 끌 수 있다. 공개 중이면 앱 커뮤니티 상단에 image_url 배너가 뜬다.
 
-    빙고 칸 전용 테이블은 두지 않는다. 칸 순서대로 스탬프 종류 id 25개만 담고, 칸이
-    채워졌는지는 조회 때 발급 기록(stamps)에서 계산한다. 배열 안 id에는 외래키가 없어서
+    빙고 칸은 이 회차 전용 스탬프(running_week_course)로 채운다. 칸 전용 테이블은 두지 않고
+    칸 순서대로 스탬프 종류 id 25개만 담고, 칸이 채워졌는지는 조회 때 발급 기록(stamps)에서
+    계산한다. 배열 안 id에는 외래키가 없어서
     저장할 때 서버가 실제 스탬프 종류인지 확인한다(admin/running_weeks).
     """
 
@@ -485,6 +487,8 @@ class RunningWeek(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    # 회차(1, 2, …). 러닝위크 전용 스탬프가 몇 회차 것인지 구분하는 데이터이고 앱에는 안 내린다.
+    round: Mapped[int] = mapped_column(Integer, unique=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text, default=None)
     # 커뮤니티 상단 배너(Supabase Storage public URL). PUT/DELETE /admin/running-weeks/{id}/image.

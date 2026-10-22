@@ -94,7 +94,4 @@ def participate(
         db.rollback()
         raise HTTPException(status_code=409, detail="이미 참가 신청을 했어요.") from None
 
-    running_week.on_participated(db, user_id, week)
-    db.commit()
-
     return _to_out(db, week, user_id)

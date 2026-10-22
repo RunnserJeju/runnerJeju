@@ -26,7 +26,7 @@ interface Props {
 
 type Visibility = 'hidden' | 'scheduled' | 'live' | 'expired'
 
-/** 서버 routers/running_weeks.is_visible과 같은 규칙. */
+/** 서버 app/running_week.is_visible과 같은 규칙. */
 function visibilityOf(week: RunningWeek, now: Date): Visibility {
   if (!week.is_active) return 'hidden'
   if (week.starts_at && new Date(week.starts_at) > now) return 'scheduled'
@@ -93,7 +93,9 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
         <button onClick={() => setEditing('new')}>+ 회차 추가</button>
       </div>
       <p className="muted page-desc">
-        공개 기간 안이면 앱 커뮤니티 상단에 배너가 뜨고, 누르면 러닝위크 화면이 열려요.
+        공개 기간 안이면 앱 커뮤니티 상단에 배너가 뜨고, 누르면 러닝위크 화면이 열려요. 참가 신청한
+        사람이 공개 기간에 완주하면 코스 스탬프와 함께 그 회차 러닝위크 스탬프를 받아요(쿠폰도
+        참가자만).
       </p>
       {error && <div className="error">{error}</div>}
       {weeks == null && !error && <p className="muted">불러오는 중…</p>}
@@ -103,6 +105,7 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
           <thead>
             <tr>
               <th></th>
+              <th className="nowrap">회차</th>
               <th>제목</th>
               <th>상태</th>
               <th>공개 기간</th>
@@ -122,6 +125,7 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
                       <div className="thumb wide placeholder">배너 없음</div>
                     )}
                   </td>
+                  <td className="nowrap">{week.round}회</td>
                   <td>
                     <strong>{week.title}</strong>
                     {week.description && <div className="muted clamp">{week.description}</div>}
@@ -181,7 +185,7 @@ function RunningWeekModal({
   }
 
   return (
-    <Modal title={week ? `러닝위크 — ${week.title}` : '새 러닝위크'} onClose={onClose}>
+    <Modal title={week ? `러닝위크 ${week.round}회 — ${week.title}` : '새 러닝위크'} onClose={onClose}>
       {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
       <ContentSection week={week} onSaved={saved} />
       {week && <ImageSection week={week} onSaved={saved} />}
@@ -198,6 +202,7 @@ function ContentSection({
   week: RunningWeek | null
   onSaved: (week: RunningWeek, message: string) => void
 }) {
+  const [round, setRound] = useState(week ? String(week.round) : '')
   const [title, setTitle] = useState(week?.title ?? '')
   const [description, setDescription] = useState(week?.description ?? '')
   const [startsAt, setStartsAt] = useState(toLocalInput(week?.starts_at ?? null))
@@ -212,6 +217,10 @@ function ContentSection({
       setError('제목을 입력해 주세요.')
       return
     }
+    if (round && !/^\d+$/.test(round)) {
+      setError('회차는 숫자로 입력해 주세요.')
+      return
+    }
     const start = startsAt ? new Date(startsAt) : null
     const end = endsAt ? new Date(endsAt) : null
     if (start && end && end < start) {
@@ -219,6 +228,7 @@ function ContentSection({
       return
     }
     const payload: RunningWeekPayload = {
+      round: round ? Number(round) : null,
       title: title.trim(),
       description: description.trim() || null,
       starts_at: start ? start.toISOString() : null,
@@ -230,7 +240,12 @@ function ContentSection({
       const next = week
         ? await updateRunningWeek(week.id, payload)
         : await createRunningWeek(payload)
-      onSaved(next, week ? '저장했어요.' : '등록했어요. 이어서 배너와 빙고를 설정해 주세요.')
+      onSaved(
+        next,
+        week
+          ? '저장했어요.'
+          : '등록했어요. 이어서 배너와 빙고를 설정해 주세요.',
+      )
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '저장에 실패했어요.')
     } finally {
@@ -241,9 +256,23 @@ function ContentSection({
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>내용</h3>
-      <div className="field">
-        <label htmlFor="rw-title">제목</label>
-        <input id="rw-title" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <div className="row">
+        <div className="field" style={{ flex: '0 0 120px' }}>
+          <label htmlFor="rw-round">
+            회차 <span className="hint">{week ? '' : '비우면 다음 회차'}</span>
+          </label>
+          <input
+            id="rw-round"
+            inputMode="numeric"
+            maxLength={3}
+            value={round}
+            onChange={(e) => setRound(e.target.value.replace(/\D/g, ''))}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="rw-title">제목</label>
+          <input id="rw-title" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
+        </div>
       </div>
       <div className="field">
         <label htmlFor="rw-description">
@@ -391,8 +420,11 @@ function BingoSection({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // 빙고 스탬프는 빙고 결과라 칸에 놓지 않는다(서버도 막는다).
-  const placeable = stamps.filter((s) => s.condition_type !== 'bingo_lines')
+  // 칸에는 이 회차 전용 코스 스탬프만 놓는다(서버도 막는다).
+  const placeable = stamps.filter(
+    (s) =>
+      s.condition_type === 'running_week_course' && s.condition_params.running_week_id === week.id,
+  )
   const active = placeable.filter((s) => s.is_active)
   const stampOptions = [
     { id: '', label: '비우기' },
@@ -405,7 +437,7 @@ function BingoSection({
   const randomFill = () => {
     setError(null)
     if (active.length < BINGO_CELLS) {
-      setError(`노출 중인 스탬프가 ${active.length}개라 25칸을 채울 수 없어요.`)
+      setError(`노출 중인 이 회차 스탬프가 ${active.length}개라 25칸을 채울 수 없어요.`)
       return
     }
     setCells(shuffled(active).slice(0, BINGO_CELLS).map((s) => s.id))
@@ -435,7 +467,8 @@ function BingoSection({
     <div className="card">
       <h3 style={{ marginTop: 0 }}>빙고 배치 (5x5)</h3>
       <p className="muted">
-        칸마다 스탬프 하나. 그 스탬프를 받으면 칸이 채워져요(러닝위크 전에 받은 것도 인정).
+        칸마다 이 회차 러닝위크 코스 스탬프 하나. 참가자가 공개 기간에 그 코스를 완주하면 칸이
+        채워져요. 이 회차 스탬프 {placeable.length}개.
       </p>
       <div
         style={{
