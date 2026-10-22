@@ -97,6 +97,13 @@
 
 ## 스탬프 도안 (백엔드, 2026-09-02)
 
+> **2026-10-22 카테고리 기본 도안 (`0040`)**: 코스 완주 스탬프는 `image_url`이 비어 있으면
+> 코스 `category`(art/road/trail/challenge)별 고정 파일을 쓴다(`app/stamp_images.py`, Storage
+> `course-stamps/category/{category}_run.png`). DB에 URL을 두지 않아 코스 카테고리를 바꾸면 도안도
+> 따라간다. 운영툴에서 올린 도안이 있으면 그게 우선, 지우면 다시 기본. 난이도별 도안 URL은 0040이
+> 비웠다. 파일 교체는 `python -m tools.upload_category_stamps <디렉터리>`(api 컨테이너 안, 같은 경로 덮어쓰기).
+> 운영 응답(`GET /admin/stamps`)의 `image_url`은 직접 올린 것만이라 기본 도안은 "등록된 도안 없음"으로 보인다.
+
 > **2026-10-18 바뀜(#71)**: 스탬프를 코스에서 분리했다. 도안은 `stamp_definitions.image_url`에 있고
 > `PUT/DELETE /admin/stamps/{id}/image`(운영 웹 "데이터 편집 > 스탬프")로 관리한다.
 > 아래 `courses.stamp_image_url`·`/admin/courses/{id}/stamp-image`는 0030에서 없어졌다. 규격은 그대로다.

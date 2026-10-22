@@ -71,6 +71,32 @@ def upload_image(
     return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
 
 
+def upload_fixed(content: bytes, *, path: str, content_type: str, bucket: str) -> str:
+    """고정 경로에 올린다(있으면 덮어쓴다). 코드가 경로를 알아야 하는 파일용 —
+    코스 카테고리 기본 스탬프 도안(stamp_images)처럼 DB에 URL을 안 두는 것.
+    같은 경로를 덮어쓰므로 CDN·앱 캐시가 옛 그림을 한동안 보여줄 수 있다."""
+    if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
+        raise StorageUploadError(
+            "이미지 업로드가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_API_SECRET_KEY)."
+        )
+
+    response = httpx.put(
+        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
+        headers={
+            "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
+            "apikey": SUPABASE_API_SECRET_KEY,
+            "Content-Type": content_type,
+            "x-upsert": "true",
+        },
+        content=content,
+        timeout=30,
+    )
+    if response.status_code >= 400:
+        raise StorageUploadError(f"이미지 업로드에 실패했어요: {response.text[:200]}")
+
+    return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
+
+
 def delete_image(image_url: str, *, bucket: str | None = None) -> None:
     """`upload_image`가 돌려준 public URL로 Storage 오브젝트를 지운다.
 
