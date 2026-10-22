@@ -1,6 +1,5 @@
 import 'dart:math';
 
-import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,8 +7,8 @@ import '../models/coupon.dart';
 import '../theme/app_theme.dart';
 import 'coupon_card.dart';
 
-/// 쿠폰 획득 팝업. 스탬프(쾅 찍힘)와 달리, 티켓이 아래에서 미끄러져 올라와 한 번
-/// 뒤집히며 앞면을 보여준다. 가벼운 진동 한 번과 리본 모양 색종이.
+/// 쿠폰 획득 팝업. 스탬프(쾅 찍힘·색종이)와 달리, 티켓이 아래에서 미끄러져 올라와 한 번
+/// 뒤집히며 앞면을 보여주고, 앞면 위로 빛줄기가 한 번 훑고 지나간다. 가벼운 진동 한 번.
 Future<void> showCouponCelebration(BuildContext context, Coupon coupon) {
   return showGeneralDialog<void>(
     context: context,
@@ -40,13 +39,14 @@ class _CouponCelebrationState extends State<_CouponCelebration>
   static const _revealAt = 0.55;
 
   late final AnimationController _controller;
-  late final ConfettiController _confetti;
   bool _revealed = false;
 
   // 올라오기: 화면 아래에서 제자리로.
   late final Animation<double> _rise;
   // 뒤집기: 뒷면(π)에서 앞면(0)으로.
   late final Animation<double> _flip;
+  // 광택: 앞면이 보인 뒤 빛줄기가 왼쪽에서 오른쪽으로 지나간다(0→1).
+  late final Animation<double> _shine;
   // 문구·버튼 등장.
   late final Animation<double> _caption;
 
@@ -54,7 +54,6 @@ class _CouponCelebrationState extends State<_CouponCelebration>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: _duration);
-    _confetti = ConfettiController(duration: const Duration(milliseconds: 600));
 
     _rise = Tween(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
@@ -68,6 +67,10 @@ class _CouponCelebrationState extends State<_CouponCelebration>
         curve: const Interval(0.3, 0.75, curve: Curves.easeInOutBack),
       ),
     );
+    _shine = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.68, 1, curve: Curves.easeInOut),
+    );
     _caption = CurvedAnimation(
       parent: _controller,
       curve: const Interval(0.7, 0.95, curve: Curves.easeOutCubic),
@@ -80,14 +83,12 @@ class _CouponCelebrationState extends State<_CouponCelebration>
   void _onTick() {
     if (_revealed || _controller.value < _revealAt) return;
     _revealed = true;
-    _confetti.play();
     HapticFeedback.lightImpact();
   }
 
   @override
   void dispose() {
     _controller.dispose();
-    _confetti.dispose();
     super.dispose();
   }
 
@@ -110,37 +111,20 @@ class _CouponCelebrationState extends State<_CouponCelebration>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    clipBehavior: Clip.none,
-                    children: [
-                      Transform.translate(
-                        offset: Offset(0, height * 0.6 * _rise.value),
-                        child: Transform(
-                          alignment: Alignment.center,
-                          transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.0015)
-                            ..rotateY(_flip.value),
-                          child: showingBack
-                              ? const _TicketBack()
-                              : _TicketFront(coupon: widget.coupon),
-                        ),
-                      ),
-                      ConfettiWidget(
-                        confettiController: _confetti,
-                        blastDirectionality: BlastDirectionality.explosive,
-                        numberOfParticles: 24,
-                        emissionFrequency: 0.4,
-                        minBlastForce: 8,
-                        maxBlastForce: 30,
-                        gravity: 0.3,
-                        colors: const [
-                          AppColors.accent,
-                          AppColors.tintAmber,
-                          Colors.white,
-                        ],
-                      ),
-                    ],
+                  Transform.translate(
+                    offset: Offset(0, height * 0.6 * _rise.value),
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.0015)
+                        ..rotateY(_flip.value),
+                      child: showingBack
+                          ? const _TicketBack()
+                          : _TicketFront(
+                              coupon: widget.coupon,
+                              shine: _shine.value,
+                            ),
+                    ),
                   ),
                   const SizedBox(height: 28),
                   Opacity(
@@ -162,11 +146,14 @@ class _CouponCelebrationState extends State<_CouponCelebration>
   }
 }
 
-/// 앞면. 목록과 같은 카드에 빛나는 테두리만 더한다.
+/// 앞면. 목록과 같은 카드에 빛나는 테두리와 지나가는 광택을 더한다.
 class _TicketFront extends StatelessWidget {
-  const _TicketFront({required this.coupon});
+  const _TicketFront({required this.coupon, required this.shine});
 
   final Coupon coupon;
+
+  /// 광택 진행(0~1). 0이면 시작 전, 1이면 다 지나감 — 둘 다 안 보인다.
+  final double shine;
 
   @override
   Widget build(BuildContext context) {
@@ -181,9 +168,48 @@ class _TicketFront extends StatelessWidget {
           ),
         ],
       ),
-      child: CouponCard(coupon: coupon),
+      child: Stack(
+        children: [
+          CouponCard(coupon: coupon),
+          if (shine > 0 && shine < 1)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: const Alignment(-1, -0.6),
+                        end: const Alignment(1, 0.6),
+                        colors: [
+                          Colors.white.withValues(alpha: 0),
+                          Colors.white.withValues(alpha: 0.6),
+                          Colors.white.withValues(alpha: 0),
+                        ],
+                        stops: const [0.4, 0.5, 0.6],
+                        // 빛줄기를 카드 왼쪽 밖(-1)에서 오른쪽 밖(+1)까지 민다.
+                        transform: _SlideGradient(shine * 2 - 1),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
+}
+
+/// 그라디언트를 가로로 카드 폭 × dx만큼 민다.
+class _SlideGradient extends GradientTransform {
+  const _SlideGradient(this.dx);
+
+  final double dx;
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.translationValues(bounds.width * dx, 0, 0);
 }
 
 /// 뒷면. 내용이 안 보이는 단색 티켓이라 뒤집히는 순간 "열린다"는 느낌을 준다.
