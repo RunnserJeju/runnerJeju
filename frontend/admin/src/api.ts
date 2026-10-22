@@ -284,25 +284,16 @@ export interface StampDefinition {
   updated_at: string
 }
 
+/** 수정 가능한 표시 정보. 지급 조건은 운영툴에서 안 바꾼다(스탬프 종류 추가는 개발자가 DB에 직접). */
 export interface StampDefinitionPayload {
   name: string
   description: string | null
-  condition_type: StampConditionType
-  condition_params: StampConditionParams
   is_active: boolean
   sort_order: number
 }
 
 export function listStamps(): Promise<StampDefinition[]> {
   return request('/admin/stamps')
-}
-
-export function createStamp(payload: StampDefinitionPayload): Promise<StampDefinition> {
-  return request('/admin/stamps', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
 }
 
 export function updateStamp(

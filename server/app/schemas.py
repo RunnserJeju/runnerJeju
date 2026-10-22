@@ -441,19 +441,14 @@ class StampOut(BaseModel):
     course_name: str
 
 
-class StampDefinitionCreate(BaseModel):
-    """스탬프 종류 등록·수정(운영툴). 도안은 전용 엔드포인트로 올린다."""
+class StampDefinitionUpdate(BaseModel):
+    """스탬프 종류 수정(PATCH /admin/stamps/{id}). 표시 정보만 — 지급 조건은 운영툴에서 안 바꾼다.
+    도안은 전용 엔드포인트로 올린다."""
 
     name: str = Field(min_length=1, max_length=100)
     description: str | None = None
-    condition_type: str
-    condition_params: dict = Field(default_factory=dict)
     is_active: bool = True
     sort_order: int = 0
-
-
-class StampDefinitionUpdate(StampDefinitionCreate):
-    """수정(PATCH /admin/stamps/{id}). 작성과 같은 필드로 전체를 교체한다."""
 
 
 class AdminStampDefinitionOut(BaseModel):

@@ -1,8 +1,8 @@
 """스탬프 획득 판정. 조건 종류마다 판정을 여기에 한 번만 쓴다.
 
 스탬프 종류(StampDefinition)는 condition_type + condition_params를 데이터로 갖는다.
-새 스탬프가 기존 종류로 표현되면 운영툴에서 행만 추가한다. 새로운 종류의 조건이
-필요할 때만 CONDITION_TYPES와 판정 함수를 더한다.
+새 스탬프가 기존 종류로 표현되면 DB에 행만 추가한다(개발자가 직접, 운영툴은 수정만).
+새로운 종류의 조건이 필요할 때만 CONDITION_TYPES와 판정 함수를 더한다.
 
 발급은 (사용자, 스탬프 종류) 유일 제약에 기대어 멱등이다 — 같은 판정을 여러 번
 돌려도 한 번만 발급된다.
@@ -22,7 +22,8 @@ RUNNING_WEEK_COURSE = "running_week_course"
 BINGO_LINES = "bingo_lines"
 MANUAL = "manual"
 
-# 조건 종류별 condition_params에 필요한 키. 운영툴 입력 검증에 쓴다.
+# 조건 종류별 condition_params에 필요한 키. 스탬프 종류는 DB에 직접 넣으므로 이 키 이름을
+# 정확히 맞춰야 한다(틀리면 판정에 안 걸려 조용히 지급되지 않는다).
 CONDITION_TYPES: dict[str, tuple[str, ...]] = {
     COURSE_COMPLETE: ("course_id",),
     RUNNING_WEEK_COURSE: ("running_week_id", "course_id"),
