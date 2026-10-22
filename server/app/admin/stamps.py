@@ -12,14 +12,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import storage
+from app.bingo import MAX_LINES as MAX_BINGO_LINES
 from app.db import get_db
-from app.models import Course, Stamp, StampDefinition
+from app.models import Course, RunningWeek, Stamp, StampDefinition
 from app.schemas import (
     AdminStampDefinitionOut,
     StampDefinitionCreate,
     StampDefinitionUpdate,
 )
-from app.stamp_rules import COURSE_COMPLETE, CONDITION_TYPES
+from app.stamp_rules import BINGO_LINES, COURSE_COMPLETE, CONDITION_TYPES
 
 router = APIRouter(tags=["stamps"])
 
@@ -57,7 +58,7 @@ def _to_out(definition: StampDefinition, issued_count: int) -> AdminStampDefinit
 
 
 def _validated_params(db: Session, condition_type: str, params: dict) -> dict:
-    """조건 종류에 필요한 값만 남긴다. course_complete면 코스가 실제로 있어야 한다."""
+    """조건 종류에 필요한 값만 남긴다. 가리키는 코스·회차는 실제로 있어야 한다."""
     required = CONDITION_TYPES.get(condition_type)
     if required is None:
         raise HTTPException(status_code=422, detail=f"알 수 없는 조건 종류예요: {condition_type}")
@@ -75,6 +76,19 @@ def _validated_params(db: Session, condition_type: str, params: dict) -> dict:
         if db.get(Course, course_id) is None:
             raise HTTPException(status_code=422, detail="코스를 찾을 수 없어요.")
         cleaned["course_id"] = str(course_id)
+    if condition_type == BINGO_LINES:
+        try:
+            week_id = uuid.UUID(str(cleaned["running_week_id"]))
+            lines = int(cleaned["lines"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail="회차나 줄 수 형식이 아니에요.") from None
+        if db.get(RunningWeek, week_id) is None:
+            raise HTTPException(status_code=422, detail="러닝위크 회차를 찾을 수 없어요.")
+        if not 1 <= lines <= MAX_BINGO_LINES:
+            raise HTTPException(
+                status_code=422, detail=f"줄 수는 1~{MAX_BINGO_LINES} 사이여야 해요."
+            )
+        cleaned = {"running_week_id": str(week_id), "lines": lines}
     return cleaned
 
 

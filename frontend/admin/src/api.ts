@@ -259,7 +259,14 @@ export function deleteCourseThumbnail(id: string): Promise<Course> {
 // --- 스탬프 -------------------------------------------------------------
 
 /** 획득 조건 종류. 서버 app/stamp_rules.CONDITION_TYPES와 같아야 한다. */
-export type StampConditionType = 'course_complete' | 'manual'
+export type StampConditionType = 'course_complete' | 'bingo_lines' | 'manual'
+
+/** 조건 값. course_complete {course_id} | bingo_lines {running_week_id, lines} | manual {}. */
+export interface StampConditionParams {
+  course_id?: string
+  running_week_id?: string
+  lines?: number
+}
 
 /** 스탬프 종류. 코스 완주는 조건의 하나(course_complete {course_id})다. */
 export interface StampDefinition {
@@ -268,7 +275,7 @@ export interface StampDefinition {
   description: string | null
   image_url: string | null
   condition_type: StampConditionType
-  condition_params: { course_id?: string }
+  condition_params: StampConditionParams
   is_active: boolean
   sort_order: number
   issued_count: number
@@ -280,7 +287,7 @@ export interface StampDefinitionPayload {
   name: string
   description: string | null
   condition_type: StampConditionType
-  condition_params: { course_id?: string }
+  condition_params: StampConditionParams
   is_active: boolean
   sort_order: number
 }
@@ -530,7 +537,7 @@ export function deletePartner(id: string): Promise<void> {
 // 템플릿 행은 서버 마이그레이션이 심는다 — 여기서는 수정·지급·현황만.
 
 /** 지급 조건. 서버 app/coupon_rules.TRIGGER_TYPES와 같다. */
-export type CouponTriggerType = 'manual' | 'course_complete'
+export type CouponTriggerType = 'manual' | 'course_complete' | 'bingo_complete'
 
 export interface Coupon {
   id: string

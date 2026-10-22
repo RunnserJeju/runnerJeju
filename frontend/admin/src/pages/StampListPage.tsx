@@ -5,10 +5,12 @@ import {
   createStamp,
   deleteStampImage,
   listCourses,
+  listRunningWeeks,
   listStamps,
   setStampImage,
   updateStamp,
   type Course,
+  type RunningWeek,
   type StampConditionType,
   type StampDefinition,
   type StampDefinitionPayload,
@@ -24,8 +26,12 @@ interface Props {
 
 const CONDITION_LABEL: Record<StampConditionType, string> = {
   course_complete: '코스 완주',
+  bingo_lines: '빙고 줄 완성',
   manual: '운영자 지급',
 }
+
+/** 5x5 빙고의 가로·세로·대각선 줄 수. 이 줄 수 스탬프가 판 전체 완성(스페셜 스탬프). */
+const MAX_BINGO_LINES = 12
 
 /**
  * 스탬프 종류 관리. 스탬프는 코스와 분리됐다(#71) — 코스 완주는 획득 조건의 하나다.
@@ -34,15 +40,17 @@ const CONDITION_LABEL: Record<StampConditionType, string> = {
 export default function StampListPage({ onUnauthorized }: Props) {
   const [stamps, setStamps] = useState<StampDefinition[] | null>(null)
   const [courses, setCourses] = useState<Course[]>([])
+  const [weeks, setWeeks] = useState<RunningWeek[]>([])
   const [error, setError] = useState<string | null>(null)
   /** 열린 모달. 'new'면 등록, 아니면 그 스탬프 수정. */
   const [editing, setEditing] = useState<'new' | StampDefinition | null>(null)
 
   const reload = useCallback(() => {
-    Promise.all([listStamps(), listCourses()])
-      .then(([loadedStamps, loadedCourses]) => {
+    Promise.all([listStamps(), listCourses(), listRunningWeeks()])
+      .then(([loadedStamps, loadedCourses, loadedWeeks]) => {
         setStamps(loadedStamps)
         setCourses(loadedCourses)
+        setWeeks(loadedWeeks)
         setError(null)
       })
       .catch((err: unknown) => {
@@ -60,6 +68,8 @@ export default function StampListPage({ onUnauthorized }: Props) {
 
   const courseName = (stamp: StampDefinition) =>
     courses.find((c) => c.id === stamp.condition_params.course_id)?.name ?? '(없는 코스)'
+  const weekTitle = (stamp: StampDefinition) =>
+    weeks.find((w) => w.id === stamp.condition_params.running_week_id)?.title ?? '(없는 회차)'
 
   return (
     <>
@@ -104,6 +114,13 @@ export default function StampListPage({ onUnauthorized }: Props) {
                   {stamp.condition_type === 'course_complete' && (
                     <div className="muted">{courseName(stamp)}</div>
                   )}
+                  {stamp.condition_type === 'bingo_lines' && (
+                    <div className="muted">
+                      {stamp.condition_params.lines}줄
+                      {stamp.condition_params.lines === MAX_BINGO_LINES && ' (판 전체)'} ·{' '}
+                      {weekTitle(stamp)}
+                    </div>
+                  )}
                 </td>
                 <td>
                   <span className={`badge ${stamp.is_active ? 'live' : 'expired'}`}>
@@ -122,6 +139,7 @@ export default function StampListPage({ onUnauthorized }: Props) {
         <StampModal
           stamp={editing === 'new' ? null : editing}
           courses={courses}
+          weeks={weeks}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             setEditing(saved)
@@ -147,12 +165,14 @@ function payloadFrom(stamp: StampDefinition | null): StampDefinitionPayload {
 function StampModal({
   stamp,
   courses,
+  weeks,
   onClose,
   onSaved,
 }: {
   /** null이면 새로 등록. */
   stamp: StampDefinition | null
   courses: Course[]
+  weeks: RunningWeek[]
   onClose: () => void
   onSaved: (stamp: StampDefinition) => void
 }) {
@@ -176,6 +196,17 @@ function StampModal({
       setError('완주할 코스를 골라 주세요.')
       return
     }
+    const { running_week_id, lines } = values.condition_params
+    if (values.condition_type === 'bingo_lines') {
+      if (!running_week_id) {
+        setError('러닝위크 회차를 골라 주세요.')
+        return
+      }
+      if (!lines || lines < 1 || lines > MAX_BINGO_LINES) {
+        setError(`줄 수는 1~${MAX_BINGO_LINES} 사이로 입력해 주세요.`)
+        return
+      }
+    }
     const payload: StampDefinitionPayload = {
       ...values,
       name: values.name.trim(),
@@ -183,7 +214,9 @@ function StampModal({
       condition_params:
         values.condition_type === 'course_complete'
           ? { course_id: values.condition_params.course_id }
-          : {},
+          : values.condition_type === 'bingo_lines'
+            ? { running_week_id, lines }
+            : {},
     }
     setSaving(true)
     try {
@@ -233,6 +266,7 @@ function StampModal({
             }
           >
             <option value="course_complete">{CONDITION_LABEL.course_complete}</option>
+            <option value="bingo_lines">{CONDITION_LABEL.bingo_lines}</option>
             <option value="manual">{CONDITION_LABEL.manual}</option>
           </select>
           {values.condition_type === 'manual' && (
@@ -250,6 +284,46 @@ function StampModal({
               emptyText="등록된 코스가 없어요"
             />
           </div>
+        )}
+        {values.condition_type === 'bingo_lines' && (
+          <>
+            <div className="field">
+              <label htmlFor="stamp-week">러닝위크 회차</label>
+              <SearchSelect
+                id="stamp-week"
+                value={values.condition_params.running_week_id ?? ''}
+                options={weeks.map((week) => ({ id: week.id, label: week.title }))}
+                onSelect={(id) =>
+                  set({ condition_params: { ...values.condition_params, running_week_id: id } })
+                }
+                emptyText="등록된 러닝위크가 없어요"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="stamp-lines">
+                줄 수{' '}
+                <span className="hint">
+                  이 회차 빙고판에서 몇 줄을 채우면 받는지. {MAX_BINGO_LINES}이면 판 전체(=25개 코스
+                  완주) 스페셜 스탬프. 참가 신청한 사람만 받아요
+                </span>
+              </label>
+              <input
+                id="stamp-lines"
+                type="number"
+                min={1}
+                max={MAX_BINGO_LINES}
+                value={values.condition_params.lines ?? ''}
+                onChange={(e) =>
+                  set({
+                    condition_params: {
+                      ...values.condition_params,
+                      lines: e.target.value ? Number(e.target.value) : undefined,
+                    },
+                  })
+                }
+              />
+            </div>
+          </>
         )}
         <div className="field">
           <label htmlFor="stamp-order">

@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import coupon_rules, stamp_rules
+from app import coupon_rules, running_week, stamp_rules
 from app import verification as verification_logic
 from app.db import get_db
 from app.deps import current_user_id
-from app.models import Course, Run, Stamp, UserCoupon, Verification
+from app.models import Coupon, Course, Run, Stamp, StampDefinition, UserCoupon, Verification
 from app.schemas import VerificationCreate, VerificationOut
 
 router = APIRouter(tags=["verifications"])
@@ -42,10 +42,34 @@ def _earned_coupon_id(db: Session, user_id: str, course_id: uuid.UUID) -> uuid.U
     ).scalar_one_or_none()
 
 
+def _bingo_stamp_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
+    """이 러닝으로 받은 빙고 스탬프. 줄 수 순."""
+    rows = db.execute(
+        select(Stamp.id, StampDefinition.condition_params)
+        .join(StampDefinition, Stamp.stamp_definition_id == StampDefinition.id)
+        .where(Stamp.run_id == run_id, StampDefinition.condition_type == stamp_rules.BINGO_LINES)
+    ).all()
+    return [stamp_id for stamp_id, params in sorted(rows, key=lambda r: int(r[1]["lines"]))]
+
+
+def _bingo_coupon_id(db: Session, run_id: uuid.UUID) -> uuid.UUID | None:
+    """이 러닝으로 받은 스페셜 쿠폰."""
+    return db.execute(
+        select(UserCoupon.id)
+        .join(Coupon, UserCoupon.coupon_id == Coupon.id)
+        .where(
+            UserCoupon.run_id == run_id, Coupon.trigger_type == coupon_rules.BINGO_COMPLETE
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+
+
 def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
     matched = verification.status == "matched"
     stamp_id = _earned_stamp_id(db, user_id, verification.course_id) if matched else None
     coupon_id = _earned_coupon_id(db, user_id, verification.course_id) if matched else None
+    bingo_stamp_ids = _bingo_stamp_ids(db, verification.run_id) if matched else []
+    bingo_coupon_id = _bingo_coupon_id(db, verification.run_id) if matched else None
 
     return {
         "id": verification.id,
@@ -57,6 +81,8 @@ def _to_out(db: Session, verification: Verification, user_id: str) -> dict:
         "completed_at": verification.completed_at,
         "earned_stamp_id": stamp_id,
         "earned_coupon_id": coupon_id,
+        "earned_bingo_stamp_ids": bingo_stamp_ids,
+        "earned_bingo_coupon_id": bingo_coupon_id,
     }
 
 
@@ -110,8 +136,9 @@ def request_verification(
     db.add(record)
 
     if outcome.status == "matched":
+        # 코스 스탬프는 상시, 쿠폰·빙고는 러닝위크일 때만(running_week가 판단).
         stamp_rules.on_course_completed(db, user_id, run, course.id)
-        coupon_rules.on_course_completed(db, user_id, course.id)
+        running_week.on_course_completed(db, user_id, course.id, run.id)
 
     db.commit()
     db.refresh(record)

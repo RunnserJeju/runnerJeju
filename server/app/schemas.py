@@ -406,6 +406,9 @@ class VerificationOut(BaseModel):
     earned_stamp_id: uuid.UUID | None = None
     # 이 코스 완주로 받은 코스완료 쿠폰(user_coupon id). 쿠폰이 꺼져 있으면 None.
     earned_coupon_id: uuid.UUID | None = None
+    # 이 러닝으로 받은 빙고 스탬프(줄 수 순)와 스페셜 쿠폰(빙고판 완성).
+    earned_bingo_stamp_ids: list[uuid.UUID] = []
+    earned_bingo_coupon_id: uuid.UUID | None = None
 
 
 # --- 스탬프 --------------------------------------------------------------

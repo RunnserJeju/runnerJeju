@@ -20,6 +20,7 @@ from app.schemas import (
     RunningWeekCreate,
     RunningWeekUpdate,
 )
+from app.stamp_rules import BINGO_LINES
 
 router = APIRouter(tags=["running-weeks"])
 
@@ -105,17 +106,21 @@ def set_bingo(week_id: uuid.UUID, payload: BingoUpdate, db: Session = Depends(ge
     """빙고 배치를 통째로 바꾼다. 25개 모두 실제 스탬프 종류여야 한다.
 
     배열 안 id에는 외래키가 없어서 여기서 확인한다. 숨긴 스탬프도 놓을 수는 있지만
-    앱에는 빈 칸으로 보인다.
+    앱에는 빈 칸으로 보인다. 빙고 스탬프는 빙고 결과라 칸에 놓을 수 없다.
     """
     week = _load_or_404(db, week_id)
-    found = set(
+    found = dict(
         db.execute(
-            select(StampDefinition.id).where(StampDefinition.id.in_(payload.stamp_ids))
-        ).scalars()
+            select(StampDefinition.id, StampDefinition.condition_type).where(
+                StampDefinition.id.in_(payload.stamp_ids)
+            )
+        ).all()
     )
     missing = [str(i) for i in payload.stamp_ids if i not in found]
     if missing:
         raise HTTPException(status_code=422, detail=f"없는 스탬프예요: {', '.join(missing)}")
+    if BINGO_LINES in found.values():
+        raise HTTPException(status_code=422, detail="빙고 스탬프는 빙고 칸에 놓을 수 없어요.")
 
     week.bingo_stamp_ids = [str(i) for i in payload.stamp_ids]
     db.commit()

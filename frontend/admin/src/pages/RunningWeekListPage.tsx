@@ -391,10 +391,12 @@ function BingoSection({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const active = stamps.filter((s) => s.is_active)
+  // 빙고 스탬프는 빙고 결과라 칸에 놓지 않는다(서버도 막는다).
+  const placeable = stamps.filter((s) => s.condition_type !== 'bingo_lines')
+  const active = placeable.filter((s) => s.is_active)
   const stampOptions = [
     { id: '', label: '비우기' },
-    ...stamps.map((stamp) => ({
+    ...placeable.map((stamp) => ({
       id: stamp.id,
       label: stamp.is_active ? stamp.name : `${stamp.name} (숨김)`,
     })),

@@ -367,7 +367,8 @@ class StampDefinition(Base):
     # 발급 기록은 이 값을 조회 시 참조하므로 도안을 바꾸면 이미 딴 스탬프에도 반영된다.
     image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
-    # 'course_complete' {"course_id": str} | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
+    # 'course_complete' {"course_id": str} | 'bingo_lines' {"running_week_id": str, "lines": int}
+    # | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
     condition_type: Mapped[str] = mapped_column(String(30))
     condition_params: Mapped[dict] = mapped_column(JSONB, default=dict)
 
@@ -702,7 +703,7 @@ class Coupon(Base):
         DateTime(timezone=True), default=None
     )
 
-    # 'manual' | 'course_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
+    # 'manual' | 'course_complete' | 'bingo_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
     trigger_type: Mapped[str] = mapped_column(String(30), default="manual")
     # 켜져 있을 때만 자동 지급한다. 기본 꺼짐 — 러닝위크 기간에 운영자가 켠다.
     # 이미 발급된 쿠폰은 꺼도 그대로 쓸 수 있다.
@@ -761,8 +762,13 @@ class UserCoupon(Base):
         UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
-    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}"). 운영자 수동 지급은 None.
+    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}", 빙고판 완성: "bingo:{week_id}").
+    # 운영자 수동 지급은 None.
     grant_key: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 달려서 받은 쿠폰이면 그 러닝. 완주 결과 화면이 "이번에 받은 쿠폰"을 찾는 데 쓴다.
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), default=None
+    )
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

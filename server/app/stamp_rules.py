@@ -16,11 +16,14 @@ from sqlalchemy.orm import Session
 from app.models import Run, Stamp, StampDefinition
 
 COURSE_COMPLETE = "course_complete"
+# 러닝위크 빙고판에서 N줄 이상 완성. 12줄(=판 전체)이 스페셜 스탬프다.
+BINGO_LINES = "bingo_lines"
 MANUAL = "manual"
 
 # 조건 종류별 condition_params에 필요한 키. 운영툴 입력 검증에 쓴다.
 CONDITION_TYPES: dict[str, tuple[str, ...]] = {
     COURSE_COMPLETE: ("course_id",),
+    BINGO_LINES: ("running_week_id", "lines"),
     MANUAL: (),
 }
 
@@ -48,6 +51,28 @@ def on_course_completed(db: Session, user_id: str, run: Run, course_id: uuid.UUI
     """완주 인증이 통과했을 때. 이 코스를 조건으로 가진 스탬프를 발급한다."""
     for definition in course_stamp_definitions(db, course_id):
         _grant(db, user_id, definition, run_id=run.id)
+
+
+def bingo_line_definitions(db: Session, week_id: uuid.UUID) -> list[StampDefinition]:
+    """이 회차 빙고 줄 수를 조건으로 가진 스탬프 종류(노출 여부 무관)."""
+    return list(
+        db.execute(
+            select(StampDefinition).where(
+                StampDefinition.condition_type == BINGO_LINES,
+                StampDefinition.condition_params["running_week_id"].astext == str(week_id),
+            )
+        ).scalars()
+    )
+
+
+def on_bingo_progress(
+    db: Session, user_id: str, week_id: uuid.UUID, lines: int, run_id: uuid.UUID | None
+) -> None:
+    """빙고 줄 수가 lines일 때. 기준 줄 수 이하인 빙고 스탬프를 모두 발급한다 — 한 번에
+    두 줄이 생겨도 사이 단계를 건너뛰지 않는다."""
+    for definition in bingo_line_definitions(db, week_id):
+        if definition.is_active and int(definition.condition_params["lines"]) <= lines:
+            _grant(db, user_id, definition, run_id=run_id)
 
 
 def _grant(
