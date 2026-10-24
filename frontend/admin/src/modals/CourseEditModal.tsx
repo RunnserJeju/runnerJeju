@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  addCourseImage,
   ApiError,
   deleteCourseThumbnail,
   getCourse,
   replaceCourseGpx,
+  setCourseImages,
   setCourseThumbnail,
   updateCourse,
   type Course,
@@ -15,6 +17,7 @@ import CourseForm, {
   valuesFromCourse,
   type CourseFormValues,
 } from '../components/CourseForm'
+import { ImagesSection, ThumbnailSection } from '../components/ImageSections'
 import Modal from '../components/Modal'
 
 interface Props {
@@ -80,7 +83,19 @@ export default function CourseEditModal({ courseId, initialNotice, onClose, onCh
             onSaved={applySaved}
           />
           <GpxSection courseId={courseId} onSaved={applyMedia} />
-          <ThumbnailSection course={course} onSaved={applyMedia} />
+          <ThumbnailSection
+            thumbnailUrl={course.thumbnail_url}
+            upload={(file) => setCourseThumbnail(course.id, file)}
+            remove={() => deleteCourseThumbnail(course.id)}
+            onSaved={applyMedia}
+          />
+          <ImagesSection
+            urls={course.image_urls}
+            description="앱 코스 상세의 시작 버튼 아래에 옆으로 미는 사진 띠예요. 사진은 원본 비율 그대로 잘리지 않고 나와요."
+            add={(file) => addCourseImage(course.id, file)}
+            set={(urls) => setCourseImages(course.id, urls)}
+            onSaved={applyMedia}
+          />
         </>
       )}
     </Modal>
@@ -208,78 +223,6 @@ function GpxSection({
           </button>
         </div>
       )}
-    </div>
-  )
-}
-
-function ThumbnailSection({
-  course,
-  onSaved,
-}: {
-  course: Course
-  onSaved: (course: Course, message: string) => void
-}) {
-  const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const upload = async () => {
-    if (!file) {
-      setError('이미지 파일을 선택해 주세요.')
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      const saved = await setCourseThumbnail(course.id, file)
-      setFile(null)
-      onSaved(saved, '썸네일을 저장했어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '썸네일 업로드에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const remove = async () => {
-    setError(null)
-    setSaving(true)
-    try {
-      const saved = await deleteCourseThumbnail(course.id)
-      onSaved(saved, '썸네일을 지웠어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '썸네일 삭제에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>썸네일</h3>
-      {course.thumbnail_url ? (
-        <img className="thumb large" src={course.thumbnail_url} alt="현재 썸네일" />
-      ) : (
-        <p className="muted">등록된 썸네일이 없어요.</p>
-      )}
-      <div className="field" style={{ marginTop: 12 }}>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-        />
-      </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button onClick={upload} disabled={saving || !file}>
-          {saving ? '처리 중…' : course.thumbnail_url ? '썸네일 교체' : '썸네일 등록'}
-        </button>
-        {course.thumbnail_url && (
-          <button className="danger" onClick={remove} disabled={saving}>
-            썸네일 삭제
-          </button>
-        )}
-      </div>
     </div>
   )
 }

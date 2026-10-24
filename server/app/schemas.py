@@ -11,7 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 Difficulty = Annotated[int, Field(ge=1, le=3)]
 
 # 'public'=모두, 'admin'=role='admin'인 앱 사용자만(테스트 코스).
-CourseVisibility = Literal["public", "admin"]
+# 공개 범위. admin은 role='admin'인 앱 사용자에게만 내려간다(코스·러닝위크·이벤트 공통).
+Visibility = Literal["public", "admin"]
+CourseVisibility = Visibility
+# 아트런·로드런·트레일런·챌린지런. models.COURSE_CATEGORIES와 같아야 한다.
+CourseCategory = Literal["art", "road", "trail", "challenge"]
 VerificationStatusName = Literal[
     "pending", "inProgress", "matched", "mismatched", "failed"
 ]
@@ -102,6 +106,7 @@ class UserOut(BaseModel):
     email: str | None
     profile_image_url: str | None
     role: str
+    created_at: datetime
 
 
 class TokenPair(BaseModel):
@@ -186,6 +191,29 @@ class PartnerSummary(BaseModel):
     instagram: str | None
     benefit: str | None
     detail: dict
+    # 목록 카드 썸네일. 없으면 앱이 업종 아이콘을 그린다.
+    thumbnail_url: str | None = None
+    # 상세 갤러리 이미지(순서대로).
+    image_urls: list[str] = []
+
+    @field_validator("image_urls", mode="before")
+    @classmethod
+    def _none_to_empty(cls, value):
+        # 아직 flush 안 된 모델이나 옛 행은 None일 수 있다.
+        return value or []
+
+
+class PartnerImagesUpdate(BaseModel):
+    """추가 이미지 순서 바꾸기·빼기(PUT /admin/partners/{id}/images). 코스와 같은 규칙."""
+
+    image_urls: list[str]
+
+    @field_validator("image_urls")
+    @classmethod
+    def _unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("같은 이미지가 두 번 들어 있어요.")
+        return value
 
 
 class PartnerCourseRef(BaseModel):
@@ -257,6 +285,7 @@ class CourseListItem(BaseModel):
     name: str
     distance_km: float
     difficulty: Difficulty
+    category: CourseCategory
 
     # "해안도로,제주시,동쪽" — 칩으로 쪼개는 건 클라이언트가 한다.
     tags: str | None
@@ -277,6 +306,8 @@ class CourseListItem(BaseModel):
 
     # 대표 썸네일 public URL. 전용 엔드포인트로만 설정/삭제된다(등록·수정 폼과 별개).
     thumbnail_url: str | None
+    # 썸네일 말고 더 보여 줄 이미지(순서대로). 전용 엔드포인트로만 바뀐다.
+    image_urls: list[str] = []
 
     # 이 코스 완주 스탬프의 도안(스탬프 종류에서 가져옴). 옛 앱 스탬프 탭 호환용 —
     # 새 앱은 GET /stamp-definitions를 쓴다(#71).
@@ -315,6 +346,7 @@ class CourseUpdate(BaseModel):
     # 소수 첫째 자리까지(DB Numeric(5,1)). 0.1 미만·9999.9 초과는 거절.
     distance_km: float = Field(ge=0.1, le=9999.9)
     difficulty: Difficulty
+    category: CourseCategory
     visibility: CourseVisibility
     address: str = Field(min_length=1)
     tags: str | None = None
@@ -326,14 +358,27 @@ class CourseUpdate(BaseModel):
     # 연결할 협력업체 id(보여줄 순서대로). 통째로 교체한다 — 빈 목록이면 전부 해제.
     partner_ids: list[uuid.UUID] = Field(default_factory=list)
 
-
-# --- 지오코딩 ------------------------------------------------------------
-
     @field_validator("distance_km")
     @classmethod
     def _round_distance(cls, value: float) -> float:
         # DB가 Numeric(5,1)로 반올림하기 전에 여기서 맞춰 응답과 저장값이 같게 한다.
         return round(value, 1)
+
+
+class CourseImagesUpdate(BaseModel):
+    """추가 이미지 순서 바꾸기·빼기(PUT /admin/courses/{id}/images). 지금 있는 URL로만."""
+
+    image_urls: list[str]
+
+    @field_validator("image_urls")
+    @classmethod
+    def _unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("같은 이미지가 두 번 들어 있어요.")
+        return value
+
+
+# --- 지오코딩 ------------------------------------------------------------
 
 
 class GeocodeResult(BaseModel):
@@ -375,6 +420,8 @@ class RunOut(BaseModel):
     distance_meters: float
     duration_sec: int
     path: list[RunPointSchema]
+    # 이 러닝으로 코스 완주 인증이 통과했는지.
+    completed: bool = False
 
 
 class RunUploadResult(BaseModel):
@@ -402,10 +449,13 @@ class VerificationOut(BaseModel):
     detail: str | None
     completed_at: datetime | None
 
-    # 검증이 matched면 이때 발급된 스탬프 id. 앱은 이 값으로 스탬프를 조회한다.
+    # 이 러닝으로 새로 받은 코스 스탬프 id. 재완주라 새로 받은 게 없으면 None.
     earned_stamp_id: uuid.UUID | None = None
-    # 이 코스 완주로 받은 코스완료 쿠폰(user_coupon id). 쿠폰이 꺼져 있으면 None.
+    # 이 러닝으로 새로 받은 코스완료 쿠폰(user_coupon id). 없으면 None.
     earned_coupon_id: uuid.UUID | None = None
+    # 이 러닝으로 받은 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 스페셜 쿠폰(빙고판 완성).
+    earned_running_week_stamp_ids: list[uuid.UUID] = []
+    earned_bingo_coupon_id: uuid.UUID | None = None
 
 
 # --- 스탬프 --------------------------------------------------------------
@@ -438,19 +488,14 @@ class StampOut(BaseModel):
     course_name: str
 
 
-class StampDefinitionCreate(BaseModel):
-    """스탬프 종류 등록·수정(운영툴). 도안은 전용 엔드포인트로 올린다."""
+class StampDefinitionUpdate(BaseModel):
+    """스탬프 종류 수정(PATCH /admin/stamps/{id}). 표시 정보만 — 지급 조건은 운영툴에서 안 바꾼다.
+    도안은 전용 엔드포인트로 올린다."""
 
     name: str = Field(min_length=1, max_length=100)
     description: str | None = None
-    condition_type: str
-    condition_params: dict = Field(default_factory=dict)
     is_active: bool = True
     sort_order: int = 0
-
-
-class StampDefinitionUpdate(StampDefinitionCreate):
-    """수정(PATCH /admin/stamps/{id}). 작성과 같은 필드로 전체를 교체한다."""
 
 
 class AdminStampDefinitionOut(BaseModel):
@@ -543,11 +588,15 @@ class RunningWeekParticipationCreate(BaseModel):
 class RunningWeekCreate(BaseModel):
     """운영툴 등록·수정. 배너 이미지와 빙고 배치는 전용 엔드포인트로 따로 바꾼다."""
 
+    # 회차. 등록 때 비우면 지금까지 가장 큰 회차 + 1, 수정 때 비우면 그대로.
+    round: int | None = Field(default=None, ge=1, le=999)
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     is_active: bool = True
+    # 기본 admin — 운영자가 확인한 뒤 공개로 바꾼다.
+    visibility: Visibility = "admin"
 
     @model_validator(mode="after")
     def _check_period(self):
@@ -577,12 +626,14 @@ class AdminRunningWeekOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    round: int
     title: str
     description: str | None
     image_url: str | None
     starts_at: datetime | None
     ends_at: datetime | None
     is_active: bool
+    visibility: Visibility
     bingo_stamp_ids: list[str]
     participant_count: int = 0
     created_at: datetime
@@ -652,6 +703,7 @@ class EventCreate(BaseModel):
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     is_active: bool = True
+    visibility: Visibility = "admin"
     sort_order: int = 0
 
     @model_validator(mode="after")
@@ -679,6 +731,7 @@ class EventOut(BaseModel):
 
 class AdminEventOut(EventOut):
     is_active: bool
+    visibility: Visibility
     sort_order: int
     updated_at: datetime
 

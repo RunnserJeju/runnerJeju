@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -99,6 +100,11 @@ class RefreshToken(Base):
     )
 
 
+# 코스 카테고리. 아트런·로드런·트레일런·챌린지런. 값을 늘리면 schemas.CourseCategory와
+# ck_courses_category(마이그레이션)도 같이 바꾼다.
+COURSE_CATEGORIES: tuple[str, ...] = ("art", "road", "trail", "challenge")
+
+
 class Course(Base):
     """관리자가 코스 명단(courses/courses.yaml)을 기준으로 올리는 러닝 코스.
 
@@ -107,12 +113,20 @@ class Course(Base):
     """
 
     __tablename__ = "courses"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('art', 'road', 'trail', 'challenge')", name="ck_courses_category"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
 
     name: Mapped[str] = mapped_column(String(200))
+
+    # 필수. COURSE_CATEGORIES 중 하나(DB CHECK로도 막는다). 태그와 별개로 코스를 크게 나눈다.
+    category: Mapped[str] = mapped_column(String(20))
 
     # 'public' | 'admin'. admin이면 role='admin'인 앱 사용자에게만 내려간다(테스트
     # 코스). 기본값 없음 — NULL은 공개가 아니라서 일반 사용자에게 보이지 않는다.
@@ -148,6 +162,10 @@ class Course(Base):
     # 전용 엔드포인트(PUT/DELETE /courses/{id}/thumbnail)가 업로드·교체·삭제하며
     # 채우고, 코스 등록/수정(GPX·메타데이터)은 이 컬럼을 건드리지 않는다.
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    # 썸네일 말고 더 보여 줄 이미지(public URL, 보여 줄 순서대로). 전용 엔드포인트
+    # (POST/PUT /admin/courses/{id}/images)만 바꾼다.
+    image_urls: Mapped[list] = mapped_column(JSONB, default=list)
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
@@ -207,7 +225,11 @@ class Partner(Base):
     # 쓴 것으로 처리된다. 비어 있으면 이 업체에서는 쿠폰을 쓸 수 없다. 앱에 내려가지 않는다.
     coupon_pin: Mapped[str | None] = mapped_column(String(4), unique=True, default=None)
 
-    # 아직 정해지지 않은 부가 정보(영업시간·업종·이미지 등)를 담는 자리. 형태가
+    # 목록 카드 썸네일과 상세 갤러리 이미지(순서대로). 코스와 같은 구조, 전용 엔드포인트가 채운다.
+    thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    image_urls: Mapped[list] = mapped_column(JSONB, default=list)
+
+    # 아직 정해지지 않은 부가 정보(영업시간·업종 등)를 담는 자리. 형태가
     # 굳어지면 컬럼으로 승격한다(user_log.detail과 같은 전략).
     detail: Mapped[dict] = mapped_column(JSONB, default=dict)
 
@@ -350,7 +372,7 @@ class StampDefinition(Base):
     """스탬프 종류. 도전과제처럼 "조건 종류 + 조건 값"을 데이터로 갖는다.
 
     판정 코드는 조건 종류마다 한 번만 쓴다(app/stamp_rules.py). 새 스탬프가 기존
-    종류로 표현되면 행만 추가하면 되고, 새로운 종류의 조건이 생길 때만 코드를 더한다.
+    종류로 표현되면 행만 추가하면 되고(개발자가 DB에 직접, 코스 스탬프만 코스 등록 때 자동), 새로운 종류의 조건이 생길 때만 코드를 더한다.
     코스는 조건 값의 하나일 뿐이라 외래키로 묶지 않는다 — 코스를 지우면 그 코스를
     조건으로 가진 스탬프는 노출을 끈다(admin/courses).
     """
@@ -367,7 +389,9 @@ class StampDefinition(Base):
     # 발급 기록은 이 값을 조회 시 참조하므로 도안을 바꾸면 이미 딴 스탬프에도 반영된다.
     image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
-    # 'course_complete' {"course_id": str} | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
+    # 'course_complete' {"course_id": str}
+    # | 'running_week_course' {"running_week_id": str, "course_id": str} (러닝위크 기간에 그 코스 완주)
+    # | 'bingo_lines' {"running_week_id": str, "lines": int} | 'manual' {}. stamp_rules.CONDITION_TYPES와 같아야 한다.
     condition_type: Mapped[str] = mapped_column(String(30))
     condition_params: Mapped[dict] = mapped_column(JSONB, default=dict)
 
@@ -474,8 +498,9 @@ class RunningWeek(Base):
     노출 규칙은 공지와 같다 — starts_at/ends_at은 null이면 "제한 없음", is_active로
     따로 끌 수 있다. 공개 중이면 앱 커뮤니티 상단에 image_url 배너가 뜬다.
 
-    빙고 칸 전용 테이블은 두지 않는다. 칸 순서대로 스탬프 종류 id 25개만 담고, 칸이
-    채워졌는지는 조회 때 발급 기록(stamps)에서 계산한다. 배열 안 id에는 외래키가 없어서
+    빙고 칸은 이 회차 전용 스탬프(running_week_course)로 채운다. 칸 전용 테이블은 두지 않고
+    칸 순서대로 스탬프 종류 id 25개만 담고, 칸이 채워졌는지는 조회 때 발급 기록(stamps)에서
+    계산한다. 배열 안 id에는 외래키가 없어서
     저장할 때 서버가 실제 스탬프 종류인지 확인한다(admin/running_weeks).
     """
 
@@ -484,6 +509,8 @@ class RunningWeek(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    # 회차(1, 2, …). 러닝위크 전용 스탬프가 몇 회차 것인지 구분하는 데이터이고 앱에는 안 내린다.
+    round: Mapped[int] = mapped_column(Integer, unique=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text, default=None)
     # 커뮤니티 상단 배너(Supabase Storage public URL). PUT/DELETE /admin/running-weeks/{id}/image.
@@ -496,6 +523,10 @@ class RunningWeek(Base):
         DateTime(timezone=True), default=None
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # 'public' | 'admin'. admin이면 role='admin'인 앱 사용자에게만 내려간다(코스와 같다).
+    # 기본 admin — 운영자가 확인한 뒤 공개로 바꾼다.
+    visibility: Mapped[str] = mapped_column(String(20), default="admin")
 
     # 칸 0~24에 놓을 스탬프 종류 id(문자열). 비어 있으면 빙고판을 아직 안 짠 것.
     bingo_stamp_ids: Mapped[list] = mapped_column(JSONB, default=list)
@@ -575,6 +606,8 @@ class Event(Base):
         DateTime(timezone=True), default=None
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 'public' | 'admin'. 러닝위크와 같다 — admin이면 운영자 계정에만 보인다.
+    visibility: Mapped[str] = mapped_column(String(20), default="admin")
     # 앱 목록 정렬. 작을수록 위, 같으면 최신순.
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -702,7 +735,7 @@ class Coupon(Base):
         DateTime(timezone=True), default=None
     )
 
-    # 'manual' | 'course_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
+    # 'manual' | 'course_complete' | 'bingo_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
     trigger_type: Mapped[str] = mapped_column(String(30), default="manual")
     # 켜져 있을 때만 자동 지급한다. 기본 꺼짐 — 러닝위크 기간에 운영자가 켠다.
     # 이미 발급된 쿠폰은 꺼도 그대로 쓸 수 있다.
@@ -761,8 +794,13 @@ class UserCoupon(Base):
         UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
-    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}"). 운영자 수동 지급은 None.
+    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}", 빙고판 완성: "bingo:{week_id}").
+    # 운영자 수동 지급은 None.
     grant_key: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 달려서 받은 쿠폰이면 그 러닝. 완주 결과 화면이 "이번에 받은 쿠폰"을 찾는 데 쓴다.
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), default=None
+    )
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

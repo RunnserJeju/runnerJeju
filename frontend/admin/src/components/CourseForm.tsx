@@ -1,4 +1,11 @@
-import type { Course, CourseUpdatePayload, CourseVisibility, Facility } from '../api'
+import {
+  COURSE_CATEGORY_LABEL,
+  type Course,
+  type CourseCategory,
+  type CourseUpdatePayload,
+  type CourseVisibility,
+  type Facility,
+} from '../api'
 import FacilityListEditor, { type FacilityDraft } from './FacilityListEditor'
 import PartnerPicker from './PartnerPicker'
 
@@ -8,6 +15,8 @@ export interface CourseFormValues {
   name: string
   distanceKm: string
   difficulty: string
+  /** '' | CourseCategory. 기본값 없음 — 제출 시 반드시 골라야 한다. */
+  category: string
   /** '' | 'public' | 'admin'. 기본값 없음 — 제출 시 반드시 골라야 한다. */
   visibility: string
   address: string
@@ -25,6 +34,7 @@ export function emptyValues(): CourseFormValues {
     name: '',
     distanceKm: '',
     difficulty: '1',
+    category: '',
     visibility: '',
     address: '',
     tags: '',
@@ -47,6 +57,7 @@ export function valuesFromCourse(course: Course): CourseFormValues {
     name: course.name,
     distanceKm: String(course.distance_km),
     difficulty: String(course.difficulty),
+    category: course.category,
     visibility: course.visibility ?? '',
     address: course.address,
     tags: course.tags ?? '',
@@ -62,6 +73,7 @@ export interface ValidatedCourseForm {
   name: string
   distanceKm: number
   difficulty: number
+  category: CourseCategory
   visibility: CourseVisibility
   address: string
   tags: string
@@ -96,6 +108,11 @@ export function validate(
   if (![1, 2, 3].includes(difficulty)) {
     return { ok: false, message: '난이도를 선택해 주세요.' }
   }
+
+  if (!(values.category in COURSE_CATEGORY_LABEL)) {
+    return { ok: false, message: '카테고리를 선택해 주세요.' }
+  }
+  const category = values.category as CourseCategory
 
   const visibility = values.visibility
   if (visibility !== 'public' && visibility !== 'admin') {
@@ -150,6 +167,7 @@ export function validate(
       name: values.name.trim(),
       distanceKm,
       difficulty,
+      category,
       visibility,
       address: values.address.trim(),
       tags: normalizeTags(values.tags),
@@ -176,6 +194,7 @@ export function toUpdatePayload(data: ValidatedCourseForm): CourseUpdatePayload 
     name: data.name,
     distance_km: data.distanceKm,
     difficulty: data.difficulty,
+    category: data.category,
     visibility: data.visibility,
     address: data.address,
     tags: data.tags || null,
@@ -236,6 +255,21 @@ export default function CourseForm({ values, onChange, nameOptional = false }: P
             <option value="1">★ (쉬움)</option>
             <option value="2">★★ (보통)</option>
             <option value="3">★★★ (어려움)</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="course-category">카테고리</label>
+          <select
+            id="course-category"
+            value={values.category}
+            onChange={(event) => set('category', event.target.value)}
+          >
+            <option value="">선택</option>
+            {Object.entries(COURSE_CATEGORY_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
         </div>
         <div className="field">

@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 // 카카오맵 SDK는 머티리얼과 겹치는 이름을 내보내므로 접두사를 붙인다.
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 
-import '../theme/app_theme.dart';
+import '../../theme/app_theme.dart';
 import 'marker_canvas.dart';
 
 /// 내 현위치 점. 러닝 탭 지도(CourseMapView)와 달리기 지도(RunMapView)가 같은

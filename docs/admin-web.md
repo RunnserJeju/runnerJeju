@@ -26,6 +26,8 @@
 | `PUT /admin/courses/{id}/gpx` | 경로 교체 (기록 있으면 409 → `reset_records=true`) |
 | `PUT /admin/courses/{id}/thumbnail` | 썸네일 설정/교체 |
 | `DELETE /admin/courses/{id}/thumbnail` | 썸네일 제거 |
+| `POST /admin/courses/{id}/images` | 추가 이미지 한 장을 맨 뒤에 붙임(최대 10장, 썸네일과 같은 버킷) |
+| `PUT /admin/courses/{id}/images` | 추가 이미지 순서 바꾸기·빼기 `{image_urls}` — 지금 있는 URL로만, 빠진 것은 Storage에서도 삭제 |
 | `PUT /admin/courses/{id}/stamp-image` | 완주 스탬프 도안 설정/교체 |
 | `DELETE /admin/courses/{id}/stamp-image` | 스탬프 도안 제거 |
 | `GET /admin/notices` | 공지 전체 목록 (예약·만료 포함 — 관리용) |
@@ -39,7 +41,7 @@
 | `PATCH /admin/events/{id}` | 이벤트 수정 (전체 교체) |
 | `DELETE /admin/events/{id}` | 이벤트 삭제 (이미지 파일도 삭제) |
 | `PUT/DELETE /admin/events/{id}/image` | 이벤트 이미지 설정/교체/제거 |
-| `GET/POST /admin/stamps`, `PATCH /admin/stamps/{id}` | 스탬프 종류 목록·등록·수정 (#71) |
+| `GET /admin/stamps`, `PATCH /admin/stamps/{id}` | 스탬프 종류 목록·수정 (#71). 수정은 표시 정보(이름·안내·정렬·노출)만, 지급 조건은 못 바꾼다. 종류 추가는 없음 — 코스 등록 때 코스 스탬프가 자동으로 하나 생기고, 그 밖의 종류는 개발자가 DB에 직접 넣는다(2026-10-22) |
 | `PUT/DELETE /admin/stamps/{id}/image` | 스탬프 도안 설정/교체/제거 |
 | `GET/POST /admin/running-weeks`, `PATCH /admin/running-weeks/{id}` | 러닝위크 회차 (#70) |
 | `PUT /admin/running-weeks/{id}/bingo` | 빙고 배치(스탬프 종류 25개) |
@@ -76,6 +78,17 @@
 **썸네일 (전용 리소스)** — 이미지 파일 처리를 등록/수정 폼과 분리:
 - `PUT /courses/{id}/thumbnail` (multipart, `file`: jpg/png/webp, ≤8MB) — 설정/교체. 교체 시 옛 오브젝트 삭제. 응답은 `CourseSummary`.
 - `DELETE /courses/{id}/thumbnail` — `thumbnail_url`을 null로 + Storage 파일 삭제. 이미 없으면 no-op.
+
+**카테고리·추가 이미지 (2026-10-22, `0039`)**
+- `courses.category` 필수: `art`(아트런) / `road`(로드런) / `trail`(트레일런) / `challenge`(챌린지런). DB CHECK(`ck_courses_category`)로도 막는다. 값을 늘리면 `models.COURSE_CATEGORIES`·`schemas.CourseCategory`·CHECK(마이그레이션)·운영 웹 `COURSE_CATEGORY_LABEL`을 같이 바꾼다. 기존 코스는 태그로 채웠다 — `아트런` → art, `트레일러닝` → trail, 나머지 road. 태그는 그대로 둔다.
+- `courses.image_urls`(JSONB 목록, 순서대로): 썸네일 말고 더 보여 줄 이미지. 응답(`CourseListItem`)에 들어간다. 앱은 코스 상세 시트의 시작 버튼 아래, 상세의 맨 위에 옆으로 미는 사진 띠(`widgets/image_gallery.dart`)로 그린다(2026-10-24). 높이(180)만 고정하고 사진마다 원본 비율대로 폭이 달라져 잘리지 않는다(네이버지도 장소 상세 방식). 썸네일은 반대로 정사각 자리에 꽉 채워 자른다. 비율·해상도 검사는 없다(형식·8MB만).
+
+**러닝위크·이벤트 공개 범위 (2026-10-24, `0042`)**
+- `running_weeks.visibility`·`events.visibility` — 코스와 같은 `public` | `admin`. `admin`이면 role='admin'인 앱 사용자에게만 내려간다(`GET /running-weeks/current`, `GET /events`, 참가 신청까지). 기본값·기존 행 모두 `admin` — 운영자가 앱에서 확인한 뒤 운영툴 폼의 '공개 범위'를 전체 공개로 바꾼다. 완주 보상(`running_week.on_course_completed`)은 운영자 전용 회차도 돈다 — 참가 신청이 이미 볼 수 있던 사람만 걸러 준다.
+
+**협력업체 썸네일·추가 이미지 (2026-10-24, `0041`)**
+- `partners.thumbnail_url`·`partners.image_urls` — 코스와 같은 구조. `PUT/DELETE /admin/partners/{id}/thumbnail`, `POST/PUT /admin/partners/{id}/images`(최대 10장). 검사·상한은 `app/admin/images.py`를 코스와 같이 쓴다. 버킷은 `SUPABASE_PARTNER_BUCKET`(기본 `partner-images`) — 없으면 첫 업로드 때 서버가 public으로 만든다(`storage.ensure_public_bucket`), 환경마다 손으로 만들 필요 없음. 업체 삭제 시 파일도 지운다.
+- 앱: 협력업체 목록이 업종 아이콘 줄 대신 코스 목록과 같은 카드(`widgets/listing_card.dart` 틀, `partner_card.dart`)로 바뀌었다. 썸네일이 없으면 같은 자리에 업종 타일. 상세 시트는 길찾기 아래에 갤러리.
 - 등록도 이 엔드포인트로 올린다 → "처음 설정"과 "교체"가 같은 코드.
 
 **조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함.
@@ -90,6 +103,13 @@
 **Storage 버킷**: 용도별 분리. 썸네일은 `SUPABASE_COURSE_BUCKET`(기본 `course-thumbnails`), 공지 배너 이미지는 `SUPABASE_STORAGE_BUCKET`(기본 `banners`), 스탬프 도안은 `SUPABASE_STAMP_BUCKET`(기본 `course-stamps`).
 
 ## 스탬프 도안 (백엔드, 2026-09-02)
+
+> **2026-10-22 카테고리 기본 도안 (`0040`)**: 코스 완주 스탬프는 `image_url`이 비어 있으면
+> 코스 `category`(art/road/trail/challenge)별 고정 파일을 쓴다(`app/stamp_images.py`, Storage
+> `course-stamps/category/{category}_run.png`). DB에 URL을 두지 않아 코스 카테고리를 바꾸면 도안도
+> 따라간다. 운영툴에서 올린 도안이 있으면 그게 우선, 지우면 다시 기본. 난이도별 도안 URL은 0040이
+> 비웠다. 파일 교체는 `python -m tools.upload_category_stamps <디렉터리>`(api 컨테이너 안, 같은 경로 덮어쓰기).
+> 운영 응답(`GET /admin/stamps`)의 `image_url`은 직접 올린 것만이라 기본 도안은 "등록된 도안 없음"으로 보인다.
 
 > **2026-10-18 바뀜(#71)**: 스탬프를 코스에서 분리했다. 도안은 `stamp_definitions.image_url`에 있고
 > `PUT/DELETE /admin/stamps/{id}/image`(운영 웹 "데이터 편집 > 스탬프")로 관리한다.
@@ -120,6 +140,8 @@
 - **`POST` / `PATCH`(전체 교체) / `DELETE /admin/notices/{id}`** — 작성·수정·삭제.
 
 운영 웹 폼: 제목·본문·노출 시작/종료(선택). 목록은 `GET /admin/notices`로 예약·만료까지 보여주고 상태 뱃지를 붙이면 좋다.
+
+- **운영 웹 위치 (2026-10-22)** — 사이드메뉴 '공지사항'을 없애고 '홈 구성' 페이지 맨 위 섹션으로 옮겼다(`components/NoticeSection`). 배너가 앱 홈 상단에 실리는 것이라 코스 큐레이션·추천 업체와 같은 화면에서 한눈에 구성하게 했다.
 
 ## 이벤트 관리 (2026-10-18, #70)
 
@@ -159,12 +181,15 @@
 
 쿠폰 템플릿(`coupons`)은 **코드가 심고 운영툴은 수정만** 한다. 지급 조건은 스탬프처럼 `trigger_type`으로 가르고 판정은 `app/coupon_rules.py` 한 곳에 쓴다(마이그레이션 `0021` 기본 구조, `0032` 규칙·업체).
 
-- **지급 조건**: `manual`(운영자가 회원 골라 지급) / `course_complete`(아무 코스나 완주 인증이 통과하면 한 장, 코스마다 1회 — `user_coupons.grant_key = "course:{course_id}"` 유니크). 새 조건(빙고 줄·블랙아웃 등)은 규칙 함수 + 행을 심는 마이그레이션을 같이 더한다. 운영툴에 생성·삭제는 없다 — 만들어 봤자 지급할 방법이 없어서.
+- **지급 조건**: `manual`(운영자가 회원 골라 지급) / `course_complete`(아무 코스나 완주 인증이 통과하면 한 장, 코스마다 1회 — `user_coupons.grant_key = "course:{course_id}"` 유니크). `bingo_complete`('스페셜 쿠폰', `0037`) — 러닝위크 빙고판 25칸을 다 채우면(=25개 코스 완주) 회차마다 한 장(`grant_key = "bingo:{week_id}"`). 새 조건은 규칙 함수 + 행을 심는 마이그레이션을 같이 더한다. 운영툴에 생성·삭제는 없다 — 만들어 봤자 지급할 방법이 없어서.
 - **사용 업체**: `coupon_partners`(쿠폰 ↔ 업체). 행이 없으면 모든 업체 허용. 앱에서는 업체 직원이 **업체 고유 쿠폰 번호(숫자 4자리)**를 입력해 `POST /me/coupons/{id}/use {pin}`으로 사용한다(2026-10-19). 번호는 협력업체 수정 화면의 "쿠폰 번호"(`partners.coupon_pin`, 업체끼리 겹치면 409, 비우면 그 업체에서 사용 불가)에서 넣는다. 서버는 번호로 업체를 찾고(없으면 400) 제한 안의 업체인지 확인하고 `user_coupons.used_partner_id`에 남긴다(업체 목록의 "쿠폰 사용" 수, 발급 현황의 사용 업체).
 - **상태**: `used_at`(사용) · `expired_at`(만료). 만료는 서버가 알아챈 시점(내 쿠폰 조회, 사용 시도)에 `expired_at`을 남기고(`0034`), 앱 목록에서는 뺀다. 만료 쿠폰을 쓰려 하면 410. 자동 지급도 템플릿 `valid_until`이 지났으면 멈춘다. `is_active`는 자동 지급 스위치이고 이미 발급된 쿠폰은 그대로 쓸 수 있다. 쿠폰은 러닝위크 기간에만 지급하므로 기본값은 꺼짐이고(`0036`에서 기존 쿠폰도 전부 끔), 운영자가 러닝위크에 맞춰 "지급 중"을 켜고 끈다.
-- **인증 응답**: `VerificationOut.earned_coupon_id` — 앱이 스탬프 연출 뒤 쿠폰 획득 연출에 쓴다.
+- **인증 응답 (팝업)**: 모두 **이번 러닝으로 새로 받은 것만** 담는다(`stamps.run_id`·`user_coupons.run_id`) — 재완주 때는 팝업이 다시 뜨지 않는다. `VerificationOut.earned_stamp_id`·`earned_coupon_id` — 앱이 스탬프 연출 뒤 쿠폰 획득 연출에 쓴다. 이어서 `earned_running_week_stamp_ids`(이번 러닝으로 받은 러닝위크 스탬프)·`earned_bingo_coupon_id`(스페셜 쿠폰)를 연출한다. 이번 러닝 판별은 `stamps.run_id`·`user_coupons.run_id`(`0037`).
+- **모듈 (2026-10-21)**: 러닝위크 기간에만 도는 보상은 `app/running_week.py` 진입점(`on_course_completed`)에서만 시작한다. 여기서 공개 중인 회차·참가 여부를 판단하고 `coupon_rules`(쿠폰 발급)·`bingo`(빙고판 계산·빙고 보상)·`stamp_rules`(스탬프 발급)를 부른다. 이 셋은 기간을 모른다. 코스 완주 스탬프만 상시(`verifications`가 직접 호출). **코스완료 쿠폰도 공개 중인 회차의 참가 신청자에게만 준다** — 쿠폰 "활성화" 스위치와 둘 다 켜져야 지급.
+- **러닝위크 전용 스탬프 (2026-10-22)**: 스탬프 조건 `running_week_course {running_week_id, course_id}`. 코드가 만들지 않는다 — 개발자가 회차·코스마다 DB에 직접 넣는다(키 이름은 `stamp_rules.CONDITION_TYPES`와 정확히 같게). 앱에 보이는 이름에는 회차를 넣지 않는다. 공개 중인 회차에 **참가 신청한 사람**이 기간에 완주하면 코스 스탬프와 함께 받는다. 신청 전 완주는 소급하지 않지만 신청 뒤 같은 코스를 다시 완주하면 그때 받는다(완주 인증마다 검사, 발급은 사람·스탬프당 1회). **빙고 칸은 이 회차 전용 스탬프만** 놓을 수 있다(422) — 그래서 러닝위크 전 완주는 칸을 채우지 않는다. 회차 번호는 `running_weeks.round`(`0038`, 유일, 등록 때 비우면 다음 번호)이고 앱에는 내리지 않는다. 인증 응답 `earned_running_week_stamp_ids`가 전용 스탬프 → 빙고 스탬프(줄 수 순)를 담는다.
+- **빙고 보상 (2026-10-21)**: 스탬프 조건 `bingo_lines {running_week_id, lines}` — 그 회차 빙고판에서 N줄 이상 채우면 발급. 1~12줄 스탬프를 줄 수마다 하나씩 개발자가 DB에 넣는다(12줄 = 판 전체 = 스페셜 스탬프). 판정은 완주 인증 직후: **공개 중인 회차 + 참가 신청자**만, 줄 수 기준 이하를 모두 발급하므로 한 번에 두 줄이 생겨도 단계를 건너뛰지 않는다. 빙고 칸에는 그 회차 러닝위크 코스 스탬프만 놓을 수 있다(422). 1·3·5줄 배송 리워드는 아직 없다.
 - **앱 API** (`/me/coupons`): `GET`(목록, 만료 제외, `partner_ids` null=모든 업체) · `GET /{id}` · `POST /{id}/use`(조건부 UPDATE로 중복 사용 방지, 만료면 410).
-- **안 한 것**: 회수(revoke)·per-issuance 만료·복권/룰렛 연출·빙고 쿠폰.
+- **안 한 것**: 회수(revoke)·per-issuance 만료·복권/룰렛 연출·1·3·5줄 리워드(선착순 배송).
 
 ## 목표 서버 구조
 

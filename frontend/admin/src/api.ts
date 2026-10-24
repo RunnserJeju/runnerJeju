@@ -19,6 +19,10 @@ export interface PartnerSummary {
   instagram: string | null
   benefit: string | null
   detail: Record<string, unknown>
+  /** 목록 카드 썸네일. 전용 엔드포인트로만 바뀐다. */
+  thumbnail_url: string | null
+  /** 상세 갤러리 이미지(순서대로). 전용 엔드포인트로만 바뀐다. */
+  image_urls: string[]
 }
 
 /** 협력업체 관리 화면용. 서버 PartnerOut과 1:1. */
@@ -49,11 +53,22 @@ export interface PartnerPayload {
 /** 공개 범위. null은 미설정(시드 스크립트로 올린 코스) — 앱에는 안 보인다. */
 export type CourseVisibility = 'public' | 'admin'
 
+/** 코스 카테고리. 서버 schemas.CourseCategory와 같아야 한다. */
+export type CourseCategory = 'art' | 'road' | 'trail' | 'challenge'
+
+export const COURSE_CATEGORY_LABEL: Record<CourseCategory, string> = {
+  art: '아트런',
+  road: '로드런',
+  trail: '트레일런',
+  challenge: '챌린지런',
+}
+
 export interface Course {
   id: string
   name: string
   distance_km: number
   difficulty: 1 | 2 | 3
+  category: CourseCategory
   visibility: CourseVisibility | null
   tags: string | null
   address: string
@@ -63,6 +78,8 @@ export interface Course {
   description: string | null
   estimated_time_min: number | null
   thumbnail_url: string | null
+  /** 썸네일 말고 더 보여 줄 이미지(순서대로). */
+  image_urls: string[]
   completed_count: number
 }
 
@@ -97,6 +114,7 @@ export interface CourseUpdatePayload {
   name: string
   distance_km: number
   difficulty: number
+  category: CourseCategory
   visibility: CourseVisibility
   address: string
   tags: string | null
@@ -194,6 +212,7 @@ export interface CourseCreateInput {
   name: string
   distanceKm: number
   difficulty: number
+  category: CourseCategory
   visibility: CourseVisibility
   address: string
   tags: string
@@ -209,6 +228,7 @@ export function createCourse(input: CourseCreateInput): Promise<Course> {
   form.set('file', input.file)
   form.set('distance_km', String(input.distanceKm))
   form.set('difficulty', String(input.difficulty))
+  form.set('category', input.category)
   form.set('visibility', input.visibility)
   form.set('address', input.address)
   if (input.name.trim()) form.set('name', input.name.trim())
@@ -256,10 +276,34 @@ export function deleteCourseThumbnail(id: string): Promise<Course> {
   return request(`/admin/courses/${id}/thumbnail`, { method: 'DELETE' })
 }
 
+/** 추가 이미지 한 장을 맨 뒤에 붙인다. */
+export function addCourseImage(id: string, file: File): Promise<Course> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/courses/${id}/images`, { method: 'POST', body: form })
+}
+
+/** 추가 이미지 순서 바꾸기·빼기. 지금 있는 URL로만(빠진 것은 서버가 지운다). */
+export function setCourseImages(id: string, imageUrls: string[]): Promise<Course> {
+  return request(`/admin/courses/${id}/images`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_urls: imageUrls }),
+  })
+}
+
 // --- 스탬프 -------------------------------------------------------------
 
 /** 획득 조건 종류. 서버 app/stamp_rules.CONDITION_TYPES와 같아야 한다. */
-export type StampConditionType = 'course_complete' | 'manual'
+export type StampConditionType = 'course_complete' | 'running_week_course' | 'bingo_lines' | 'manual'
+
+/** 조건 값. course_complete {course_id} | running_week_course {running_week_id, course_id}
+ * | bingo_lines {running_week_id, lines} | manual {}. */
+export interface StampConditionParams {
+  course_id?: string
+  running_week_id?: string
+  lines?: number
+}
 
 /** 스탬프 종류. 코스 완주는 조건의 하나(course_complete {course_id})다. */
 export interface StampDefinition {
@@ -268,7 +312,7 @@ export interface StampDefinition {
   description: string | null
   image_url: string | null
   condition_type: StampConditionType
-  condition_params: { course_id?: string }
+  condition_params: StampConditionParams
   is_active: boolean
   sort_order: number
   issued_count: number
@@ -276,25 +320,16 @@ export interface StampDefinition {
   updated_at: string
 }
 
+/** 수정 가능한 표시 정보. 지급 조건은 운영툴에서 안 바꾼다(스탬프 종류 추가는 개발자가 DB에 직접). */
 export interface StampDefinitionPayload {
   name: string
   description: string | null
-  condition_type: StampConditionType
-  condition_params: { course_id?: string }
   is_active: boolean
   sort_order: number
 }
 
 export function listStamps(): Promise<StampDefinition[]> {
   return request('/admin/stamps')
-}
-
-export function createStamp(payload: StampDefinitionPayload): Promise<StampDefinition> {
-  return request('/admin/stamps', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
 }
 
 export function updateStamp(
@@ -325,12 +360,16 @@ export const BINGO_CELLS = 25
 /** 러닝위크 회차. 공개 규칙은 공지와 같고, 공개 중이면 앱 커뮤니티 상단에 배너가 뜬다. */
 export interface RunningWeek {
   id: string
+  /** 회차(1, 2, …). 전용 스탬프를 구분하는 데이터이고 앱에는 안 보인다. */
+  round: number
   title: string
   description: string | null
   image_url: string | null
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  /** 공개 범위. admin이면 운영자 계정에만 보인다(코스와 같다). */
+  visibility: CourseVisibility
   /** 칸 0~24에 놓은 스탬프 종류 id. 비어 있으면 빙고판을 아직 안 짠 것. */
   bingo_stamp_ids: string[]
   participant_count: number
@@ -339,11 +378,14 @@ export interface RunningWeek {
 }
 
 export interface RunningWeekPayload {
+  /** 등록 때 비우면 서버가 다음 회차로 매긴다. */
+  round: number | null
   title: string
   description: string | null
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  visibility: CourseVisibility
 }
 
 export interface Participation {
@@ -413,6 +455,8 @@ export interface CommunityEvent {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  /** 공개 범위. admin이면 운영자 계정에만 보인다(코스와 같다). */
+  visibility: CourseVisibility
   sort_order: number
   created_at: string
   updated_at: string
@@ -424,6 +468,7 @@ export interface CommunityEventPayload {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  visibility: CourseVisibility
   sort_order: number
 }
 
@@ -526,11 +571,37 @@ export function deletePartner(id: string): Promise<void> {
   return request(`/admin/partners/${id}`, { method: 'DELETE' })
 }
 
+export function setPartnerThumbnail(id: string, file: File): Promise<Partner> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/partners/${id}/thumbnail`, { method: 'PUT', body: form })
+}
+
+export function deletePartnerThumbnail(id: string): Promise<Partner> {
+  return request(`/admin/partners/${id}/thumbnail`, { method: 'DELETE' })
+}
+
+/** 갤러리 이미지 한 장을 맨 뒤에 붙인다. */
+export function addPartnerImage(id: string, file: File): Promise<Partner> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/partners/${id}/images`, { method: 'POST', body: form })
+}
+
+/** 갤러리 이미지 순서 바꾸기·빼기. 지금 있는 URL로만(빠진 것은 서버가 지운다). */
+export function setPartnerImages(id: string, imageUrls: string[]): Promise<Partner> {
+  return request(`/admin/partners/${id}/images`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_urls: imageUrls }),
+  })
+}
+
 // --- 쿠폰 ---------------------------------------------------------------
 // 템플릿 행은 서버 마이그레이션이 심는다 — 여기서는 수정·지급·현황만.
 
 /** 지급 조건. 서버 app/coupon_rules.TRIGGER_TYPES와 같다. */
-export type CouponTriggerType = 'manual' | 'course_complete'
+export type CouponTriggerType = 'manual' | 'course_complete' | 'bingo_complete'
 
 export interface Coupon {
   id: string

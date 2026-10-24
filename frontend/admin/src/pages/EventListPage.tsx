@@ -9,6 +9,7 @@ import {
   setEventImage,
   updateEvent,
   type CommunityEvent,
+  type CourseVisibility,
   type CommunityEventPayload,
 } from '../api'
 import Modal from '../components/Modal'
@@ -195,6 +196,7 @@ function ContentSection({
   const [startsAt, setStartsAt] = useState(toLocalInput(event?.starts_at ?? null))
   const [endsAt, setEndsAt] = useState(toLocalInput(event?.ends_at ?? null))
   const [isActive, setIsActive] = useState(event?.is_active ?? true)
+  const [visibility, setVisibility] = useState<CourseVisibility>(event?.visibility ?? 'admin')
   const [sortOrder, setSortOrder] = useState(event?.sort_order ?? 0)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -221,6 +223,7 @@ function ContentSection({
       starts_at: start ? start.toISOString() : null,
       ends_at: end ? end.toISOString() : null,
       is_active: isActive,
+      visibility,
       sort_order: sortOrder,
     }
     setSaving(true)
@@ -301,6 +304,19 @@ function ContentSection({
             />{' '}
             앱에 노출
           </label>
+        </div>
+        <div className="field">
+          <label htmlFor="ev-visibility">
+            공개 범위 <span className="hint">운영자: role=admin 계정에만 보여요</span>
+          </label>
+          <select
+            id="ev-visibility"
+            value={visibility}
+            onChange={(e) => setVisibility(e.target.value as CourseVisibility)}
+          >
+            <option value="admin">운영자</option>
+            <option value="public">전체 공개</option>
+          </select>
         </div>
       </div>
       {error && <div className="error">{error}</div>}

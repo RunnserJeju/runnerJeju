@@ -12,6 +12,7 @@ import {
   type HomeCurationItem,
   type Partner,
 } from '../api'
+import NoticeSection from '../components/NoticeSection'
 import SearchSelect from '../components/SearchSelect'
 
 interface Props {
@@ -20,8 +21,9 @@ interface Props {
 }
 
 /**
- * 앱 홈의 두 섹션 구성: '러닝 코스 큐레이션'(코스)과 '추천 협력 업체'(업체).
- * 섹션마다 고른 항목을 순서대로 편집하고 저장하면 그 순서 그대로 앱 홈에 나온다.
+ * 앱 홈 구성: 맨 위 '공지사항'(배너), 그 아래 '러닝 코스 큐레이션'(코스)과
+ * '추천 협력 업체'(업체). 큐레이션 섹션은 고른 항목을 순서대로 편집·저장하면 그 순서
+ * 그대로 앱 홈에 나온다.
  */
 export default function HomeCurationPage({ onUnauthorized }: Props) {
   const [courses, setCourses] = useState<Course[] | null>(null)
@@ -56,9 +58,10 @@ export default function HomeCurationPage({ onUnauthorized }: Props) {
         <h2>홈 구성</h2>
       </div>
       <p className="muted page-desc">
-        앱 홈에 띄울 코스와 협력업체를 고르고 순서를 정해요. 저장하면 앱을 새로 열거나 당겨서
-        새로고침할 때 반영돼요. 아무것도 고르지 않으면 그 섹션은 앱 홈에서 숨겨져요.
+        앱 홈에 띄울 공지·코스·협력업체를 정해요. 저장하면 앱을 새로 열거나 당겨서 새로고침할
+        때 반영돼요. 코스·협력업체를 아무것도 고르지 않으면 그 섹션은 앱 홈에서 숨겨져요.
       </p>
+      <NoticeSection onUnauthorized={onUnauthorized} />
       {error && <div className="error">{error}</div>}
       {home == null && !error && <p className="muted">불러오는 중…</p>}
 

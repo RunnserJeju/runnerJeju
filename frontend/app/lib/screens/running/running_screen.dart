@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -51,13 +52,19 @@ class RunningScreenState extends State<RunningScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
-  /// 짧은 안내는 겹쳐 쌓이지 않게 이쪽을 거친다. '준비 중' 버튼들은 연달아
-  /// 눌리기 쉬워서, 그냥 띄우면 같은 문장이 누른 횟수만큼 줄을 선다.
+  /// 짧은 안내는 겹쳐 쌓이지 않게 이쪽을 거친다. 찜 토글처럼 연달아 눌리기 쉬운
+  /// 안내는 그냥 띄우면 같은 문장이 누른 횟수만큼 줄을 선다.
   final TransientMessenger _messenger = TransientMessenger();
 
   List<RunningCourse> _courses = const [];
   bool _isLoadingCourses = true;
   Object? _coursesError;
+
+  /// 찜한 코스 id. '찜' 칩을 켤 때 받아 온다(FavoriteService가 세션 캐시).
+  /// null이면 아직 안 받았거나 실패.
+  Set<String>? _favoriteIds;
+  bool _isLoadingFavorites = false;
+  Object? _favoritesError;
 
   /// 코스 이름 검색. 결과 목록만 서버(ILIKE)를 따르고 지도 마커는 전부 남긴다 —
   /// 글자를 지울 때마다 라벨이 사라졌다 나타나면 눈에 거슬린다.
@@ -116,12 +123,36 @@ class RunningScreenState extends State<RunningScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  /// 지도에 무엇을 찍을지. '협력업체' 칩이면 업체만(코스 라벨은 숨기고 아래 시트는
-  /// [PartnerListSheet]), '전체' 칩이면 코스와 업체를 함께. 코스를 고르면 courses로
-  /// 돌아가 그 코스만 남는다.
+  /// 지도에 무엇을 찍을지. 칩 하나가 레이어 하나를 켜고, 켜진 칩은 색이 반전된다.
+  /// '코스 탐색'은 코스만, '협력업체'는 업체만(아래 시트는 [PartnerListSheet]),
+  /// '전체'는 둘 다, '찜'은 찜한 코스만(시트도 그 목록). 켜진 칩을 다시 누르면
+  /// 꺼진다(코스 탐색은 none, 나머지는 courses로). 코스를 고르면 courses로
+  /// 돌아가 그 코스만 남는다(찜 모드에서 골랐으면 찜 모드 유지).
   _MapLayer _layer = _MapLayer.courses;
 
   bool get _isPartnerMode => _layer == _MapLayer.partners;
+
+  bool get _isFavoriteMode => _layer == _MapLayer.favorites;
+
+  bool get _showsCourses =>
+      _layer == _MapLayer.courses ||
+      _layer == _MapLayer.all ||
+      _layer == _MapLayer.favorites;
+
+  /// 지도와 목록 시트에 내려보내는 코스. 찜 모드면 찜한 코스만 — 보고 있던 코스가
+  /// 찜 해제돼도 상세가 떠 있는 동안은 마커를 남긴다.
+  List<RunningCourse> get _visibleCourses {
+    if (!_isFavoriteMode) return _courses;
+    final ids = _favoriteIds;
+    if (ids == null) return const [];
+    return [
+      for (final c in _courses)
+        if (ids.contains(c.id) || c.id == _selected?.id) c,
+    ];
+  }
+
+  bool get _showsPartners =>
+      _layer == _MapLayer.partners || _layer == _MapLayer.all;
 
   /// 협력업체 전체. 처음 모드를 켤 때 한 번 받고, 실패했을 때만 다시 받는다.
   List<CoursePartner> _partners = const [];
@@ -297,8 +328,8 @@ class RunningScreenState extends State<RunningScreen> {
       _detailError = null;
       _selectedIsFavorite = false;
       // 코스를 고르면(협력업체 시트의 연결 코스, 지도의 코스 라벨) 업체 레이어를
-      // 끈다. 지도에는 코스만 남는다.
-      _layer = _MapLayer.courses;
+      // 끈다. 지도에는 코스만 남는다. 찜 모드는 그대로 둔다 — 닫으면 찜 목록으로.
+      if (!_isFavoriteMode) _layer = _MapLayer.courses;
       _selectedPartner = null;
     });
 
@@ -332,7 +363,13 @@ class RunningScreenState extends State<RunningScreen> {
       currently: _selectedIsFavorite,
     );
     if (!mounted || _selected?.id != course.id) return;
-    setState(() => _selectedIsFavorite = nowFavorite);
+    setState(() {
+      _selectedIsFavorite = nowFavorite;
+      // 찜 모드의 목록·마커도 같이 따라간다.
+      nowFavorite
+          ? _favoriteIds?.add(course.id)
+          : _favoriteIds?.remove(course.id);
+    });
     _showMessage(nowFavorite ? '찜한 코스에 담았어요.' : '찜을 해제했어요.');
   }
 
@@ -340,25 +377,25 @@ class RunningScreenState extends State<RunningScreen> {
   /// 먼저 보낼 곳을 고르게 한다.
   /// - 안드로이드: 깔린 워치 앱으로 열기 · 기기에 저장 · 다른 앱으로 보내기.
   ///   저장이 안 되는 구형 안드로이드는 공유 시트로 넘어간다.
-  /// - iOS: 설치 앱을 알 수 없어, GPX 앱 목록으로 열기 · 공유 시트(파일에 저장 포함).
+  /// - iOS: 고를 것 없이 바로 공유 시트. 가민·순토도 파일에 저장도 거기서 한다.
+  ///   ('열기' 메뉴로는 가민 등이 파일을 받지 못했다.)
   Future<void> _downloadSelectedGpx() async {
     final course = _selected;
     if (course == null || _downloadingGpx) return;
 
-    final apps = await Services.instance.course.installedGpxApps();
-    if (!mounted) return;
-    final destination = await _askGpxDestination(apps);
-    if (destination == null || !mounted) return;
+    _GpxDestination? destination;
+    if (!Platform.isIOS) {
+      final apps = await Services.instance.course.installedGpxApps();
+      if (!mounted) return;
+      destination = await _askGpxDestination(apps);
+      if (destination == null || !mounted) return;
+    }
     setState(() => _downloadingGpx = true);
 
     try {
       final file = await Services.instance.course.downloadGpx(course);
-      if (Platform.isIOS) {
-        if (!destination.gpxApps) {
-          await Services.instance.course.shareGpxOnIOS(file);
-        } else if (!await Services.instance.course.openInGpxApps(file)) {
-          if (mounted) _showMessage('GPX 파일을 열 수 있는 앱이 없어요.');
-        }
+      if (destination == null) {
+        await Services.instance.course.shareGpxOnIOS(file);
         return;
       }
       final app = destination.app;
@@ -404,50 +441,29 @@ class RunningScreenState extends State<RunningScreen> {
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: Platform.isIOS
-              ? [
-                  ListTile(
-                    leading: const Icon(Icons.watch_rounded),
-                    title: const Text('GPX 앱에서 열기'),
-                    subtitle: const Text('가민·순토 등 GPX를 여는 앱'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.gpxApps()),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.ios_share_rounded),
-                    title: const Text('파일에 저장 / 공유하기'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.share()),
-                  ),
-                ]
-              : [
-                  for (final app in apps)
-                    ListTile(
-                      leading: const Icon(Icons.watch_rounded),
-                      title: Text('${app.label}로 열기'),
-                      subtitle: Text(app.description),
-                      onTap: () => Navigator.of(
-                        sheetContext,
-                      ).pop(_GpxDestination.app(app)),
-                    ),
-                  ListTile(
-                    leading: const Icon(Icons.download_rounded),
-                    title: const Text('기기에 저장'),
-                    subtitle: const Text('다운로드 폴더에 저장해요'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.save()),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.share_rounded),
-                    title: const Text('다른 앱으로 보내기'),
-                    onTap: () => Navigator.of(
-                      sheetContext,
-                    ).pop(const _GpxDestination.share()),
-                  ),
-                ],
+          children: [
+            for (final app in apps)
+              ListTile(
+                leading: const Icon(Icons.watch_rounded),
+                title: Text('${app.label}로 열기'),
+                subtitle: Text(app.description),
+                onTap: () =>
+                    Navigator.of(sheetContext).pop(_GpxDestination.app(app)),
+              ),
+            ListTile(
+              leading: const Icon(Icons.download_rounded),
+              title: const Text('기기에 저장'),
+              subtitle: const Text('다운로드 폴더에 저장해요'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(const _GpxDestination.save()),
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_rounded),
+              title: const Text('다른 앱으로 보내기'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(const _GpxDestination.share()),
+            ),
+          ],
         ),
       ),
     );
@@ -520,8 +536,17 @@ class RunningScreenState extends State<RunningScreen> {
     });
   }
 
-  /// '코스 탐색' 버튼. 코스 상세가 떠 있었다면 걷고 탐색 시트를 펼친다.
+  /// '코스 탐색' 칩. 협력업체 칩처럼 켜고 끈다. 켜면 코스 마커와 탐색 시트를 펼치고,
+  /// 코스만 보던 중(상세 없음)에 다시 누르면 코스 마커를 걷고 시트를 접는다.
+  /// 코스 상세가 떠 있었다면 걷고 탐색 시트를 펼친다.
   void _openExplore() {
+    if (_layer == _MapLayer.courses && _selected == null) {
+      _closeSearch();
+      setState(() => _layer = _MapLayer.none);
+      _moveSheet(CourseListSheet.peekHeight, isPixels: true);
+      return;
+    }
+    _closeSearch();
     _detailRequestId++;
     setState(() {
       _selected = null;
@@ -568,6 +593,41 @@ class RunningScreenState extends State<RunningScreen> {
   /// '전체' 칩. 코스와 업체를 함께 찍는다. 시트는 코스 목록 그대로.
   void _toggleAllMode() => _toggleLayer(_MapLayer.all);
 
+  /// '찜' 칩. 켜면 찜한 코스만 지도에 찍고 시트도 그 목록으로 펼친다.
+  void _toggleFavoriteMode() {
+    final turningOn = !_isFavoriteMode;
+    _toggleLayer(_MapLayer.favorites);
+    if (!turningOn) return;
+    if (_favoriteIds == null || _favoritesError != null) {
+      unawaited(_loadFavoriteIds());
+    }
+    // 상세를 걷은 프레임에서 시트가 다시 트리에 붙는다. 붙은 뒤에 움직인다.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _moveSheet(CourseListSheet.halfSize),
+    );
+  }
+
+  Future<void> _loadFavoriteIds() async {
+    setState(() {
+      _isLoadingFavorites = true;
+      _favoritesError = null;
+    });
+    try {
+      final ids = await Services.instance.favorite.favoriteIds();
+      if (!mounted) return;
+      setState(() {
+        _favoriteIds = {...ids};
+        _isLoadingFavorites = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _favoritesError = error;
+        _isLoadingFavorites = false;
+      });
+    }
+  }
+
   /// 같은 칩을 다시 누르면 코스만 보기로 돌아간다. 카메라는 건드리지 않는다 —
   /// 보던 자리에서 마커만 바뀌어야 어디를 보고 있었는지 잃지 않는다.
   void _toggleLayer(_MapLayer layer) {
@@ -596,7 +656,7 @@ class RunningScreenState extends State<RunningScreen> {
       _isReversed = false;
     });
 
-    if (_partners.isEmpty || _partnersError != null) {
+    if (_showsPartners && (_partners.isEmpty || _partnersError != null)) {
       unawaited(_loadPartners());
     }
   }
@@ -650,7 +710,10 @@ class RunningScreenState extends State<RunningScreen> {
 
     writeLog(
       LogName.partnerPreviewOpen,
-      detail: {LogKeys.partnerId: partner.id, LogKeys.source: LogSource.detail.name},
+      detail: {
+        LogKeys.partnerId: partner.id,
+        LogKeys.source: LogSource.detail.name,
+      },
     );
     unawaited(
       showPartnerDetailModal(
@@ -881,8 +944,6 @@ class RunningScreenState extends State<RunningScreen> {
     _showMessage('길찾기를 열지 못했어요.');
   }
 
-  void _showComingSoon(String label) => _showMessage('$label 기능은 준비 중이에요.');
-
   void _showMessage(String message) => _messenger.show(context, message);
 
   // ---------------------------------------------------------------------------
@@ -916,8 +977,8 @@ class RunningScreenState extends State<RunningScreen> {
                     listenable: _currentLocation,
                     builder: (context, _) => CourseMapView(
                       controller: _mapController,
-                      // 협력업체 모드면 코스 라벨을 치워 업체만 보이게 한다.
-                      courses: _isPartnerMode ? const [] : _courses,
+                      // 켜진 칩의 레이어만 찍는다([_layer]).
+                      courses: _showsCourses ? _visibleCourses : const [],
                       selectedCourseId: selected?.id,
                       selectedPath: detail?.path ?? const [],
                       // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
@@ -928,11 +989,8 @@ class RunningScreenState extends State<RunningScreen> {
                       selectedRestrooms: selected == null
                           ? const []
                           : (detail ?? selected).restrooms,
-                      // 업체는 협력업체·전체 레이어에서만. 코스를 고르면 레이어가
-                      // courses로 돌아가므로 코스만 남는다.
-                      partners: _layer == _MapLayer.courses
-                          ? const []
-                          : _partners,
+                      // 코스를 고르면 레이어가 courses로 돌아가므로 코스만 남는다.
+                      partners: _showsPartners ? _partners : const [],
                       selectedPartnerId: _selectedPartner?.id,
                       onPartnerTap: _onPartnerMarkerTap,
                       myPosition: _currentLocation.latest,
@@ -941,7 +999,10 @@ class RunningScreenState extends State<RunningScreen> {
                       onMapTap: _clearSelection,
                       // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
                       // 코스가 있으면 그 자리에서 다시 시작한다.
-                      initialCenter: (detail ?? selected)?.startPoint,
+                      // 디버그 빌드는 현위치와 상관없이 제주시청에서 시작한다.
+                      initialCenter:
+                          (detail ?? selected)?.startPoint ??
+                          (kDebugMode ? _debugStartCenter : null),
                     ),
                   ),
           ),
@@ -978,7 +1039,7 @@ class RunningScreenState extends State<RunningScreen> {
                     )
                   else ...[
                     _ActionChips(
-                      onTapFavorite: () => _showComingSoon('찜'),
+                      onTapFavorite: _toggleFavoriteMode,
                       onTapExplore: _openExplore,
                       onTapPartner: _togglePartnerMode,
                       onTapAll: _toggleAllMode,
@@ -1013,13 +1074,21 @@ class RunningScreenState extends State<RunningScreen> {
               listenable: _currentLocation,
               builder: (context, _) => CourseListSheet(
                 controller: _sheetController,
-                courses: _courses,
+                courses: _visibleCourses,
                 myPosition: _currentLocation.latest,
-                isLoading: _isLoadingCourses,
-                hasError: _coursesError != null,
+                isLoading: _isLoadingCourses || _isLoadingFavorites,
+                hasError: _coursesError != null || _favoritesError != null,
                 onSelect: (course) =>
                     _selectCourse(course, source: LogSource.list),
-                onRetry: _loadCourses,
+                onRetry: _favoritesError != null
+                    ? _loadFavoriteIds
+                    : _loadCourses,
+                title: _isFavoriteMode ? '찜한 코스' : null,
+                emptyIcon: _isFavoriteMode
+                    ? Icons.favorite_border_rounded
+                    : null,
+                emptyTitle: _isFavoriteMode ? '찜한 코스가 없어요' : null,
+                emptyMessage: _isFavoriteMode ? '코스 상세의 하트를 눌러 담아 보세요' : null,
               ),
             )
           else
@@ -1095,6 +1164,24 @@ class RunningScreenState extends State<RunningScreen> {
       );
     }
 
+    if (_isFavoriteMode && _favoritesError != null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: _StatusPill(
+          label: '찜한 코스를 불러오지 못했어요',
+          icon: Icons.refresh_rounded,
+          onTap: _loadFavoriteIds,
+        ),
+      );
+    }
+
+    if (_isFavoriteMode && _isLoadingFavorites) {
+      return const Align(
+        alignment: Alignment.centerLeft,
+        child: _StatusPill(label: '찜한 코스를 불러오는 중', busy: true),
+      );
+    }
+
     return const SizedBox.shrink();
   }
 }
@@ -1151,8 +1238,12 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-/// 지도에 찍는 마커 레이어.
-enum _MapLayer { courses, partners, all }
+/// 지도에 찍는 마커 레이어. none은 코스 탐색 칩을 끈 상태(마커 없음).
+/// favorites는 찜한 코스만.
+enum _MapLayer { none, courses, partners, all, favorites }
+
+/// 디버그 빌드의 지도 시작 위치(제주시청).
+const _debugStartCenter = GeoPoint(latitude: 33.4996, longitude: 126.5312);
 
 /// 검색창 아래 가로로 늘어서는 기능 칩들. 화면보다 길어지면 좌우로 스크롤한다.
 class _ActionChips extends StatelessWidget {
@@ -1174,14 +1265,18 @@ class _ActionChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final chips = <Widget>[
       _ActionChip(
-        icon: Icons.favorite_border_rounded,
+        icon: layer == _MapLayer.favorites
+            ? Icons.favorite_rounded
+            : Icons.favorite_border_rounded,
         label: '찜',
         onTap: onTapFavorite,
+        active: layer == _MapLayer.favorites,
       ),
       _ActionChip(
         icon: Icons.route_rounded,
         label: '코스 탐색',
         onTap: onTapExplore,
+        active: layer == _MapLayer.courses,
       ),
       _ActionChip(
         icon: Icons.storefront_rounded,
@@ -1354,12 +1449,10 @@ class _StatusPill extends StatelessWidget {
 /// GPX다운 선택지. [app]이 있으면 그 워치 앱으로(안드로이드), [gpxApps]면 GPX 앱
 /// 목록으로(iOS) 연다.
 class _GpxDestination {
-  const _GpxDestination.app(GpxApp this.app) : save = false, gpxApps = false;
-  const _GpxDestination.gpxApps() : app = null, save = false, gpxApps = true;
-  const _GpxDestination.save() : app = null, save = true, gpxApps = false;
-  const _GpxDestination.share() : app = null, save = false, gpxApps = false;
+  const _GpxDestination.app(GpxApp this.app) : save = false;
+  const _GpxDestination.save() : app = null, save = true;
+  const _GpxDestination.share() : app = null, save = false;
 
   final GpxApp? app;
   final bool save;
-  final bool gpxApps;
 }

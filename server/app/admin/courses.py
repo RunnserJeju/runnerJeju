@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app import storage
+from app.admin.images import MAX_EXTRA_IMAGES, read_image_or_raise
 from app.db import get_db
 from app.models import Course, Partner, Run, Stamp, StampDefinition, Verification
 from app.stamp_rules import course_condition
@@ -24,6 +25,8 @@ from app.routers.courses import (
     set_course_partners,
 )
 from app.schemas import (
+    CourseCategory,
+    CourseImagesUpdate,
     CourseListItem,
     CourseSummary,
     CourseUpdate,
@@ -37,15 +40,6 @@ router = APIRouter(tags=["courses"])
 # 업로드 가능한 GPX 최대 크기. 6.2km 코스가 36KB이므로 넉넉하다.
 # 제한이 없으면 거대한 파일 하나로 워커 메모리를 채울 수 있다.
 MAX_GPX_BYTES = 5 * 1024 * 1024
-
-# 썸네일 이미지 제한. 공지 배너 이미지(admin/notices.py)와 같은 규칙 — 폰 원본 사진이
-# 올라올 수 있어 넉넉히 두고, 확장자는 Storage 오브젝트 경로로도 쓰인다.
-MAX_THUMBNAIL_BYTES = 8 * 1024 * 1024
-_ALLOWED_IMAGE_TYPES = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-}
 
 # 멀티파트 폼에 파일과 함께 실려오는 parkings/restrooms를 검증한다. 폼 필드라
 # JSON 문자열로 오므로 validate_json으로 파싱한다(각 원소는 Facility = 좌표 포함).
@@ -105,6 +99,7 @@ def update_course(
     course.name = payload.name
     course.distance_km = payload.distance_km
     course.difficulty = payload.difficulty
+    course.category = payload.category
     course.visibility = payload.visibility
     course.address = payload.address
     course.tags = payload.tags
@@ -130,6 +125,9 @@ def create_course_from_gpx(
         ..., ge=0.1, le=9999.9, description="왕복 기준 거리(km), 소수 첫째 자리까지"
     ),
     difficulty: Difficulty = Form(..., description="1=★, 2=★★, 3=★★★"),
+    category: CourseCategory = Form(
+        ..., description="art=아트런, road=로드런, trail=트레일런, challenge=챌린지런"
+    ),
     visibility: CourseVisibility = Form(..., description="public=모두, admin=운영자만"),
     address: str = Form(..., min_length=1, description="코스 시작 지점 주소"),
     name: str | None = Form(default=None, description="생략하면 GPX의 <name>을 쓴다"),
@@ -190,6 +188,7 @@ def create_course_from_gpx(
             name=name,
             distance_km=round(distance_km, 1),
             difficulty=difficulty,
+            category=category,
             visibility=visibility,
             address=address,
             tags=tags,
@@ -327,18 +326,7 @@ def set_course_thumbnail(
     """
     course = _load_course_or_404(db, course_id)
 
-    extension = _ALLOWED_IMAGE_TYPES.get(file.content_type or "")
-    if extension is None:
-        raise HTTPException(status_code=422, detail="jpg/png/webp 이미지만 올릴 수 있어요.")
-
-    content = file.file.read(MAX_THUMBNAIL_BYTES + 1)
-    if len(content) > MAX_THUMBNAIL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"이미지가 너무 커요. {MAX_THUMBNAIL_BYTES // (1024 * 1024)}MB 이하여야 해요.",
-        )
-    if not content:
-        raise HTTPException(status_code=422, detail="빈 파일이에요.")
+    content, extension = read_image_or_raise(file)
 
     try:
         new_url = storage.upload_image(
@@ -380,6 +368,68 @@ def delete_course_thumbnail(
         db.commit()
         db.refresh(course)
         storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
+
+    counts = _completed_counts(db, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), False)
+
+
+@router.post("/courses/{course_id}/images", response_model=CourseSummary)
+def add_course_image(
+    course_id: uuid.UUID,
+    file: UploadFile = File(..., description="추가 이미지 (jpg/png/webp)"),
+    db: Session = Depends(get_db),
+):
+    """썸네일 말고 더 보여 줄 이미지를 맨 뒤에 하나 붙인다. (관리자 전용)"""
+    course = _load_course_or_404(db, course_id)
+    if len(course.image_urls or []) >= MAX_EXTRA_IMAGES:
+        raise HTTPException(
+            status_code=422, detail=f"이미지는 {MAX_EXTRA_IMAGES}장까지 올릴 수 있어요."
+        )
+    content, extension = read_image_or_raise(file)
+
+    try:
+        url = storage.upload_image(
+            content,
+            content_type=file.content_type,
+            extension=extension,
+            bucket=storage.SUPABASE_COURSE_BUCKET,
+        )
+    except storage.StorageUploadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    # JSONB 목록은 새 리스트를 대입해야 변경으로 잡힌다.
+    course.image_urls = [*(course.image_urls or []), url]
+    db.commit()
+    db.refresh(course)
+
+    counts = _completed_counts(db, [course.id])
+    return _to_summary(course, counts.get(course.id, 0), False)
+
+
+@router.put("/courses/{course_id}/images", response_model=CourseSummary)
+def set_course_images(
+    course_id: uuid.UUID,
+    payload: CourseImagesUpdate,
+    db: Session = Depends(get_db),
+):
+    """추가 이미지 순서를 바꾸거나 뺀다. (관리자 전용)
+
+    지금 있는 URL로만 이뤄져야 한다(새 이미지는 POST로). 빠진 이미지는 Storage에서도
+    지운다 — 실패는 무시한다.
+    """
+    course = _load_course_or_404(db, course_id)
+    current = list(course.image_urls or [])
+    unknown = [url for url in payload.image_urls if url not in current]
+    if unknown:
+        raise HTTPException(status_code=422, detail="이 코스에 없는 이미지가 섞여 있어요.")
+
+    removed = [url for url in current if url not in payload.image_urls]
+    course.image_urls = list(payload.image_urls)
+    db.commit()
+    db.refresh(course)
+
+    for url in removed:
+        storage.delete_image(url, bucket=storage.SUPABASE_COURSE_BUCKET)
 
     counts = _completed_counts(db, [course.id])
     return _to_summary(course, counts.get(course.id, 0), False)

@@ -197,12 +197,7 @@ class JejuBasemapPainter extends CustomPainter {
   ///
   /// 비켜 놓지 않으면, 오름을 빙 두르는 코스에서 경로가 이름을 전부 덮어
   /// 지도에 이름이 하나도 남지 않는다. 지도가 제 역할을 못 하는 셈이다.
-  Rect? _findSpot(
-    Offset at,
-    TextPainter text,
-    Size size,
-    List<Rect> placed,
-  ) {
+  Rect? _findSpot(Offset at, TextPainter text, Size size, List<Rect> placed) {
     for (final offset in _labelOffsets) {
       final box = Rect.fromCenter(
         center: at + offset * text.height,

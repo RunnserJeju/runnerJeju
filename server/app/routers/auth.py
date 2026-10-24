@@ -5,11 +5,12 @@ from datetime import datetime, timezone
 
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from app import apple_auth
+from app import apple_auth, storage
+from app.admin.images import read_image_or_raise
 from app.db import get_db
 from app.deps import current_user_id
 from app.models import RefreshToken, Run, User
@@ -101,10 +102,9 @@ def login_with_kakao(payload: KakaoLoginRequest, db: Session = Depends(get_db)):
         user = User(kakao_id=kakao_id)
         db.add(user)
 
-    # 닉네임은 카카오 프로필 값을 그대로 쓰지 않는다 — 최초 로그인 후 앱에서 직접
-    # 받는다(_issue_tokens의 needs_nickname). provider마다 제공 방식이 달라(카카오는
-    # 매번, 애플은 최초 1회만) 동기화 로직을 따로 두는 대신 앱 내 값을 기준으로 삼는다.
-    user.profile_image_url = profile.get("profile_image_url")
+    # 닉네임·프로필 사진은 카카오 값을 쓰지 않는다 — 앱에서 직접 받는다(닉네임은
+    # _issue_tokens의 needs_nickname, 사진은 PUT /auth/me/profile-image). 로그인 때
+    # 덮어쓰면 사용자가 올린 사진이 사라진다.
     # 이메일 동의항목이 꺼져 있거나 사용자가 거부했으면 안 내려온다 — 그럴 땐 기존 값 유지.
     email = (kakao_user.get("kakao_account") or {}).get("email")
     if email:
@@ -222,6 +222,58 @@ def get_me(
     return user
 
 
+def _active_user(db: Session, user_id: str) -> User:
+    user = db.get(User, uuid.UUID(user_id))
+    if user is None or user.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없어요.")
+    return user
+
+
+@router.put("/me/profile-image", response_model=UserOut)
+def upload_profile_image(
+    file: UploadFile = File(...),
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """프로필 사진을 올린다(jpg/png/webp, 8MB 이하). 이전 사진은 Storage에서 지운다."""
+    user = _active_user(db, user_id)
+    content, extension = read_image_or_raise(file)
+    try:
+        storage.ensure_public_bucket(storage.SUPABASE_PROFILE_BUCKET)
+        new_url = storage.upload_image(
+            content,
+            content_type=file.content_type,
+            extension=extension,
+            bucket=storage.SUPABASE_PROFILE_BUCKET,
+        )
+    except storage.StorageUploadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    old_url = user.profile_image_url
+    user.profile_image_url = new_url
+    db.commit()
+    db.refresh(user)
+    if old_url:
+        storage.delete_image(old_url, bucket=storage.SUPABASE_PROFILE_BUCKET)
+    return user
+
+
+@router.delete("/me/profile-image", response_model=UserOut)
+def delete_profile_image(
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """프로필 사진을 지운다(기본 아이콘으로 돌아간다). 없으면 그대로."""
+    user = _active_user(db, user_id)
+    old_url = user.profile_image_url
+    user.profile_image_url = None
+    db.commit()
+    db.refresh(user)
+    if old_url:
+        storage.delete_image(old_url, bucket=storage.SUPABASE_PROFILE_BUCKET)
+    return user
+
+
 @router.patch("/nickname", status_code=204)
 def update_nickname(
     payload: NicknameUpdate,
@@ -324,6 +376,9 @@ def withdraw(
             )
 
     # ① PII 스크럽 + 탈퇴 마커. provider id를 지워 재로그인=새 계정이 되게 한다.
+    #    직접 올린 프로필 사진은 Storage에서도 지운다(다른 곳 URL이면 그냥 넘어간다).
+    if user.profile_image_url:
+        storage.delete_image(user.profile_image_url, bucket=storage.SUPABASE_PROFILE_BUCKET)
     user.email = None
     user.nickname = None
     user.profile_image_url = None

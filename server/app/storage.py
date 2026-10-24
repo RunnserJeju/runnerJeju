@@ -27,6 +27,11 @@ SUPABASE_API_SECRET_KEY = os.environ.get("SUPABASE_API_SECRET_KEY")
 SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "banners")
 SUPABASE_COURSE_BUCKET = os.environ.get("SUPABASE_COURSE_BUCKET", "course-thumbnails")
 SUPABASE_STAMP_BUCKET = os.environ.get("SUPABASE_STAMP_BUCKET", "course-stamps")
+SUPABASE_PARTNER_BUCKET = os.environ.get("SUPABASE_PARTNER_BUCKET", "partner-images")
+SUPABASE_PROFILE_BUCKET = os.environ.get("SUPABASE_PROFILE_BUCKET", "profile-images")
+
+# ensure_public_bucket이 이미 확인한 버킷. 프로세스마다 한 번만 물어본다.
+_known_buckets: set[str] = set()
 
 
 class StorageUploadError(RuntimeError):
@@ -65,6 +70,55 @@ def upload_image(
         timeout=30,
     )
 
+    if response.status_code >= 400:
+        raise StorageUploadError(f"이미지 업로드에 실패했어요: {response.text[:200]}")
+
+    return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
+
+
+def ensure_public_bucket(bucket: str) -> None:
+    """버킷이 없으면 public으로 만든다. 새 용도의 버킷(협력업체 이미지)을 환경마다
+    손으로 만들지 않으려고 첫 업로드 때 부른다. 이미 있으면(409) 그냥 넘어간다."""
+    if bucket in _known_buckets:
+        return
+    if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
+        raise StorageUploadError(
+            "이미지 업로드가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_API_SECRET_KEY)."
+        )
+    response = httpx.post(
+        f"{SUPABASE_URL}/storage/v1/bucket",
+        headers={
+            "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
+            "apikey": SUPABASE_API_SECRET_KEY,
+        },
+        json={"id": bucket, "name": bucket, "public": True},
+        timeout=30,
+    )
+    if response.status_code >= 400 and response.status_code != 409:
+        raise StorageUploadError(f"버킷을 만들지 못했어요: {response.text[:200]}")
+    _known_buckets.add(bucket)
+
+
+def upload_fixed(content: bytes, *, path: str, content_type: str, bucket: str) -> str:
+    """고정 경로에 올린다(있으면 덮어쓴다). 코드가 경로를 알아야 하는 파일용 —
+    코스 카테고리 기본 스탬프 도안(stamp_images)처럼 DB에 URL을 안 두는 것.
+    같은 경로를 덮어쓰므로 CDN·앱 캐시가 옛 그림을 한동안 보여줄 수 있다."""
+    if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
+        raise StorageUploadError(
+            "이미지 업로드가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_API_SECRET_KEY)."
+        )
+
+    response = httpx.put(
+        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
+        headers={
+            "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
+            "apikey": SUPABASE_API_SECRET_KEY,
+            "Content-Type": content_type,
+            "x-upsert": "true",
+        },
+        content=content,
+        timeout=30,
+    )
     if response.status_code >= 400:
         raise StorageUploadError(f"이미지 업로드에 실패했어요: {response.text[:200]}")
 

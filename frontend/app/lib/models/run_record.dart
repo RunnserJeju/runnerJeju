@@ -12,6 +12,7 @@ class RunRecord {
     this.id,
     this.courseId,
     this.courseName,
+    this.completed = false,
   });
 
   final String? id;
@@ -25,6 +26,9 @@ class RunRecord {
   final double distanceMeters;
   final Duration duration;
   final List<GeoPoint> path;
+
+  /// 이 러닝으로 코스 완주 인증이 통과했는지. 서버가 채운다.
+  final bool completed;
 
   bool get isCourseRun => courseId != null;
 
@@ -49,6 +53,7 @@ class RunRecord {
     distanceMeters: (json['distance_meters'] as num).toDouble(),
     duration: Duration(seconds: (json['duration_sec'] as num).toInt()),
     path: parseList(json['path'], GeoPoint.fromJson),
+    completed: json['completed'] as bool? ?? false,
   );
 
   Map<String, dynamic> toJson() => {

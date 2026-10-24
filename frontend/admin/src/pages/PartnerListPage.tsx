@@ -49,6 +49,7 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
         <table>
           <thead>
             <tr>
+              <th></th>
               <th>이름</th>
               <th>주소</th>
               <th>혜택</th>
@@ -61,6 +62,13 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
           <tbody>
             {partners.map((partner) => (
               <tr key={partner.id} onClick={() => setEditing(partner)}>
+                <td style={{ width: 56 }}>
+                  {partner.thumbnail_url ? (
+                    <img className="thumb" src={partner.thumbnail_url} alt="" />
+                  ) : (
+                    <div className="thumb placeholder">없음</div>
+                  )}
+                </td>
                 <td>
                   <strong>{partner.name}</strong>
                 </td>

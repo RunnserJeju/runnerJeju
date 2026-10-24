@@ -51,7 +51,7 @@ def list_favorites(
     ids = [c.id for c in courses]
     counts = _completed_counts(db, ids)
     mine = _my_completed_course_ids(db, user_id, ids)
-    images = _stamp_images(db, ids)
+    images = _stamp_images(db, courses)
 
     return [
         _to_summary(

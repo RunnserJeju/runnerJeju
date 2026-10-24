@@ -6,13 +6,15 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import storage
+from app.admin.images import MAX_EXTRA_IMAGES, read_image_or_raise
 from app.db import get_db
 from app.models import CoursePartner, Partner, UserCoupon
-from app.schemas import PartnerOut, PartnerPayload
+from app.schemas import PartnerImagesUpdate, PartnerOut, PartnerPayload
 
 router = APIRouter(tags=["partners"])
 
@@ -59,6 +61,8 @@ def _to_out(partner: Partner, course_count: int, coupon_used_count: int = 0) -> 
         instagram=partner.instagram,
         benefit=partner.benefit,
         detail=partner.detail or {},
+        thumbnail_url=partner.thumbnail_url,
+        image_urls=list(partner.image_urls or []),
         course_count=course_count,
         coupon_used_count=coupon_used_count,
         coupon_pin=partner.coupon_pin,
@@ -143,8 +147,110 @@ def update_partner(
 
 @router.delete("/partners/{partner_id}", status_code=204)
 def delete_partner(partner_id: uuid.UUID, db: Session = Depends(get_db)):
-    """협력업체를 삭제한다. 코스 연결은 FK CASCADE로 함께 지워진다.
+    """협력업체를 삭제한다. 코스 연결은 FK CASCADE로 함께 지워지고, 이미지 파일도 지운다.
     (관리자 전용 — 라우터 레벨에서 강제)"""
     partner = _load_partner_or_404(db, partner_id)
+    urls = [partner.thumbnail_url, *(partner.image_urls or [])]
     db.delete(partner)
     db.commit()
+    for url in urls:
+        if url:
+            storage.delete_image(url, bucket=storage.SUPABASE_PARTNER_BUCKET)
+
+
+# --- 썸네일·추가 이미지 (코스와 같은 구조: admin/courses.py) -------------------------
+
+
+def _out_for(db: Session, partner: Partner) -> PartnerOut:
+    return _to_out(
+        partner,
+        _course_counts(db, [partner.id]).get(partner.id, 0),
+        _coupon_used_counts(db, [partner.id]).get(partner.id, 0),
+    )
+
+
+def _upload(file: UploadFile) -> str:
+    content, extension = read_image_or_raise(file)
+    try:
+        storage.ensure_public_bucket(storage.SUPABASE_PARTNER_BUCKET)
+        return storage.upload_image(
+            content,
+            content_type=file.content_type,
+            extension=extension,
+            bucket=storage.SUPABASE_PARTNER_BUCKET,
+        )
+    except storage.StorageUploadError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.put("/partners/{partner_id}/thumbnail", response_model=PartnerOut)
+def set_partner_thumbnail(
+    partner_id: uuid.UUID,
+    file: UploadFile = File(..., description="썸네일 이미지 (jpg/png/webp)"),
+    db: Session = Depends(get_db),
+):
+    """썸네일을 올린다(교체 포함). 옛 파일은 지운다. (관리자 전용)"""
+    partner = _load_partner_or_404(db, partner_id)
+    new_url = _upload(file)
+    old_url = partner.thumbnail_url
+    partner.thumbnail_url = new_url
+    db.commit()
+    db.refresh(partner)
+    if old_url:
+        storage.delete_image(old_url, bucket=storage.SUPABASE_PARTNER_BUCKET)
+    return _out_for(db, partner)
+
+
+@router.delete("/partners/{partner_id}/thumbnail", response_model=PartnerOut)
+def delete_partner_thumbnail(partner_id: uuid.UUID, db: Session = Depends(get_db)):
+    """썸네일을 뗀다. 파일도 지운다. (관리자 전용)"""
+    partner = _load_partner_or_404(db, partner_id)
+    old_url = partner.thumbnail_url
+    if old_url:
+        partner.thumbnail_url = None
+        db.commit()
+        db.refresh(partner)
+        storage.delete_image(old_url, bucket=storage.SUPABASE_PARTNER_BUCKET)
+    return _out_for(db, partner)
+
+
+@router.post("/partners/{partner_id}/images", response_model=PartnerOut)
+def add_partner_image(
+    partner_id: uuid.UUID,
+    file: UploadFile = File(..., description="추가 이미지 (jpg/png/webp)"),
+    db: Session = Depends(get_db),
+):
+    """상세 갤러리 이미지를 맨 뒤에 하나 붙인다. (관리자 전용)"""
+    partner = _load_partner_or_404(db, partner_id)
+    if len(partner.image_urls or []) >= MAX_EXTRA_IMAGES:
+        raise HTTPException(
+            status_code=422, detail=f"이미지는 {MAX_EXTRA_IMAGES}장까지 올릴 수 있어요."
+        )
+    url = _upload(file)
+    # JSONB 목록은 새 리스트를 대입해야 변경으로 잡힌다.
+    partner.image_urls = [*(partner.image_urls or []), url]
+    db.commit()
+    db.refresh(partner)
+    return _out_for(db, partner)
+
+
+@router.put("/partners/{partner_id}/images", response_model=PartnerOut)
+def set_partner_images(
+    partner_id: uuid.UUID,
+    payload: PartnerImagesUpdate,
+    db: Session = Depends(get_db),
+):
+    """갤러리 이미지 순서를 바꾸거나 뺀다. 지금 있는 URL로만. 빠진 것은 파일도 지운다. (관리자 전용)"""
+    partner = _load_partner_or_404(db, partner_id)
+    current = list(partner.image_urls or [])
+    unknown = [url for url in payload.image_urls if url not in current]
+    if unknown:
+        raise HTTPException(status_code=422, detail="이 업체에 없는 이미지가 섞여 있어요.")
+
+    removed = [url for url in current if url not in payload.image_urls]
+    partner.image_urls = list(payload.image_urls)
+    db.commit()
+    db.refresh(partner)
+    for url in removed:
+        storage.delete_image(url, bucket=storage.SUPABASE_PARTNER_BUCKET)
+    return _out_for(db, partner)

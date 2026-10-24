@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 // 카카오 SDK도 User를 내보내는데 여기서는 쓰지 않는다. 우리 모델과 이름이
@@ -186,6 +187,26 @@ class AuthService {
     }
     await _tokenStorage.clear();
     _currentUser = null;
+  }
+
+  /// 프로필 사진을 바꾼다. [path]는 기기 안 이미지 파일.
+  Future<User> updateProfileImage(String path) async {
+    try {
+      return _currentUser = await _authApi.uploadProfileImage(path);
+    } on DioException catch (e) {
+      final detail = (e.response?.data as Map?)?['detail'];
+      throw AppException(detail is String ? detail : '프로필 사진을 올리지 못했어요.', e);
+    } catch (e) {
+      throw AppException('프로필 사진을 올리지 못했어요.', e);
+    }
+  }
+
+  Future<User> removeProfileImage() async {
+    try {
+      return _currentUser = await _authApi.deleteProfileImage();
+    } catch (e) {
+      throw AppException('프로필 사진을 지우지 못했어요.', e);
+    }
   }
 
   /// 회원 탈퇴. 서버 익명화가 성공해야만 로컬 세션을 지운다 — 실패 시 계정이

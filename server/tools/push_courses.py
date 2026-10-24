@@ -39,13 +39,14 @@ FORM_FIELDS = (
     "name",
     "distance_km",
     "difficulty",
+    "category",
     "address",
     "tags",
     "description",
 )
 
 # 명단에 반드시 있어야 하는 키. 나머지는 비어 있어도 된다.
-REQUIRED_FIELDS = ("file", "name", "distance_km", "difficulty", "address")
+REQUIRED_FIELDS = ("file", "name", "distance_km", "difficulty", "category", "address")
 
 
 def load_manifest() -> list[dict]:

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 // 카카오맵 SDK는 머티리얼과 겹치는 이름을 내보내므로 접두사를 붙인다.
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 
-import '../theme/app_theme.dart';
+import '../../theme/app_theme.dart';
 import 'marker_canvas.dart';
 
 /// 코스 시작/끝점에 찍는 알약 모양 배지. 시설 배지처럼 CourseMapView와

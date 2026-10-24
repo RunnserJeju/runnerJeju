@@ -16,6 +16,7 @@ from app.deps import (
     current_user_is_admin,
 )
 from app.models import Course, CoursePartner, Run, StampDefinition, Verification
+from app.stamp_images import category_stamp_url
 from app.stamp_rules import COURSE_COMPLETE
 from app.schemas import CourseListItem, CourseSummary, PartnerSummary
 
@@ -39,6 +40,7 @@ def _to_summary(
         "name": course.name,
         "distance_km": course.distance_km,
         "difficulty": course.difficulty,
+        "category": course.category,
         "tags": course.tags,
         "address": course.address,
         "parkings": course.parkings or [],
@@ -50,6 +52,7 @@ def _to_summary(
         "description": course.description,
         "estimated_time_min": course.estimated_time_min,
         "thumbnail_url": course.thumbnail_url,
+        "image_urls": course.image_urls or [],
         # 도안은 스탬프 종류에 있다(#71). 옛 앱 스탬프 탭이 이 값을 써서 남겨 둔다.
         "stamp_image_url": stamp_image_url,
         "path": path,
@@ -105,26 +108,30 @@ def _my_completed_course_ids(
     return set(rows)
 
 
-def _stamp_images(db: Session, course_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
-    """코스 완주 스탬프의 도안. 옛 앱 호환용(stamp_image_url)."""
-    if not course_ids:
+def _stamp_images(db: Session, courses: list[Course]) -> dict[uuid.UUID, str]:
+    """코스 완주 스탬프의 도안. 옛 앱 호환용(stamp_image_url).
+
+    직접 올린 도안이 있으면 그것, 없고 노출 중인 스탬프가 있으면 코스 카테고리 기본 도안."""
+    if not courses:
         return {}
 
-    keys = {str(course_id): course_id for course_id in course_ids}
+    keys = {str(course.id): course for course in courses}
     rows = db.execute(
         select(StampDefinition.condition_params["course_id"].astext, StampDefinition.image_url)
         .where(
             StampDefinition.condition_type == COURSE_COMPLETE,
             StampDefinition.condition_params["course_id"].astext.in_(keys),
             StampDefinition.is_active.is_(True),
-            StampDefinition.image_url.is_not(None),
         )
         .order_by(StampDefinition.sort_order, StampDefinition.created_at)
     ).all()
 
     images: dict[uuid.UUID, str] = {}
     for course_key, image_url in rows:
-        images.setdefault(keys[course_key], image_url)
+        course = keys[course_key]
+        url = image_url or category_stamp_url(course.category)
+        if url:
+            images.setdefault(course.id, url)
     return images
 
 
@@ -181,7 +188,7 @@ def list_courses(
 
     counts = _completed_counts(db, course_ids)
     mine = _my_completed_course_ids(db, user_id, course_ids)
-    images = _stamp_images(db, course_ids)
+    images = _stamp_images(db, courses)
 
     return [
         _to_summary(
@@ -208,7 +215,7 @@ def get_course(
 
     counts = _completed_counts(db, [course.id])
     mine = _my_completed_course_ids(db, user_id, [course.id])
-    images = _stamp_images(db, [course.id])
+    images = _stamp_images(db, [course])
     summary = _to_summary(
         course, counts.get(course.id, 0), course.id in mine, images.get(course.id)
     )
@@ -300,6 +307,7 @@ def create_course_from_gpx_bytes(
     name: str | None,
     distance_km: float,
     difficulty: int,
+    category: str,
     address: str,
     tags: str | None,
     parkings: list[dict] | None = None,
@@ -341,6 +349,7 @@ def create_course_from_gpx_bytes(
         name=resolved_name,
         distance_km=distance_km,
         difficulty=difficulty,
+        category=category,
         address=address,
         tags=tags,
         parkings=parkings or [],

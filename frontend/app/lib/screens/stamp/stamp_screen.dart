@@ -63,39 +63,61 @@ class _StampScreenState extends State<StampScreen> {
   }
 
   /// 받은 스탬프는 도안·획득일, 못 받은 스탬프는 이름과 획득 조건 안내.
+  /// 가운데 작은 팝업. 우상단 X나 바깥을 누르면 닫힌다.
   void _showStampDetail(_StampSlot slot) {
     final stamp = slot.stamp;
-    showModalBottomSheet<void>(
+    showDialog<void>(
       context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              StampBadge(
-                stamp: stamp,
-                name: slot.name,
-                acquired: slot.acquired,
-                size: 132,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.white,
+        // 화면 폭의 약 3분의 2(좌우 48 여백을 뺀 폭의 2/3).
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: (MediaQuery.sizeOf(dialogContext).width + 192) / 6,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Stack(
+          children: [
+            // Stack 안이라 폭이 내용만큼 줄어든다. 팝업 폭을 꽉 채워 가운데에 놓는다.
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 36, 24, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  StampBadge(
+                    stamp: stamp,
+                    name: slot.name,
+                    acquired: slot.acquired,
+                    size: 132,
+                  ),
+                  if (slot.description case final description?) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      description,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(dialogContext).textTheme.bodyMedium,
+                    ),
+                  ],
+                  if (stamp != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      '${Formatters.date(stamp.acquiredAt)} 획득',
+                      style: Theme.of(dialogContext).textTheme.bodyMedium,
+                    ),
+                  ],
+                ],
               ),
-              if (slot.description case final description?) ...[
-                const SizedBox(height: 12),
-                Text(
-                  description,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(sheetContext).textTheme.bodyMedium,
-                ),
-              ],
-              if (stamp != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  '${Formatters.date(stamp.acquiredAt)} 획득',
-                  style: Theme.of(sheetContext).textTheme.bodyMedium,
-                ),
-              ],
-            ],
-          ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                tooltip: '닫기',
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -284,13 +306,12 @@ class _StampGrid extends StatelessWidget {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               sliver: SliverGrid.builder(
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      mainAxisExtent: 188,
-                    ),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: 188,
+                ),
                 itemCount: slots.length,
                 itemBuilder: (context, index) {
                   final slot = slots[index];
@@ -483,10 +504,7 @@ class _StampSlot {
 
   /// "제주시 · 14 km". 지역·거리 둘 다 없으면 null.
   String? get metaLine {
-    final parts = [
-      ?region,
-      if (distanceKm case final d?) '$d km',
-    ];
+    final parts = [?region, if (distanceKm case final d?) '$d km'];
     return parts.isEmpty ? null : parts.join(' · ');
   }
 

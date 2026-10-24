@@ -72,6 +72,7 @@ def _create(db, **overrides) -> Course:
         name="테스트 코스",
         distance_km=6,
         difficulty=2,
+        category="road",
         address="제주시 어딘가",
         tags=None,
         parkings=[],
@@ -100,6 +101,7 @@ class TestCreateCourseFacilities:
             name="c",
             distance_km=6,
             difficulty=2,
+            category="road",
             address="제주",
             tags=None,
             description=None,
@@ -372,6 +374,7 @@ class TestUpdateCourse:
             name="새 이름",
             distance_km=9,
             difficulty=3,
+            category="trail",
             visibility="public",
             address="새 주소",
             tags="새,태그",
@@ -479,21 +482,21 @@ class TestUpdateCourse:
 class TestCourseUpdateSchema:
     def test_rejects_zero_distance(self):
         with pytest.raises(ValidationError):
-            CourseUpdate(name="x", distance_km=0, difficulty=2, visibility="public", address="제주")
+            CourseUpdate(name="x", distance_km=0, difficulty=2, category="road", visibility="public", address="제주")
 
     def test_rejects_out_of_range_difficulty(self):
         with pytest.raises(ValidationError):
-            CourseUpdate(name="x", distance_km=5, difficulty=4, visibility="public", address="제주")
+            CourseUpdate(name="x", distance_km=5, difficulty=4, category="road", visibility="public", address="제주")
 
     def test_facilities_default_to_empty(self):
-        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, visibility="public", address="제주")
+        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, category="road", visibility="public", address="제주")
 
         assert payload.parkings == []
         assert payload.restrooms == []
         assert payload.partner_ids == []
 
     def test_estimated_time_defaults_to_none(self):
-        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, visibility="public", address="제주")
+        payload = CourseUpdate(name="x", distance_km=5, difficulty=2, category="road", visibility="public", address="제주")
 
         assert payload.estimated_time_min is None
 

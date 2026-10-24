@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { ApiError, listCourses, type Course } from '../api'
+import { ApiError, COURSE_CATEGORY_LABEL, listCourses, type Course } from '../api'
 import CourseCreateModal from '../modals/CourseCreateModal'
 import CourseEditModal from '../modals/CourseEditModal'
 
@@ -54,6 +54,7 @@ export default function CourseListPage({ onUnauthorized }: Props) {
               <th></th>
               <th>이름</th>
               <th>거리</th>
+              <th className="nowrap">카테고리</th>
               <th>난이도</th>
               <th>공개</th>
               <th>태그</th>
@@ -75,6 +76,7 @@ export default function CourseListPage({ onUnauthorized }: Props) {
                   <div className="muted">{course.address}</div>
                 </td>
                 <td>{course.distance_km}km</td>
+                <td className="nowrap">{COURSE_CATEGORY_LABEL[course.category]}</td>
                 <td>{DIFFICULTY_LABEL[course.difficulty]}</td>
                 <td className={course.visibility === 'public' ? undefined : 'muted'}>
                   {course.visibility ? VISIBILITY_LABEL[course.visibility] : '미설정'}

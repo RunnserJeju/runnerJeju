@@ -1,18 +1,32 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.deps import current_user_id
-from app.models import Course, Run
+from app.models import Course, Run, Verification
 from app.schemas import RunCreate, RunOut, RunUploadResult
 
 router = APIRouter(tags=["runs"])
 
 
-def to_run_out(run: Run) -> dict:
+def _completed_run_ids(db: Session, run_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """완주 인증이 통과한(matched) 러닝."""
+    if not run_ids:
+        return set()
+    return set(
+        db.execute(
+            select(Verification.run_id).where(
+                Verification.run_id.in_(run_ids), Verification.status == "matched"
+            )
+        ).scalars()
+    )
+
+
+def to_run_out(run: Run, with_path: bool = True, completed: bool = False) -> dict:
     return {
         "id": run.id,
         "course_id": run.course_id,
@@ -21,7 +35,8 @@ def to_run_out(run: Run) -> dict:
         "ended_at": run.ended_at,
         "distance_meters": run.distance_meters,
         "duration_sec": run.duration_sec,
-        "path": run.path or [],
+        "path": (run.path or []) if with_path else [],
+        "completed": completed,
     }
 
 
@@ -68,18 +83,22 @@ def create_run(
 
 @router.get("/runs", response_model=list[RunOut])
 def list_runs(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=500),
+    since: datetime | None = Query(default=None, description="started_at 이상"),
+    until: datetime | None = Query(default=None, description="started_at 미만"),
+    with_path: bool = Query(default=True, description="false면 path를 빈 배열로(달력용)"),
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ):
-    runs = db.execute(
-        select(Run)
-        .where(Run.user_id == user_id)
-        .order_by(Run.started_at.desc())
-        .limit(limit)
-    ).scalars()
+    query = select(Run).where(Run.user_id == user_id).options(selectinload(Run.course))
+    if since is not None:
+        query = query.where(Run.started_at >= since)
+    if until is not None:
+        query = query.where(Run.started_at < until)
+    runs = list(db.execute(query.order_by(Run.started_at.desc()).limit(limit)).scalars())
+    completed = _completed_run_ids(db, [run.id for run in runs])
 
-    return [to_run_out(run) for run in runs]
+    return [to_run_out(run, with_path, run.id in completed) for run in runs]
 
 
 @router.get("/runs/{run_id}", response_model=RunOut)
@@ -92,4 +111,4 @@ def get_run(
     if run is None or run.user_id != user_id:
         raise HTTPException(status_code=404, detail="러닝 기록을 찾을 수 없어요.")
 
-    return to_run_out(run)
+    return to_run_out(run, completed=run.id in _completed_run_ids(db, [run.id]))

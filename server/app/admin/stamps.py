@@ -1,5 +1,7 @@
-"""운영자 전용 스탬프 종류 API — 목록/등록/수정 + 도안. 앱 조회는 app.routers.stamps에 있다.
+"""운영자 전용 스탬프 종류 API — 목록/수정 + 도안. 앱 조회는 app.routers.stamps에 있다.
 
+스탬프 종류는 여기서 만들지 않는다 — 코스 등록 때 코스 스탬프가 하나 생기고, 그 밖의 종류는
+개발자가 DB에 직접 넣는다. 수정도 표시 정보만이고 지급 조건은 바꾸지 않는다.
 스탬프 종류는 지우지 않는다. 발급 기록(stamps)이 가리키므로 노출(is_active)을 끈다.
 도안은 텍스트 폼(JSON)과 파일(multipart)을 섞지 않으려고 PUT/DELETE
 /stamps/{id}/image로 분리했다(공지 배너와 같은 방식).
@@ -13,13 +15,8 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
-from app.models import Course, Stamp, StampDefinition
-from app.schemas import (
-    AdminStampDefinitionOut,
-    StampDefinitionCreate,
-    StampDefinitionUpdate,
-)
-from app.stamp_rules import COURSE_COMPLETE, CONDITION_TYPES
+from app.models import Stamp, StampDefinition
+from app.schemas import AdminStampDefinitionOut, StampDefinitionUpdate
 
 router = APIRouter(tags=["stamps"])
 
@@ -56,28 +53,6 @@ def _to_out(definition: StampDefinition, issued_count: int) -> AdminStampDefinit
     return out
 
 
-def _validated_params(db: Session, condition_type: str, params: dict) -> dict:
-    """조건 종류에 필요한 값만 남긴다. course_complete면 코스가 실제로 있어야 한다."""
-    required = CONDITION_TYPES.get(condition_type)
-    if required is None:
-        raise HTTPException(status_code=422, detail=f"알 수 없는 조건 종류예요: {condition_type}")
-
-    missing = [key for key in required if not params.get(key)]
-    if missing:
-        raise HTTPException(status_code=422, detail=f"조건 값이 빠졌어요: {', '.join(missing)}")
-
-    cleaned = {key: params[key] for key in required}
-    if condition_type == COURSE_COMPLETE:
-        try:
-            course_id = uuid.UUID(str(cleaned["course_id"]))
-        except ValueError:
-            raise HTTPException(status_code=422, detail="코스 id 형식이 아니에요.") from None
-        if db.get(Course, course_id) is None:
-            raise HTTPException(status_code=422, detail="코스를 찾을 수 없어요.")
-        cleaned["course_id"] = str(course_id)
-    return cleaned
-
-
 @router.get("/stamps", response_model=list[AdminStampDefinitionOut])
 def list_stamp_definitions(db: Session = Depends(get_db)):
     """스탬프 종류 전체(노출 끈 것 포함). (관리자 전용 — 라우터 레벨에서 강제)"""
@@ -92,36 +67,16 @@ def list_stamp_definitions(db: Session = Depends(get_db)):
     return [_to_out(d, counts.get(d.id, 0)) for d in definitions]
 
 
-@router.post("/stamps", response_model=AdminStampDefinitionOut, status_code=201)
-def create_stamp_definition(payload: StampDefinitionCreate, db: Session = Depends(get_db)):
-    definition = StampDefinition(
-        name=payload.name,
-        description=payload.description,
-        condition_type=payload.condition_type,
-        condition_params=_validated_params(db, payload.condition_type, payload.condition_params),
-        is_active=payload.is_active,
-        sort_order=payload.sort_order,
-    )
-    db.add(definition)
-    db.commit()
-    db.refresh(definition)
-    return _to_out(definition, 0)
-
-
 @router.patch("/stamps/{stamp_id}", response_model=AdminStampDefinitionOut)
 def update_stamp_definition(
     stamp_id: uuid.UUID,
     payload: StampDefinitionUpdate,
     db: Session = Depends(get_db),
 ):
-    """수정. 조건을 바꿔도 이미 발급된 스탬프는 그대로 둔다."""
+    """표시 정보만 고친다. 지급 조건(condition_type/params)은 운영툴에서 바꾸지 않는다."""
     definition = _load_or_404(db, stamp_id)
     definition.name = payload.name
     definition.description = payload.description
-    definition.condition_type = payload.condition_type
-    definition.condition_params = _validated_params(
-        db, payload.condition_type, payload.condition_params
-    )
     definition.is_active = payload.is_active
     definition.sort_order = payload.sort_order
     db.commit()

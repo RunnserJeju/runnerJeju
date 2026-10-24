@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { ApiError, createNotice, setNoticeImage, type Notice } from '../api'
+import { BANNER_SPEC, validateBannerImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
 import NoticeForm, { emptyNoticeValues, validateNotice } from '../components/NoticeForm'
 
@@ -22,6 +23,14 @@ export default function NoticeCreateModal({ onClose, onCreated }: Props) {
     if (!validated.ok) {
       setError(validated.message)
       return
+    }
+    // 배너 규격은 등록 전에 막는다 — 등록 뒤에 걸리면 공지만 만들어지고 이미지는 빠진다.
+    if (imageFile) {
+      const problem = await validateBannerImage(imageFile)
+      if (problem) {
+        setError(problem)
+        return
+      }
     }
 
     setSubmitting(true)
@@ -58,7 +67,7 @@ export default function NoticeCreateModal({ onClose, onCreated }: Props) {
         <div className="field">
           <label htmlFor="notice-image-file">
             배너 이미지{' '}
-            <span className="hint">선택 — 가로 3:1 권장, jpg/png/webp, 8MB 이하. 올리면 홈 상단 배너에 실린다</span>
+            <span className="hint">선택 — {BANNER_SPEC.hint}. 올리면 홈 상단 배너에 실린다</span>
           </label>
           <input
             id="notice-image-file"

@@ -4,7 +4,7 @@ import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
 
 import 'marker_canvas.dart';
 
-/// 코스 주차장/화장실을 지도에 찍는 원형 배지. 협력업체는 핀 모양(partner_marker.dart)이다.
+/// 코스 주차장/화장실을 지도에 찍는 원형 배지. 코스·협력업체는 말풍선(bubble_marker.dart)이다.
 ///
 /// 러닝 탭 지도(CourseMapView)와 달리기 지도(RunMapView)가 같은 모양을 써야 해서
 /// 여기로 뺐다. 배지는 좌표 정중앙에 놓으므로 PoiStyle의 anchor를 (0.5, 0.5)로 준다.

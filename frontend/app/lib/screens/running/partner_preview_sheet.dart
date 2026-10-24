@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/course_partner.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/partner_category_tile.dart';
+import '../../widgets/image_gallery.dart';
+import '../../widgets/partner_card.dart';
 import '../../widgets/section_title.dart';
 import '../../widgets/sheet_handle.dart';
 
@@ -101,7 +102,14 @@ class PartnerDetailContent extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PartnerCategoryTile(category: category, size: 56),
+            // 목록 카드와 같은 썸네일(없으면 업종 타일).
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox.square(
+                dimension: 56,
+                child: PartnerThumbnail(partner: partner, size: 56),
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -167,6 +175,11 @@ class PartnerDetailContent extends StatelessWidget {
           icon: const Icon(Icons.directions_walk_rounded),
           label: const Text('길찾기'),
         ),
+        // 사진 갤러리는 길찾기 바로 아래, 상세의 맨 위. 없으면 아무것도 안 그린다.
+        if (partner.imageUrls.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          ImageGallery(urls: partner.imageUrls),
+        ],
         if (comment != null) ...[
           const SizedBox(height: 20),
           const SectionTitle('소개', small: true),

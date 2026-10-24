@@ -6,6 +6,7 @@ import '../../models/running_course.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/course_thumbnail.dart';
 import '../../widgets/elevation_chart.dart';
+import '../../widgets/image_gallery.dart';
 import '../../widgets/sheet_handle.dart';
 import '../../widgets/section_title.dart';
 import '../../widgets/tag_chip.dart';
@@ -146,6 +147,11 @@ class CoursePreviewSheet extends StatelessWidget {
     final description = course.description;
 
     return [
+      // 사진 갤러리는 상세의 맨 위. 없으면 아무것도 안 그린다.
+      if (course.imageUrls.isNotEmpty) ...[
+        ImageGallery(urls: course.imageUrls),
+        const SizedBox(height: 20),
+      ],
       if (description != null && description.isNotEmpty) ...[
         const SectionTitle('코스 소개', small: true),
         const SizedBox(height: 8),

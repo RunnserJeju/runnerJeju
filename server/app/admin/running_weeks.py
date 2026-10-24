@@ -10,9 +10,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import storage
+from app import running_week, stamp_rules, storage
 from app.db import get_db
-from app.models import RunningWeek, RunningWeekParticipation, StampDefinition
+from app.models import RunningWeek, RunningWeekParticipation
 from app.schemas import (
     AdminParticipationOut,
     AdminRunningWeekOut,
@@ -56,12 +56,23 @@ def _to_out(db: Session, week: RunningWeek) -> AdminRunningWeekOut:
     return out
 
 
+def _check_round_free(db: Session, round_: int, week_id: uuid.UUID | None = None) -> None:
+    query = select(RunningWeek.id).where(RunningWeek.round == round_)
+    if week_id is not None:
+        query = query.where(RunningWeek.id != week_id)
+    if db.execute(query).first() is not None:
+        raise HTTPException(status_code=409, detail=f"{round_}회차는 이미 있어요.")
+
+
 def _apply(week: RunningWeek, payload: RunningWeekCreate) -> None:
+    if payload.round is not None:
+        week.round = payload.round
     week.title = payload.title
     week.description = payload.description
     week.starts_at = payload.starts_at
     week.ends_at = payload.ends_at
     week.is_active = payload.is_active
+    week.visibility = payload.visibility
 
 
 @router.get("/running-weeks", response_model=list[AdminRunningWeekOut])
@@ -81,7 +92,9 @@ def list_running_weeks(db: Session = Depends(get_db)):
 
 @router.post("/running-weeks", response_model=AdminRunningWeekOut, status_code=201)
 def create_running_week(payload: RunningWeekCreate, db: Session = Depends(get_db)):
-    week = RunningWeek(bingo_stamp_ids=[])
+    if payload.round is not None:
+        _check_round_free(db, payload.round)
+    week = RunningWeek(bingo_stamp_ids=[], round=running_week.next_round(db))
     _apply(week, payload)
     db.add(week)
     db.commit()
@@ -94,6 +107,8 @@ def update_running_week(
     week_id: uuid.UUID, payload: RunningWeekUpdate, db: Session = Depends(get_db)
 ):
     week = _load_or_404(db, week_id)
+    if payload.round is not None:
+        _check_round_free(db, payload.round, week.id)
     _apply(week, payload)
     db.commit()
     db.refresh(week)
@@ -105,17 +120,16 @@ def set_bingo(week_id: uuid.UUID, payload: BingoUpdate, db: Session = Depends(ge
     """빙고 배치를 통째로 바꾼다. 25개 모두 실제 스탬프 종류여야 한다.
 
     배열 안 id에는 외래키가 없어서 여기서 확인한다. 숨긴 스탬프도 놓을 수는 있지만
-    앱에는 빈 칸으로 보인다.
+    앱에는 빈 칸으로 보인다. 칸에는 이 회차 전용 코스 스탬프만 놓는다.
     """
     week = _load_or_404(db, week_id)
-    found = set(
-        db.execute(
-            select(StampDefinition.id).where(StampDefinition.id.in_(payload.stamp_ids))
-        ).scalars()
-    )
-    missing = [str(i) for i in payload.stamp_ids if i not in found]
-    if missing:
-        raise HTTPException(status_code=422, detail=f"없는 스탬프예요: {', '.join(missing)}")
+    allowed = {d.id for d in stamp_rules.running_week_course_definitions(db, week.id)}
+    wrong = [str(i) for i in payload.stamp_ids if i not in allowed]
+    if wrong:
+        raise HTTPException(
+            status_code=422,
+            detail=f"이 회차 러닝위크 스탬프가 아니에요: {', '.join(wrong)}",
+        )
 
     week.bingo_stamp_ids = [str(i) for i in payload.stamp_ids]
     db.commit()

@@ -31,7 +31,11 @@ function formatDateTime(iso: string | null): string {
   return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export default function NoticeListPage({ onUnauthorized }: Props) {
+/**
+ * 홈 구성 페이지의 공지사항 섹션. 이미지가 있는 공지가 앱 홈 상단 캐러셀에 최신순으로
+ * 나오고, 나머지는 텍스트 공지로만 보인다. 등록·수정은 모달.
+ */
+export default function NoticeSection({ onUnauthorized }: Props) {
   const [notices, setNotices] = useState<Notice[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -60,14 +64,12 @@ export default function NoticeListPage({ onUnauthorized }: Props) {
   const now = new Date()
 
   return (
-    <>
-      <div className="page-head">
-        <h2>공지사항</h2>
+    <div className="card">
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0 }}>공지사항</h3>
         <button onClick={() => setCreating(true)}>+ 공지 추가</button>
       </div>
-      <p className="muted page-desc">
-        이미지가 없는 공지는 앱 홈에 표시되지 않습니다. 
-      </p>
+      <p className="muted">이미지가 있는 공지만 앱 홈 상단 배너에 나와요.</p>
       {error && <div className="error">{error}</div>}
       {notices == null && !error && <p className="muted">불러오는 중…</p>}
       {notices && notices.length === 0 && <p className="muted">등록된 공지가 없어요.</p>}
@@ -133,6 +135,6 @@ export default function NoticeListPage({ onUnauthorized }: Props) {
           onChanged={reload}
         />
       )}
-    </>
+    </div>
   )
 }

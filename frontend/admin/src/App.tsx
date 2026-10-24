@@ -8,7 +8,6 @@ import CourseStatsPage from './pages/CourseStatsPage'
 import EventListPage from './pages/EventListPage'
 import HomeCurationPage from './pages/HomeCurationPage'
 import LogsPage from './pages/LogsPage'
-import NoticeListPage from './pages/NoticeListPage'
 import PartnerListPage from './pages/PartnerListPage'
 import RunningWeekListPage from './pages/RunningWeekListPage'
 import StampListPage from './pages/StampListPage'
@@ -31,7 +30,6 @@ type Page =
   | 'running-weeks'
   | 'events'
   | 'coupons'
-  | 'notices'
   | 'dashboard'
   | 'course-stats'
   | 'users'
@@ -60,7 +58,6 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
       { key: 'running-weeks', label: '러닝위크' },
       { key: 'events', label: '이벤트' },
       { key: 'coupons', label: '쿠폰' },
-      { key: 'notices', label: '공지사항' },
     ],
   },
 ]
@@ -167,9 +164,6 @@ export default function App() {
           )}
           {page === 'events' && (
             <EventListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
-          )}
-          {page === 'notices' && (
-            <NoticeListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
           )}
           {page === 'dashboard' && (
             <Suspense fallback={<p className="muted">불러오는 중…</p>}>

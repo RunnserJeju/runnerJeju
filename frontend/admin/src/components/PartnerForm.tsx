@@ -12,8 +12,9 @@ export interface PartnerFormValues {
   instagram: string
   benefit: string
   couponPin: string
-  /** detail(JSONB) 원문. 형태가 정해지지 않아 JSON 객체를 그대로 편집한다. */
-  detail: string
+  /** detail(JSONB). 운영자가 직접 고치지 않는다 — 업종 선택이 category만 바꾸고
+   * 나머지 키는 받은 그대로 돌려보낸다. */
+  detail: Record<string, unknown>
 }
 
 export function emptyPartnerValues(): PartnerFormValues {
@@ -26,7 +27,7 @@ export function emptyPartnerValues(): PartnerFormValues {
     instagram: '',
     benefit: '',
     couponPin: '',
-    detail: '{}',
+    detail: {},
   }
 }
 
@@ -40,7 +41,7 @@ export function valuesFromPartner(partner: Partner): PartnerFormValues {
     instagram: partner.instagram ?? '',
     benefit: partner.benefit ?? '',
     couponPin: partner.coupon_pin ?? '',
-    detail: JSON.stringify(partner.detail ?? {}, null, 2),
+    detail: partner.detail ?? {},
   }
 }
 
@@ -65,15 +66,6 @@ export function validatePartner(
     return { ok: false, message: '쿠폰 번호는 숫자 4자리여야 해요.' }
   }
 
-  let detail: Record<string, unknown>
-  try {
-    const parsed: unknown = JSON.parse(values.detail.trim() || '{}')
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error()
-    detail = parsed as Record<string, unknown>
-  } catch {
-    return { ok: false, message: 'detail은 JSON 객체여야 해요. 예: {"hours": "09:00-18:00"}' }
-  }
-
   const optional = (value: string) => value.trim() || null
   return {
     ok: true,
@@ -86,7 +78,7 @@ export function validatePartner(
       instagram: optional(values.instagram),
       benefit: optional(values.benefit),
       coupon_pin: couponPin || null,
-      detail,
+      detail: values.detail,
     },
   }
 }
@@ -101,31 +93,14 @@ export const PARTNER_CATEGORIES: { value: string; label: string }[] = [
   { value: 'other', label: '기타' },
 ]
 
-/** detail JSON 원문에서 category를 읽는다. JSON이 깨져 있으면 null. */
-function categoryOf(detail: string): string | null {
-  try {
-    const parsed: unknown = JSON.parse(detail.trim() || '{}')
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
-    const category = (parsed as Record<string, unknown>).category
-    return typeof category === 'string' ? category : ''
-  } catch {
-    return null
-  }
+function categoryOf(detail: Record<string, unknown>): string {
+  return typeof detail.category === 'string' ? detail.category : ''
 }
 
-/** detail JSON 원문의 category만 바꾼다(다른 키는 그대로). 빈 값이면 키를 지운다. */
-function withCategory(detail: string, category: string): string {
-  let parsed: Record<string, unknown> = {}
-  try {
-    const value: unknown = JSON.parse(detail.trim() || '{}')
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      parsed = value as Record<string, unknown>
-    }
-  } catch {
-    // 깨진 JSON이면 category만 담긴 새 객체로 시작한다.
-  }
-  const { category: _previous, ...rest } = parsed
-  return JSON.stringify(category ? { ...rest, category } : rest, null, 2)
+/** category만 바꾼다(다른 키는 그대로). 빈 값이면 키를 지운다. */
+function withCategory(detail: Record<string, unknown>, category: string): Record<string, unknown> {
+  const { category: _previous, ...rest } = detail
+  return category ? { ...rest, category } : rest
 }
 
 interface Props {
@@ -196,8 +171,7 @@ export default function PartnerForm({ values, onChange }: Props) {
           </label>
           <select
             id="partner-category"
-            value={categoryOf(values.detail) ?? ''}
-            disabled={categoryOf(values.detail) === null}
+            value={categoryOf(values.detail)}
             onChange={(e) => set('detail', withCategory(values.detail, e.target.value))}
           >
             <option value="">기타</option>
@@ -307,13 +281,14 @@ export default function PartnerForm({ values, onChange }: Props) {
 
       <div className="field">
         <label htmlFor="partner-instagram">
-          인스타그램 <span className="hint">선택 — 계정명이나 URL</span>
+          인스타그램 <span className="hint">선택 — @를 제외한 아이디</span>
         </label>
         <input
           id="partner-instagram"
           maxLength={200}
+          placeholder="runnersjeju"
           value={values.instagram}
-          onChange={(e) => set('instagram', e.target.value)}
+          onChange={(e) => set('instagram', e.target.value.replace(/^@+/, ''))}
         />
       </div>
 
@@ -325,21 +300,6 @@ export default function PartnerForm({ values, onChange }: Props) {
           id="partner-comment"
           value={values.comment}
           onChange={(e) => set('comment', e.target.value)}
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="partner-detail">
-          detail{' '}
-          <span className="hint">
-            선택 — 부가 정보(JSON 객체). category는 위 "업종"이 채워요
-          </span>
-        </label>
-        <textarea
-          id="partner-detail"
-          value={values.detail}
-          onChange={(e) => set('detail', e.target.value)}
-          style={{ fontFamily: 'monospace' }}
         />
       </div>
     </>

@@ -26,6 +26,25 @@ enum CourseDifficulty {
       );
 }
 
+/// 코스 카테고리. [wire]는 서버 `courses.category`와 같은 값이어야 한다.
+/// [markerIcon]은 지도 말풍선 아이콘.
+enum CourseCategory {
+  art('art', '아트런', 'assets/icons/run_art.svg'),
+  road('road', '로드런', 'assets/icons/run_road.svg'),
+  trail('trail', '트레일런', 'assets/icons/run_trail.svg'),
+  challenge('challenge', '챌린지런', 'assets/icons/run_challenge.svg');
+
+  const CourseCategory(this.wire, this.label, this.markerIcon);
+
+  final String wire;
+  final String label;
+  final String markerIcon;
+
+  /// 모르는 값(서버에 새 카테고리가 먼저 생긴 경우)은 로드런으로 본다.
+  static CourseCategory fromWire(String? wire) => CourseCategory.values
+      .firstWhere((e) => e.wire == wire, orElse: () => CourseCategory.road);
+}
+
 /// 서버에서 내려받아 따라 달리는 러닝 코스.
 ///
 /// 필드는 코스 명단 시트의 컬럼과 1:1이다. 관리자만 등록하고, 고칠 일은 DB에서
@@ -38,6 +57,7 @@ class RunningCourse {
     required this.address,
     required this.path,
     this.difficulty = CourseDifficulty.normal,
+    this.category = CourseCategory.road,
     this.tags,
     this.parkings = const [],
     this.restrooms = const [],
@@ -45,6 +65,7 @@ class RunningCourse {
     this.description,
     this.estimatedTimeMin,
     this.thumbnailUrl,
+    this.imageUrls = const [],
     this.completedCount = 0,
     this.isCompletedByMe = false,
     this.startPoint,
@@ -64,6 +85,8 @@ class RunningCourse {
       : distanceKm.toStringAsFixed(1);
 
   final CourseDifficulty difficulty;
+
+  final CourseCategory category;
 
   /// 쉼표로 이어진 태그 문자열. 예) `"해안도로,제주시,동쪽"`
   final String? tags;
@@ -85,6 +108,9 @@ class RunningCourse {
 
   /// 대표 썸네일 URL(Supabase Storage public URL). 없으면 null.
   final String? thumbnailUrl;
+
+  /// 썸네일 말고 상세 시트 갤러리에 보여 줄 이미지(순서대로). 비어 있으면 갤러리 없음.
+  final List<String> imageUrls;
 
   /// 코스를 이루는 좌표 목록. 지도에 그대로 폴리라인으로 그린다.
   final List<GeoPoint> path;
@@ -133,6 +159,7 @@ class RunningCourse {
     address: address,
     path: path.reversed.toList(growable: false),
     difficulty: difficulty,
+    category: category,
     tags: tags,
     parkings: parkings,
     restrooms: restrooms,
@@ -140,6 +167,7 @@ class RunningCourse {
     description: description,
     estimatedTimeMin: estimatedTimeMin,
     thumbnailUrl: thumbnailUrl,
+    imageUrls: imageUrls,
     completedCount: completedCount,
     isCompletedByMe: isCompletedByMe,
     startPoint: path.isEmpty ? startPoint : path.last,
@@ -152,6 +180,7 @@ class RunningCourse {
     difficulty: CourseDifficulty.fromValue(
       (json['difficulty'] as num?)?.toInt(),
     ),
+    category: CourseCategory.fromWire(json['category'] as String?),
     tags: json['tags'] as String?,
     address: json['address'] as String,
     parkings: parseList(json['parkings'], CourseFacility.fromJson),
@@ -160,6 +189,7 @@ class RunningCourse {
     description: json['description'] as String?,
     estimatedTimeMin: (json['estimated_time_min'] as num?)?.toInt(),
     thumbnailUrl: json['thumbnail_url'] as String?,
+    imageUrls: [for (final url in (json['image_urls'] as List?) ?? const []) url as String],
     path: parseList(json['path'], GeoPoint.fromJson),
     completedCount: (json['completed_count'] as num?)?.toInt() ?? 0,
     isCompletedByMe: json['is_completed_by_me'] as bool? ?? false,
