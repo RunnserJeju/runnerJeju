@@ -1,6 +1,17 @@
 import { useState } from 'react'
 
-import { ApiError, createPartner, deletePartner, updatePartner, type Partner } from '../api'
+import {
+  addPartnerImage,
+  ApiError,
+  createPartner,
+  deletePartner,
+  deletePartnerThumbnail,
+  setPartnerImages,
+  setPartnerThumbnail,
+  updatePartner,
+  type Partner,
+} from '../api'
+import { ImagesSection, ThumbnailSection } from '../components/ImageSections'
 import Modal from '../components/Modal'
 import PartnerForm, {
   emptyPartnerValues,
@@ -16,15 +27,24 @@ interface Props {
   onChanged: () => void
 }
 
-/** 협력업체 등록·수정 모달. 업체는 이미지 같은 별도 리소스가 없어 폼 하나로 끝난다
- * (공지처럼 등록/수정 모달을 나누지 않는다). */
-export default function PartnerModal({ partner, onClose, onChanged }: Props) {
+/** 협력업체 등록·수정 모달. 폼 하나로 등록·수정을 다 하고(공지처럼 모달을 나누지 않는다),
+ * 썸네일·추가 이미지는 등록된 업체에만 붙는다(코스 수정 모달과 같은 카드). */
+export default function PartnerModal({ partner: initial, onClose, onChanged }: Props) {
+  // 이미지 저장 응답으로 갈아끼운다. 폼 입력(values)은 건드리지 않는다.
+  const [partner, setPartner] = useState(initial)
   const [values, setValues] = useState(() =>
-    partner ? valuesFromPartner(partner) : emptyPartnerValues(),
+    initial ? valuesFromPartner(initial) : emptyPartnerValues(),
   )
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  const applyMedia = (saved: Partner, message: string) => {
+    setPartner(saved)
+    setNotice(message)
+    onChanged()
+  }
 
   const save = async () => {
     setError(null)
@@ -65,6 +85,7 @@ export default function PartnerModal({ partner, onClose, onChanged }: Props) {
       onClose={onClose}
       closable={!saving}
     >
+      {notice && <div className="notice" style={{ marginTop: 0 }}>{notice}</div>}
       <div className="card">
         {partner && partner.course_count > 0 && (
           <p className="muted" style={{ marginTop: 0 }}>
@@ -79,6 +100,25 @@ export default function PartnerModal({ partner, onClose, onChanged }: Props) {
           </button>
         </div>
       </div>
+
+      {partner && (
+        <>
+          <ThumbnailSection
+            thumbnailUrl={partner.thumbnail_url}
+            hint="앱 협력업체 목록 카드에 정사각형으로 보여요. 없으면 업종 아이콘이 나와요."
+            upload={(file) => setPartnerThumbnail(partner.id, file)}
+            remove={() => deletePartnerThumbnail(partner.id)}
+            onSaved={applyMedia}
+          />
+          <ImagesSection
+            urls={partner.image_urls}
+            description="앱 업체 상세의 길찾기 버튼 아래에 옆으로 넘기며 보는 갤러리예요."
+            add={(file) => addPartnerImage(partner.id, file)}
+            set={(urls) => setPartnerImages(partner.id, urls)}
+            onSaved={applyMedia}
+          />
+        </>
+      )}
 
       {partner && (
         <div className="card">

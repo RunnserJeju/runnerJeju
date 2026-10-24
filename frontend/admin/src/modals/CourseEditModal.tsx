@@ -17,6 +17,7 @@ import CourseForm, {
   valuesFromCourse,
   type CourseFormValues,
 } from '../components/CourseForm'
+import { ImagesSection, ThumbnailSection } from '../components/ImageSections'
 import Modal from '../components/Modal'
 
 interface Props {
@@ -82,8 +83,19 @@ export default function CourseEditModal({ courseId, initialNotice, onClose, onCh
             onSaved={applySaved}
           />
           <GpxSection courseId={courseId} onSaved={applyMedia} />
-          <ThumbnailSection course={course} onSaved={applyMedia} />
-          <ImagesSection course={course} onSaved={applyMedia} />
+          <ThumbnailSection
+            thumbnailUrl={course.thumbnail_url}
+            upload={(file) => setCourseThumbnail(course.id, file)}
+            remove={() => deleteCourseThumbnail(course.id)}
+            onSaved={applyMedia}
+          />
+          <ImagesSection
+            urls={course.image_urls}
+            description="앱 코스 상세의 시작 버튼 아래에 옆으로 넘기며 보는 갤러리예요."
+            add={(file) => addCourseImage(course.id, file)}
+            set={(urls) => setCourseImages(course.id, urls)}
+            onSaved={applyMedia}
+          />
         </>
       )}
     </Modal>
@@ -211,198 +223,6 @@ function GpxSection({
           </button>
         </div>
       )}
-    </div>
-  )
-}
-
-function ThumbnailSection({
-  course,
-  onSaved,
-}: {
-  course: Course
-  onSaved: (course: Course, message: string) => void
-}) {
-  const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const upload = async () => {
-    if (!file) {
-      setError('이미지 파일을 선택해 주세요.')
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      const saved = await setCourseThumbnail(course.id, file)
-      setFile(null)
-      onSaved(saved, '썸네일을 저장했어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '썸네일 업로드에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const remove = async () => {
-    setError(null)
-    setSaving(true)
-    try {
-      const saved = await deleteCourseThumbnail(course.id)
-      onSaved(saved, '썸네일을 지웠어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '썸네일 삭제에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>썸네일</h3>
-      {course.thumbnail_url ? (
-        <img className="thumb large" src={course.thumbnail_url} alt="현재 썸네일" />
-      ) : (
-        <p className="muted">등록된 썸네일이 없어요.</p>
-      )}
-      <div className="field" style={{ marginTop: 12 }}>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-        />
-      </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button onClick={upload} disabled={saving || !file}>
-          {saving ? '처리 중…' : course.thumbnail_url ? '썸네일 교체' : '썸네일 등록'}
-        </button>
-        {course.thumbnail_url && (
-          <button className="danger" onClick={remove} disabled={saving}>
-            썸네일 삭제
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/** 서버 admin/courses.MAX_COURSE_IMAGES와 같다. */
-const MAX_COURSE_IMAGES = 10
-
-/** 썸네일 말고 더 보여 줄 이미지. 한 장씩 붙이고, 순서를 바꾸거나 뺀다. */
-function ImagesSection({
-  course,
-  onSaved,
-}: {
-  course: Course
-  onSaved: (course: Course, message: string) => void
-}) {
-  const [file, setFile] = useState<File | null>(null)
-  /** 파일 입력을 비우려고 업로드할 때마다 바꾼다. */
-  const [inputKey, setInputKey] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const urls = course.image_urls
-
-  /** 성공하면 true. */
-  const run = async (action: () => Promise<Course>, done: string, failure: string) => {
-    setError(null)
-    setSaving(true)
-    try {
-      onSaved(await action(), done)
-      return true
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : failure)
-      return false
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const upload = async () => {
-    if (!file) return
-    const ok = await run(
-      () => addCourseImage(course.id, file),
-      '이미지를 추가했어요.',
-      '이미지 업로드에 실패했어요.',
-    )
-    if (ok) {
-      setFile(null)
-      setInputKey((key) => key + 1)
-    }
-  }
-
-  const move = (index: number, delta: number) => {
-    const next = [...urls]
-    const [moved] = next.splice(index, 1)
-    next.splice(index + delta, 0, moved)
-    run(() => setCourseImages(course.id, next), '순서를 바꿨어요.', '순서 변경에 실패했어요.')
-  }
-
-  const remove = (url: string) =>
-    run(
-      () => setCourseImages(course.id, urls.filter((u) => u !== url)),
-      '이미지를 뺐어요.',
-      '이미지 삭제에 실패했어요.',
-    )
-
-  const full = urls.length >= MAX_COURSE_IMAGES
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>추가 이미지</h3>
-      <p className="muted">
-        썸네일 말고 앱에서 더 보여 줄 이미지예요. 위에서부터 순서대로, 최대 {MAX_COURSE_IMAGES}장.
-      </p>
-      {urls.length === 0 && <p className="muted">등록된 이미지가 없어요.</p>}
-      {urls.map((url, index) => (
-        <div key={url} className="facility picked-row">
-          <div className="row" style={{ alignItems: 'center' }}>
-            <img className="thumb" src={url} alt={`추가 이미지 ${index + 1}`} />
-            <div className="picked-name muted">{index + 1}번째</div>
-            <button
-              type="button"
-              className="secondary small"
-              onClick={() => move(index, -1)}
-              disabled={saving || index === 0}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              className="secondary small"
-              onClick={() => move(index, 1)}
-              disabled={saving || index === urls.length - 1}
-            >
-              ↓
-            </button>
-            <button
-              type="button"
-              className="danger small"
-              onClick={() => remove(url)}
-              disabled={saving}
-            >
-              삭제
-            </button>
-          </div>
-        </div>
-      ))}
-      <div className="field" style={{ marginTop: 12 }}>
-        <input
-          key={inputKey}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={full}
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-        />
-      </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button onClick={upload} disabled={saving || !file || full}>
-          {saving ? '처리 중…' : full ? `${MAX_COURSE_IMAGES}장까지예요` : '이미지 추가'}
-        </button>
-      </div>
     </div>
   )
 }

@@ -81,7 +81,11 @@
 
 **카테고리·추가 이미지 (2026-10-22, `0039`)**
 - `courses.category` 필수: `art`(아트런) / `road`(로드런) / `trail`(트레일런) / `challenge`(챌린지런). DB CHECK(`ck_courses_category`)로도 막는다. 값을 늘리면 `models.COURSE_CATEGORIES`·`schemas.CourseCategory`·CHECK(마이그레이션)·운영 웹 `COURSE_CATEGORY_LABEL`을 같이 바꾼다. 기존 코스는 태그로 채웠다 — `아트런` → art, `트레일러닝` → trail, 나머지 road. 태그는 그대로 둔다.
-- `courses.image_urls`(JSONB 목록, 순서대로): 썸네일 말고 더 보여 줄 이미지. 응답(`CourseListItem`)에 들어가지만 앱 화면은 후속 작업.
+- `courses.image_urls`(JSONB 목록, 순서대로): 썸네일 말고 더 보여 줄 이미지. 응답(`CourseListItem`)에 들어간다. 앱은 코스 상세 시트의 시작 버튼 아래, 상세의 맨 위에 옆으로 넘기는 갤러리(`widgets/image_gallery.dart`)로 그린다(2026-10-24).
+
+**협력업체 썸네일·추가 이미지 (2026-10-24, `0041`)**
+- `partners.thumbnail_url`·`partners.image_urls` — 코스와 같은 구조. `PUT/DELETE /admin/partners/{id}/thumbnail`, `POST/PUT /admin/partners/{id}/images`(최대 10장). 검사·상한은 `app/admin/images.py`를 코스와 같이 쓴다. 버킷은 `SUPABASE_PARTNER_BUCKET`(기본 `partner-images`) — 없으면 첫 업로드 때 서버가 public으로 만든다(`storage.ensure_public_bucket`), 환경마다 손으로 만들 필요 없음. 업체 삭제 시 파일도 지운다.
+- 앱: 협력업체 목록이 업종 아이콘 줄 대신 코스 목록과 같은 카드(`widgets/listing_card.dart` 틀, `partner_card.dart`)로 바뀌었다. 썸네일이 없으면 같은 자리에 업종 타일. 상세 시트는 길찾기 아래에 갤러리.
 - 등록도 이 엔드포인트로 올린다 → "처음 설정"과 "교체"가 같은 코드.
 
 **조회 응답 추가 필드**: `GET /courses`(목록)·`GET /courses/{id}`(상세) 모두에 `estimated_time_min: int|null`, `thumbnail_url: str|null` 포함.

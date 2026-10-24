@@ -19,6 +19,10 @@ export interface PartnerSummary {
   instagram: string | null
   benefit: string | null
   detail: Record<string, unknown>
+  /** 목록 카드 썸네일. 전용 엔드포인트로만 바뀐다. */
+  thumbnail_url: string | null
+  /** 상세 갤러리 이미지(순서대로). 전용 엔드포인트로만 바뀐다. */
+  image_urls: string[]
 }
 
 /** 협력업체 관리 화면용. 서버 PartnerOut과 1:1. */
@@ -559,6 +563,32 @@ export function updatePartner(id: string, payload: PartnerPayload): Promise<Part
 /** 삭제하면 연결된 코스에서도 빠진다(서버 FK CASCADE). */
 export function deletePartner(id: string): Promise<void> {
   return request(`/admin/partners/${id}`, { method: 'DELETE' })
+}
+
+export function setPartnerThumbnail(id: string, file: File): Promise<Partner> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/partners/${id}/thumbnail`, { method: 'PUT', body: form })
+}
+
+export function deletePartnerThumbnail(id: string): Promise<Partner> {
+  return request(`/admin/partners/${id}/thumbnail`, { method: 'DELETE' })
+}
+
+/** 갤러리 이미지 한 장을 맨 뒤에 붙인다. */
+export function addPartnerImage(id: string, file: File): Promise<Partner> {
+  const form = new FormData()
+  form.set('file', file)
+  return request(`/admin/partners/${id}/images`, { method: 'POST', body: form })
+}
+
+/** 갤러리 이미지 순서 바꾸기·빼기. 지금 있는 URL로만(빠진 것은 서버가 지운다). */
+export function setPartnerImages(id: string, imageUrls: string[]): Promise<Partner> {
+  return request(`/admin/partners/${id}/images`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_urls: imageUrls }),
+  })
 }
 
 // --- 쿠폰 ---------------------------------------------------------------

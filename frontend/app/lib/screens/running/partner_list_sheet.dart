@@ -5,7 +5,7 @@ import '../../models/geo_point.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/geo_utils.dart';
-import '../../widgets/partner_category_tile.dart';
+import '../../widgets/partner_card.dart';
 import '../../widgets/sheet_handle.dart';
 import 'course_list_sheet.dart';
 
@@ -129,14 +129,15 @@ class _PartnerListSheetState extends State<PartnerListSheet> {
       );
     }
 
+    // 코스 목록과 같은 카드·간격(CourseListSheet).
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       sliver: SliverList.separated(
         itemCount: _sorted.length,
-        separatorBuilder: (_, _) => const Divider(height: 1, color: AppColors.lineSoft),
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final item = _sorted[index];
-          return PartnerListTile(
+          return PartnerCard(
             partner: item.partner,
             distanceLabel: item.distance == null
                 ? null
@@ -237,93 +238,6 @@ class _Header extends StatelessWidget {
             visualDensity: VisualDensity.compact,
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 협력업체 목록 한 줄: 업종 타일 + 이름·업종 + 혜택 + 주소(와 거리).
-class PartnerListTile extends StatelessWidget {
-  const PartnerListTile({
-    super.key,
-    required this.partner,
-    required this.onTap,
-    this.distanceLabel,
-  });
-
-  final CoursePartner partner;
-  final VoidCallback onTap;
-
-  /// '1.2km' 같은 현위치 거리. 위치를 모르면 null이라 숨긴다.
-  final String? distanceLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final address = partner.address;
-
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          children: [
-            PartnerCategoryTile(category: partner.category),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          partner.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.ink,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        partner.category.label,
-                        style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                      ),
-                    ],
-                  ),
-                  if (partner.benefit != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      partner.benefit!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.ink,
-                      ),
-                    ),
-                  ],
-                  if (address != null || distanceLabel != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      [?distanceLabel, ?address].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: AppColors.textSubtle),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
-          ],
-        ),
       ),
     );
   }

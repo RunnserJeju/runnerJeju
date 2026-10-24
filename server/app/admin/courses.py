@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app import storage
+from app.admin.images import MAX_EXTRA_IMAGES, read_image_or_raise
 from app.db import get_db
 from app.models import Course, Partner, Run, Stamp, StampDefinition, Verification
 from app.stamp_rules import course_condition
@@ -392,23 +393,10 @@ def delete_course_thumbnail(
     return _to_summary(course, counts.get(course.id, 0), False)
 
 
-# 코스 하나에 올릴 수 있는 추가 이미지 수.
-MAX_COURSE_IMAGES = 10
+# 코스 하나에 올릴 수 있는 추가 이미지 수(협력업체와 같다).
+MAX_COURSE_IMAGES = MAX_EXTRA_IMAGES
 
-
-def _read_image_or_raise(file: UploadFile) -> tuple[bytes, str]:
-    extension = _ALLOWED_IMAGE_TYPES.get(file.content_type or "")
-    if extension is None:
-        raise HTTPException(status_code=422, detail="jpg/png/webp 이미지만 올릴 수 있어요.")
-    content = file.file.read(MAX_THUMBNAIL_BYTES + 1)
-    if len(content) > MAX_THUMBNAIL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"이미지가 너무 커요. {MAX_THUMBNAIL_BYTES // (1024 * 1024)}MB 이하여야 해요.",
-        )
-    if not content:
-        raise HTTPException(status_code=422, detail="빈 파일이에요.")
-    return content, extension
+_read_image_or_raise = read_image_or_raise
 
 
 @router.post("/courses/{course_id}/images", response_model=CourseSummary)

@@ -57,6 +57,8 @@ class CoursePartner {
     this.comment,
     this.instagram,
     this.benefit,
+    this.thumbnailUrl,
+    this.imageUrls = const [],
     this.detail = const {},
     this.courses = const [],
   });
@@ -74,6 +76,12 @@ class CoursePartner {
 
   /// 예) "러너 인증 시 아메리카노 10% 할인".
   final String? benefit;
+
+  /// 목록 카드 썸네일. 없으면 업종 아이콘 타일을 그린다.
+  final String? thumbnailUrl;
+
+  /// 상세 갤러리 이미지(순서대로). 비어 있으면 갤러리를 그리지 않는다.
+  final List<String> imageUrls;
 
   /// 형태가 정해지지 않은 부가 정보(서버 partners.detail JSONB). 지금은 category만 읽는다.
   final Map<String, dynamic> detail;
@@ -106,6 +114,8 @@ class CoursePartner {
     comment: json['comment'] as String?,
     instagram: json['instagram'] as String?,
     benefit: json['benefit'] as String?,
+    thumbnailUrl: json['thumbnail_url'] as String?,
+    imageUrls: [for (final url in (json['image_urls'] as List?) ?? const []) url as String],
     detail: (json['detail'] as Map<String, dynamic>?) ?? const {},
     courses: [
       for (final course in (json['courses'] as List?) ?? const [])

@@ -188,6 +188,29 @@ class PartnerSummary(BaseModel):
     instagram: str | None
     benefit: str | None
     detail: dict
+    # 목록 카드 썸네일. 없으면 앱이 업종 아이콘을 그린다.
+    thumbnail_url: str | None = None
+    # 상세 갤러리 이미지(순서대로).
+    image_urls: list[str] = []
+
+    @field_validator("image_urls", mode="before")
+    @classmethod
+    def _none_to_empty(cls, value):
+        # 아직 flush 안 된 모델이나 옛 행은 None일 수 있다.
+        return value or []
+
+
+class PartnerImagesUpdate(BaseModel):
+    """추가 이미지 순서 바꾸기·빼기(PUT /admin/partners/{id}/images). 코스와 같은 규칙."""
+
+    image_urls: list[str]
+
+    @field_validator("image_urls")
+    @classmethod
+    def _unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("같은 이미지가 두 번 들어 있어요.")
+        return value
 
 
 class PartnerCourseRef(BaseModel):
