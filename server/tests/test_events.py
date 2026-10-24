@@ -29,6 +29,7 @@ def _event(**over) -> Event:
         starts_at=None,
         ends_at=None,
         is_active=True,
+        visibility="public",
         sort_order=0,
     )
     fields.update(over)
@@ -120,16 +121,25 @@ class TestAdminCrud:
 
 class TestVisibility:
     def test_hidden_scheduled_and_expired_are_not_visible(self):
-        assert events_router.is_visible(_event(), NOW)
-        assert not events_router.is_visible(_event(is_active=False), NOW)
-        assert not events_router.is_visible(_event(starts_at=NOW + DAY), NOW)
-        assert not events_router.is_visible(_event(ends_at=NOW - DAY), NOW)
+        assert events_router.is_visible(_event(), NOW, is_admin=False)
+        assert not events_router.is_visible(_event(is_active=False), NOW, is_admin=False)
+        assert not events_router.is_visible(_event(starts_at=NOW + DAY), NOW, is_admin=False)
+        assert not events_router.is_visible(_event(ends_at=NOW - DAY), NOW, is_admin=False)
+
+    def test_admin_only_event_is_visible_to_admin_only(self):
+        e = _event(visibility="admin")
+        assert not events_router.is_visible(e, NOW, is_admin=False)
+        assert events_router.is_visible(e, NOW, is_admin=True)
+        # 공개 범위는 기간과 별개 — 운영자라도 기간 밖이면 안 보인다.
+        assert not events_router.is_visible(
+            _event(visibility="admin", ends_at=NOW - DAY), NOW, is_admin=True
+        )
 
     def test_app_detail_404_when_hidden(self):
         e = _event(is_active=False)
 
         with pytest.raises(HTTPException) as exc:
-            events_router.get_event(e.id, FakeSession([e]), user_id="u")
+            events_router.get_event(e.id, FakeSession([e]), user_id="u", is_admin=False)
         assert exc.value.status_code == 404
 
 
