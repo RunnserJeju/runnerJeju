@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -78,9 +77,8 @@ class RunShareCard extends StatelessWidget {
       : (theme.isDark ? _accent : AppColors.ink);
 
   /// 지형을 아직 못 읽었을 때 경로 뒤에 까는 면.
-  Color get _mapPlaceholder => theme.isDark
-      ? const Color(0xFF16181A)
-      : const Color(0xFFECEEF1);
+  Color get _mapPlaceholder =>
+      theme.isDark ? const Color(0xFF16181A) : const Color(0xFFECEEF1);
 
   /// 지형 배색. 카드 배경보다 한 단계만 밝거나 어둡게 둬서, 지형이 경로보다
   /// 앞으로 나오지 않게 한다.
@@ -150,11 +148,7 @@ class RunShareCard extends StatelessWidget {
               child: _title(),
             ),
             Positioned(left: _sideMargin, top: 510, child: _subtitle()),
-            Positioned(
-              left: _sideMargin,
-              top: _mapTop,
-              child: _routeArea(),
-            ),
+            Positioned(left: _sideMargin, top: _mapTop, child: _routeArea()),
             Positioned(
               left: _sideMargin,
               top: 1196,

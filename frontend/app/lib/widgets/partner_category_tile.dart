@@ -8,7 +8,11 @@ import '../models/course_partner.dart';
 /// 홈 큐레이션과 러닝 탭 협력업체 시트가 같이 쓴다. 전용 SVG가 있는 업종은 SVG를,
 /// 없으면 머티리얼 아이콘을 그린다.
 class PartnerCategoryTile extends StatelessWidget {
-  const PartnerCategoryTile({super.key, required this.category, this.size = 48});
+  const PartnerCategoryTile({
+    super.key,
+    required this.category,
+    this.size = 48,
+  });
 
   final PartnerCategory category;
   final double size;

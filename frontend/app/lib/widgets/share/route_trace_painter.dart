@@ -142,8 +142,8 @@ class RouteTracePainter extends CustomPainter {
           180,
     );
 
-    final spanX = (bounds.northEast.longitude - bounds.southWest.longitude) *
-        cosLat;
+    final spanX =
+        (bounds.northEast.longitude - bounds.southWest.longitude) * cosLat;
     final spanY = bounds.northEast.latitude - bounds.southWest.latitude;
 
     final boxWidth = math.max(size.width - _padding * 2, 1.0);
@@ -162,8 +162,7 @@ class RouteTracePainter extends CustomPainter {
     final offsetY = (size.height - spanY * scale) / 2;
 
     Offset toCanvas(GeoPoint p) => Offset(
-      offsetX +
-          (p.longitude - bounds.southWest.longitude) * cosLat * scale,
+      offsetX + (p.longitude - bounds.southWest.longitude) * cosLat * scale,
       // 북쪽이 위로 가도록 위도를 뒤집는다.
       offsetY + (bounds.northEast.latitude - p.latitude) * scale,
     );

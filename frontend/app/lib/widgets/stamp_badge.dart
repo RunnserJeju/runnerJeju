@@ -19,10 +19,7 @@ class StampBadge extends StatelessWidget {
     this.size = 104,
     this.onTap,
     this.showLabel = true,
-  }) : assert(
-         stamp != null || name != null,
-         'stamp 또는 name 중 하나는 있어야 한다',
-       );
+  }) : assert(stamp != null || name != null, 'stamp 또는 name 중 하나는 있어야 한다');
 
   /// 획득 스탬프. 도안 이미지·획득일 출처. 미획득이면 null일 수 있다.
   final RunStamp? stamp;

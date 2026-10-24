@@ -18,7 +18,7 @@ enum PartnerCategory {
   final String wire;
   final String label;
 
-  /// 지도 마커에 새기는 글리프. 마커는 캔버스로 그려서 SVG를 쓸 수 없다.
+  /// 지도 마커에 새기는 글리프. 지도 말풍선 아이콘은 이 글리프로 그린다.
   final IconData icon;
   final Color tint;
 

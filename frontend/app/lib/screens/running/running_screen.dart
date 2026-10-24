@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -116,12 +117,19 @@ class RunningScreenState extends State<RunningScreen> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
 
-  /// 지도에 무엇을 찍을지. '협력업체' 칩이면 업체만(코스 라벨은 숨기고 아래 시트는
-  /// [PartnerListSheet]), '전체' 칩이면 코스와 업체를 함께. 코스를 고르면 courses로
-  /// 돌아가 그 코스만 남는다.
+  /// 지도에 무엇을 찍을지. 칩 하나가 레이어 하나를 켜고, 켜진 칩은 색이 반전된다.
+  /// '코스 탐색'은 코스만, '협력업체'는 업체만(아래 시트는 [PartnerListSheet]),
+  /// '전체'는 둘 다. 켜진 칩을 다시 누르면 꺼진다(코스 탐색은 none, 나머지는 courses로).
+  /// 코스를 고르면 courses로 돌아가 그 코스만 남는다.
   _MapLayer _layer = _MapLayer.courses;
 
   bool get _isPartnerMode => _layer == _MapLayer.partners;
+
+  bool get _showsCourses =>
+      _layer == _MapLayer.courses || _layer == _MapLayer.all;
+
+  bool get _showsPartners =>
+      _layer == _MapLayer.partners || _layer == _MapLayer.all;
 
   /// 협력업체 전체. 처음 모드를 켤 때 한 번 받고, 실패했을 때만 다시 받는다.
   List<CoursePartner> _partners = const [];
@@ -499,8 +507,17 @@ class RunningScreenState extends State<RunningScreen> {
     });
   }
 
-  /// '코스 탐색' 버튼. 코스 상세가 떠 있었다면 걷고 탐색 시트를 펼친다.
+  /// '코스 탐색' 칩. 협력업체 칩처럼 켜고 끈다. 켜면 코스 마커와 탐색 시트를 펼치고,
+  /// 코스만 보던 중(상세 없음)에 다시 누르면 코스 마커를 걷고 시트를 접는다.
+  /// 코스 상세가 떠 있었다면 걷고 탐색 시트를 펼친다.
   void _openExplore() {
+    if (_layer == _MapLayer.courses && _selected == null) {
+      _closeSearch();
+      setState(() => _layer = _MapLayer.none);
+      _moveSheet(CourseListSheet.peekHeight, isPixels: true);
+      return;
+    }
+    _closeSearch();
     _detailRequestId++;
     setState(() {
       _selected = null;
@@ -898,8 +915,8 @@ class RunningScreenState extends State<RunningScreen> {
                     listenable: _currentLocation,
                     builder: (context, _) => CourseMapView(
                       controller: _mapController,
-                      // 협력업체 모드면 코스 라벨을 치워 업체만 보이게 한다.
-                      courses: _isPartnerMode ? const [] : _courses,
+                      // 켜진 칩의 레이어만 찍는다([_layer]).
+                      courses: _showsCourses ? _courses : const [],
                       selectedCourseId: selected?.id,
                       selectedPath: detail?.path ?? const [],
                       // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
@@ -910,11 +927,8 @@ class RunningScreenState extends State<RunningScreen> {
                       selectedRestrooms: selected == null
                           ? const []
                           : (detail ?? selected).restrooms,
-                      // 업체는 협력업체·전체 레이어에서만. 코스를 고르면 레이어가
-                      // courses로 돌아가므로 코스만 남는다.
-                      partners: _layer == _MapLayer.courses
-                          ? const []
-                          : _partners,
+                      // 코스를 고르면 레이어가 courses로 돌아가므로 코스만 남는다.
+                      partners: _showsPartners ? _partners : const [],
                       selectedPartnerId: _selectedPartner?.id,
                       onPartnerTap: _onPartnerMarkerTap,
                       myPosition: _currentLocation.latest,
@@ -923,7 +937,10 @@ class RunningScreenState extends State<RunningScreen> {
                       onMapTap: _clearSelection,
                       // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
                       // 코스가 있으면 그 자리에서 다시 시작한다.
-                      initialCenter: (detail ?? selected)?.startPoint,
+                      // 디버그 빌드는 현위치와 상관없이 제주시청에서 시작한다.
+                      initialCenter:
+                          (detail ?? selected)?.startPoint ??
+                          (kDebugMode ? _debugStartCenter : null),
                     ),
                   ),
           ),
@@ -1133,8 +1150,11 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-/// 지도에 찍는 마커 레이어.
-enum _MapLayer { courses, partners, all }
+/// 지도에 찍는 마커 레이어. none은 코스 탐색 칩을 끈 상태(마커 없음).
+enum _MapLayer { none, courses, partners, all }
+
+/// 디버그 빌드의 지도 시작 위치(제주시청).
+const _debugStartCenter = GeoPoint(latitude: 33.4996, longitude: 126.5312);
 
 /// 검색창 아래 가로로 늘어서는 기능 칩들. 화면보다 길어지면 좌우로 스크롤한다.
 class _ActionChips extends StatelessWidget {
@@ -1164,6 +1184,7 @@ class _ActionChips extends StatelessWidget {
         icon: Icons.route_rounded,
         label: '코스 탐색',
         onTap: onTapExplore,
+        active: layer == _MapLayer.courses,
       ),
       _ActionChip(
         icon: Icons.storefront_rounded,

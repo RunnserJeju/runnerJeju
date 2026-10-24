@@ -14,13 +14,13 @@ import '../models/geo_point.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
 import '../utils/run_path_interpolator.dart';
-import 'course_direction_arrow.dart';
-import 'course_endpoint_marker.dart';
-import 'facility_marker.dart';
+import 'image_coding/course_direction_arrow.dart';
+import 'image_coding/course_endpoint_marker.dart';
+import 'image_coding/facility_marker.dart';
 import 'kakao_geo.dart';
-import 'my_position_marker.dart';
+import 'image_coding/my_position_marker.dart';
 import 'map_status_views.dart';
-import 'partner_marker.dart';
+import 'image_coding/bubble_marker.dart';
 
 /// 카카오맵을 감싸는 러닝 전용 지도.
 ///
@@ -147,7 +147,7 @@ class _RunMapViewState extends State<RunMapView>
   List<CoursePartner>? _drawnPartners;
   kakao.PoiStyle? _parkingStyle;
   kakao.PoiStyle? _restroomStyle;
-  final Map<PartnerCategory, kakao.PoiStyle> _partnerStyles = {};
+  final Map<String, kakao.PoiStyle> _partnerStyles = {};
 
   /// 코스 시작/끝의 '출발'/'도착' 배지. 코스가 바뀔 때만 다시 그린다.
   final List<kakao.Poi> _endpointMarkers = [];
@@ -880,16 +880,10 @@ class _RunMapViewState extends State<RunMapView>
     final restroomStyle = await _ensureRestroomStyle();
     if (parkingStyle == null || restroomStyle == null || _disposed) return;
 
-    Future<void> place(
-      double lat,
-      double lng,
-      kakao.PoiStyle style, {
-      String? text,
-    }) async {
+    Future<void> place(double lat, double lng, kakao.PoiStyle style) async {
       final poi = await controller.labelLayer.addPoi(
         kakao.LatLng(lat, lng),
         style: style,
-        text: text,
       );
       if (_disposed) {
         await poi.remove();
@@ -907,9 +901,9 @@ class _RunMapViewState extends State<RunMapView>
       if (_disposed) return;
     }
     for (final partner in widget.partners) {
-      final style = await _ensurePartnerStyle(partner.category);
+      final style = await _ensurePartnerStyle(partner);
       if (style == null || _disposed) return;
-      await place(partner.lat, partner.lng, style, text: partner.name);
+      await place(partner.lat, partner.lng, style);
       if (_disposed) return;
     }
 
@@ -941,15 +935,14 @@ class _RunMapViewState extends State<RunMapView>
     );
   }
 
-  Future<kakao.PoiStyle?> _ensurePartnerStyle(PartnerCategory category) async {
-    final cached = _partnerStyles[category];
+  Future<kakao.PoiStyle?> _ensurePartnerStyle(CoursePartner partner) async {
+    final cached = _partnerStyles[partner.id];
     if (cached != null) return cached;
-    final icon = await buildPartnerPin(category);
+    final icon = await buildPartnerBubble(partner);
     if (_disposed) return null;
-    return _partnerStyles[category] = kakao.PoiStyle(
-      anchor: partnerPinAnchor,
+    return _partnerStyles[partner.id] = kakao.PoiStyle(
+      anchor: bubbleMarkerAnchor,
       icon: icon,
-      textStyle: partnerLabelStyle,
     );
   }
 

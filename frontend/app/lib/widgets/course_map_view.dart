@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 // 카카오맵 SDK는 Route, Polygon 등 머티리얼과 겹치는 이름을 내보내므로 접두사를 붙인다.
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
@@ -11,13 +9,12 @@ import '../models/geo_point.dart';
 import '../models/running_course.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
-import 'course_endpoint_marker.dart';
-import 'facility_marker.dart';
+import 'image_coding/course_endpoint_marker.dart';
+import 'image_coding/bubble_marker.dart';
+import 'image_coding/facility_marker.dart';
 import 'kakao_geo.dart';
-import 'marker_canvas.dart';
-import 'my_position_marker.dart';
+import 'image_coding/my_position_marker.dart';
 import 'map_status_views.dart';
-import 'partner_marker.dart';
 
 /// '러닝' 탭이 쓰는 지도. 코스마다 라벨을 찍고, 라벨을 누르면 알려준다.
 ///
@@ -145,8 +142,8 @@ class _CourseMapViewState extends State<CourseMapView> {
 
   kakao.Poi? _myPositionMarker;
 
-  kakao.PoiStyle? _courseStyle;
-  kakao.PoiStyle? _selectedCourseStyle;
+  /// 코스 말풍선 스타일. 이름이 그림에 들어가 코스마다 다르다. 키는 `id|선택여부`.
+  final Map<String, kakao.PoiStyle> _courseStyles = {};
   kakao.PoiStyle? _parkingStyle;
   kakao.PoiStyle? _restroomStyle;
   kakao.PoiStyle? _myPositionStyle;
@@ -398,9 +395,6 @@ class _CourseMapViewState extends State<CourseMapView> {
   /// 목록과 지도의 라벨을 맞춘다. 남아 있는 라벨은 건드리지 않는다 — 검색어를
   /// 지웠을 때 화면에 있던 코스가 깜빡이지 않게 하려는 것이다.
   Future<void> _syncMarkers(kakao.KakaoMapController controller) async {
-    final style = await _ensureCourseStyle();
-    if (style == null || _disposed) return;
-
     final wanted = {
       for (final course in widget.courses)
         if (course.startPoint != null) course.id: course,
@@ -418,10 +412,12 @@ class _CourseMapViewState extends State<CourseMapView> {
     for (final course in wanted.values) {
       if (_markers.containsKey(course.id)) continue;
 
+      final style = await _ensureCourseStyle(course);
+      if (style == null || _disposed) return;
+
       final marker = await controller.labelLayer.addPoi(
         course.startPoint!.toLatLng(),
         style: style,
-        text: course.name,
         onClick: () => widget.onCourseTap?.call(course),
       );
       if (_disposed) {
@@ -432,24 +428,33 @@ class _CourseMapViewState extends State<CourseMapView> {
     }
   }
 
-  /// 선택된 라벨만 강조색 큰 핀으로 바꾼다.
+  /// 선택된 라벨만 강조 말풍선으로 바꾼다.
   Future<void> _syncHighlight() async {
     final selected = widget.selectedCourseId;
     if (_highlightedCourseId == selected) return;
 
-    final base = await _ensureCourseStyle();
-    final highlight = await _ensureSelectedCourseStyle();
-    if (base == null || highlight == null || _disposed) return;
+    RunningCourse? courseOf(String? id) =>
+        widget.courses.where((c) => c.id == id).firstOrNull;
 
+    final previousCourse = courseOf(_highlightedCourseId);
     final previous = _markers[_highlightedCourseId];
-    if (previous != null) await previous.changeStyles(base);
-    if (_disposed) return;
+    if (previous != null && previousCourse != null) {
+      final base = await _ensureCourseStyle(previousCourse);
+      if (base == null || _disposed) return;
+      await previous.changeStyles(base);
+      if (_disposed) return;
+    }
 
+    final nextCourse = courseOf(selected);
     final next = selected == null || selected == _hiddenCourseId
         ? null
         : _markers[selected];
-    if (next != null) await next.changeStyles(highlight);
-    if (_disposed) return;
+    if (next != null && nextCourse != null) {
+      final highlight = await _ensureCourseStyle(nextCourse, selected: true);
+      if (highlight == null || _disposed) return;
+      await next.changeStyles(highlight);
+      if (_disposed) return;
+    }
 
     // 강조에 실패한 코스를 기억해 두면 다음 선택 때 되돌릴 라벨을 놓친다.
     _highlightedCourseId = next == null ? null : selected;
@@ -638,7 +643,7 @@ class _CourseMapViewState extends State<CourseMapView> {
 
     for (final partner in ordered) {
       final style = await _ensurePartnerStyle(
-        partner.category,
+        partner,
         selected: partner.id == widget.selectedPartnerId,
       );
       if (style == null || _disposed) return;
@@ -646,7 +651,6 @@ class _CourseMapViewState extends State<CourseMapView> {
       final poi = await controller.labelLayer.addPoi(
         kakao.LatLng(partner.lat, partner.lng),
         style: style,
-        text: partner.name,
         onClick: () => widget.onPartnerTap?.call(partner),
       );
       if (_disposed) {
@@ -736,49 +740,20 @@ class _CourseMapViewState extends State<CourseMapView> {
         icon: await buildMyPositionMarker(),
       );
 
-  Future<kakao.PoiStyle?> _ensureCourseStyle() async {
-    if (_courseStyle != null) return _courseStyle;
+  Future<kakao.PoiStyle?> _ensureCourseStyle(
+    RunningCourse course, {
+    bool selected = false,
+  }) async {
+    final key = '${course.id}|$selected';
+    final cached = _courseStyles[key];
+    if (cached != null) return cached;
 
-    final icon = await _buildPinImage(AppColors.ink, _pinWidth, _pinHeight);
+    final icon = await buildCourseBubble(course, selected: selected);
     if (_disposed) return null;
 
-    return _courseStyle = kakao.PoiStyle(
-      // 핀 끝이 좌표 위에 놓이도록 아래쪽 가운데를 기준으로 잡는다.
-      anchor: const kakao.KPoint(0.5, 1.0),
+    return _courseStyles[key] = kakao.PoiStyle(
+      anchor: bubbleMarkerAnchor,
       icon: icon,
-      textStyle: const [
-        // 지도 위 글씨라 흰 외곽선을 둘러야 바다·초록 지형 어디서든 읽힌다.
-        kakao.PoiTextStyle(
-          size: 13,
-          color: AppColors.ink,
-          stroke: 3,
-          strokeColor: Colors.white,
-        ),
-      ],
-    );
-  }
-
-  Future<kakao.PoiStyle?> _ensureSelectedCourseStyle() async {
-    if (_selectedCourseStyle != null) return _selectedCourseStyle;
-
-    final icon = await _buildPinImage(
-      AppColors.accent,
-      _selectedPinWidth,
-      _selectedPinHeight,
-    );
-    if (_disposed) return null;
-
-    return _selectedCourseStyle = kakao.PoiStyle(
-      anchor: const kakao.KPoint(0.5, 1.0),
-      icon: icon,
-      textStyle: const [
-        kakao.PoiTextStyle(
-          size: 14,
-          color: AppColors.ink,
-          stroke: 3,
-          strokeColor: Colors.white,
-        ),
-      ],
     );
   }
 
@@ -811,71 +786,19 @@ class _CourseMapViewState extends State<CourseMapView> {
   }
 
   Future<kakao.PoiStyle?> _ensurePartnerStyle(
-    PartnerCategory category, {
+    CoursePartner partner, {
     required bool selected,
   }) async {
-    final key = '${category.wire}|$selected';
+    final key = '${partner.id}|$selected';
     final cached = _partnerStyles[key];
     if (cached != null) return cached;
 
-    final icon = await buildPartnerPin(category, selected: selected);
+    final icon = await buildPartnerBubble(partner, selected: selected);
     if (_disposed) return null;
 
     return _partnerStyles[key] = kakao.PoiStyle(
-      anchor: partnerPinAnchor,
+      anchor: bubbleMarkerAnchor,
       icon: icon,
-      textStyle: partnerLabelStyle,
     );
   }
-
-  static const int _pinWidth = 26;
-  static const int _pinHeight = 34;
-  static const int _selectedPinWidth = 32;
-  static const int _selectedPinHeight = 42;
-
-  /// 핀을 그려 지도에 넘길 이미지로 만든다.
-  ///
-  /// 에셋 PNG 대신 그리는 이유는 색이 둘(기본/선택)이고 크기도 둘이라, 파일로
-  /// 두면 같은 모양을 네 벌 관리하게 되기 때문이다. 앱 색을 바꾸면 여기만 따라온다.
-  ///
-  /// [width]·[height]는 화면 크기(dp)다.
-  static Future<kakao.KImage> _buildPinImage(
-    Color color,
-    int width,
-    int height,
-  ) {
-    final w = width.toDouble();
-    final h = height.toDouble();
-    final radius = w / 2 - _pinBorder;
-    final center = Offset(w / 2, radius + _pinBorder);
-
-    return rasterizeMarker(
-      width: w,
-      height: h,
-      draw: (canvas) {
-        // 머리(원)와 꼬리(삼각형)를 합쳐 하나의 외곽선으로 만든다. 따로 그리면
-        // 겹치는 자리에 흰 테두리가 가로질러 그어진다.
-        final head = Path()
-          ..addOval(Rect.fromCircle(center: center, radius: radius));
-        final tail = Path()
-          ..moveTo(center.dx - radius * 0.62, center.dy + radius * 0.55)
-          ..lineTo(center.dx, h - _pinBorder / 2)
-          ..lineTo(center.dx + radius * 0.62, center.dy + radius * 0.55)
-          ..close();
-        final pin = Path.combine(ui.PathOperation.union, head, tail);
-
-        canvas.drawPath(pin, Paint()..color = color);
-        canvas.drawPath(
-          pin,
-          Paint()
-            ..color = Colors.white
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = _pinBorder,
-        );
-        canvas.drawCircle(center, radius * 0.34, Paint()..color = Colors.white);
-      },
-    );
-  }
-
-  static const double _pinBorder = 2;
 }

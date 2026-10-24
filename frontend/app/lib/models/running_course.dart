@@ -26,6 +26,25 @@ enum CourseDifficulty {
       );
 }
 
+/// 코스 카테고리. [wire]는 서버 `courses.category`와 같은 값이어야 한다.
+/// [markerIcon]은 지도 말풍선 아이콘.
+enum CourseCategory {
+  art('art', '아트런', 'assets/icons/run_art.svg'),
+  road('road', '로드런', 'assets/icons/run_road.svg'),
+  trail('trail', '트레일런', 'assets/icons/run_trail.svg'),
+  challenge('challenge', '챌린지런', 'assets/icons/run_challenge.svg');
+
+  const CourseCategory(this.wire, this.label, this.markerIcon);
+
+  final String wire;
+  final String label;
+  final String markerIcon;
+
+  /// 모르는 값(서버에 새 카테고리가 먼저 생긴 경우)은 로드런으로 본다.
+  static CourseCategory fromWire(String? wire) => CourseCategory.values
+      .firstWhere((e) => e.wire == wire, orElse: () => CourseCategory.road);
+}
+
 /// 서버에서 내려받아 따라 달리는 러닝 코스.
 ///
 /// 필드는 코스 명단 시트의 컬럼과 1:1이다. 관리자만 등록하고, 고칠 일은 DB에서
@@ -38,6 +57,7 @@ class RunningCourse {
     required this.address,
     required this.path,
     this.difficulty = CourseDifficulty.normal,
+    this.category = CourseCategory.road,
     this.tags,
     this.parkings = const [],
     this.restrooms = const [],
@@ -64,6 +84,8 @@ class RunningCourse {
       : distanceKm.toStringAsFixed(1);
 
   final CourseDifficulty difficulty;
+
+  final CourseCategory category;
 
   /// 쉼표로 이어진 태그 문자열. 예) `"해안도로,제주시,동쪽"`
   final String? tags;
@@ -133,6 +155,7 @@ class RunningCourse {
     address: address,
     path: path.reversed.toList(growable: false),
     difficulty: difficulty,
+    category: category,
     tags: tags,
     parkings: parkings,
     restrooms: restrooms,
@@ -152,6 +175,7 @@ class RunningCourse {
     difficulty: CourseDifficulty.fromValue(
       (json['difficulty'] as num?)?.toInt(),
     ),
+    category: CourseCategory.fromWire(json['category'] as String?),
     tags: json['tags'] as String?,
     address: json['address'] as String,
     parkings: parseList(json['parkings'], CourseFacility.fromJson),
