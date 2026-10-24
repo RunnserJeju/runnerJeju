@@ -52,6 +52,7 @@ dependencies:
   path_provider: ^2.1.5
   # 스탬프 획득 팝업의 색종이 효과.
   confetti: ^0.8.0
+  image_picker: ^1.2.4
 
 # 포크를 쓴다. pub 1.2.6의 iOS 래퍼에 크래시가 있어 직접 고치면서 사용해야 할 것 같다..
 # 실제로 받는 커밋은 pubspec.lock에 박히므로 팀원은 모두 같은 코드를 쓴다.

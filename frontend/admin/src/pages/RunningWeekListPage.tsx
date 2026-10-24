@@ -11,6 +11,7 @@ import {
   setRunningWeekBingo,
   setRunningWeekImage,
   updateRunningWeek,
+  type CourseVisibility,
   type Participation,
   type RunningWeek,
   type RunningWeekPayload,
@@ -208,6 +209,7 @@ function ContentSection({
   const [startsAt, setStartsAt] = useState(toLocalInput(week?.starts_at ?? null))
   const [endsAt, setEndsAt] = useState(toLocalInput(week?.ends_at ?? null))
   const [isActive, setIsActive] = useState(week?.is_active ?? true)
+  const [visibility, setVisibility] = useState<CourseVisibility>(week?.visibility ?? 'admin')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -234,6 +236,7 @@ function ContentSection({
       starts_at: start ? start.toISOString() : null,
       ends_at: end ? end.toISOString() : null,
       is_active: isActive,
+      visibility,
     }
     setSaving(true)
     try {
@@ -313,6 +316,19 @@ function ContentSection({
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />{' '}
           앱에 공개 <span className="hint">끄면 공개 기간 안이어도 안 보여요</span>
         </label>
+      </div>
+      <div className="field">
+        <label htmlFor="rw-visibility">
+          공개 범위 <span className="hint">운영자: role=admin 계정에만 보여요</span>
+        </label>
+        <select
+          id="rw-visibility"
+          value={visibility}
+          onChange={(e) => setVisibility(e.target.value as CourseVisibility)}
+        >
+          <option value="admin">운영자</option>
+          <option value="public">전체 공개</option>
+        </select>
       </div>
       {error && <div className="error">{error}</div>}
       <div className="submit-row">

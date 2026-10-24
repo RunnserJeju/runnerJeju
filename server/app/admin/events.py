@@ -39,6 +39,7 @@ def _apply(event: Event, payload: EventCreate) -> None:
     event.starts_at = payload.starts_at
     event.ends_at = payload.ends_at
     event.is_active = payload.is_active
+    event.visibility = payload.visibility
     event.sort_order = payload.sort_order
 
 

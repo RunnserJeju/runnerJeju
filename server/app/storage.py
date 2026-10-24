@@ -28,6 +28,7 @@ SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "banners")
 SUPABASE_COURSE_BUCKET = os.environ.get("SUPABASE_COURSE_BUCKET", "course-thumbnails")
 SUPABASE_STAMP_BUCKET = os.environ.get("SUPABASE_STAMP_BUCKET", "course-stamps")
 SUPABASE_PARTNER_BUCKET = os.environ.get("SUPABASE_PARTNER_BUCKET", "partner-images")
+SUPABASE_PROFILE_BUCKET = os.environ.get("SUPABASE_PROFILE_BUCKET", "profile-images")
 
 # ensure_public_bucket이 이미 확인한 버킷. 프로세스마다 한 번만 물어본다.
 _known_buckets: set[str] = set()

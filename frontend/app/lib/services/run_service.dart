@@ -17,9 +17,28 @@ class RunService {
     }
   }
 
-  Future<List<RunRecord>> loadMyRecords({int limit = 20}) async {
+  Future<List<RunRecord>> loadMyRecords({
+    int limit = 20,
+    DateTime? since,
+    DateTime? until,
+    bool withPath = true,
+  }) async {
     try {
-      return await _runApi.fetchMyRecords(limit: limit);
+      return await _runApi.fetchMyRecords(
+        limit: limit,
+        since: since,
+        until: until,
+        withPath: withPath,
+      );
+    } catch (e) {
+      throw AppException('러닝 기록을 불러오지 못했어요.', e);
+    }
+  }
+
+  /// 경로까지 담긴 기록 하나. 경로 없이 받은 기록의 상세를 열 때 쓴다.
+  Future<RunRecord> loadRecord(String id) async {
+    try {
+      return await _runApi.fetchRecord(id);
     } catch (e) {
       throw AppException('러닝 기록을 불러오지 못했어요.', e);
     }

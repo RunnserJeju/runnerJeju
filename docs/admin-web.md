@@ -81,7 +81,10 @@
 
 **카테고리·추가 이미지 (2026-10-22, `0039`)**
 - `courses.category` 필수: `art`(아트런) / `road`(로드런) / `trail`(트레일런) / `challenge`(챌린지런). DB CHECK(`ck_courses_category`)로도 막는다. 값을 늘리면 `models.COURSE_CATEGORIES`·`schemas.CourseCategory`·CHECK(마이그레이션)·운영 웹 `COURSE_CATEGORY_LABEL`을 같이 바꾼다. 기존 코스는 태그로 채웠다 — `아트런` → art, `트레일러닝` → trail, 나머지 road. 태그는 그대로 둔다.
-- `courses.image_urls`(JSONB 목록, 순서대로): 썸네일 말고 더 보여 줄 이미지. 응답(`CourseListItem`)에 들어간다. 앱은 코스 상세 시트의 시작 버튼 아래, 상세의 맨 위에 옆으로 넘기는 갤러리(`widgets/image_gallery.dart`)로 그린다(2026-10-24).
+- `courses.image_urls`(JSONB 목록, 순서대로): 썸네일 말고 더 보여 줄 이미지. 응답(`CourseListItem`)에 들어간다. 앱은 코스 상세 시트의 시작 버튼 아래, 상세의 맨 위에 옆으로 미는 사진 띠(`widgets/image_gallery.dart`)로 그린다(2026-10-24). 높이(180)만 고정하고 사진마다 원본 비율대로 폭이 달라져 잘리지 않는다(네이버지도 장소 상세 방식). 썸네일은 반대로 정사각 자리에 꽉 채워 자른다. 비율·해상도 검사는 없다(형식·8MB만).
+
+**러닝위크·이벤트 공개 범위 (2026-10-24, `0042`)**
+- `running_weeks.visibility`·`events.visibility` — 코스와 같은 `public` | `admin`. `admin`이면 role='admin'인 앱 사용자에게만 내려간다(`GET /running-weeks/current`, `GET /events`, 참가 신청까지). 기본값·기존 행 모두 `admin` — 운영자가 앱에서 확인한 뒤 운영툴 폼의 '공개 범위'를 전체 공개로 바꾼다. 완주 보상(`running_week.on_course_completed`)은 운영자 전용 회차도 돈다 — 참가 신청이 이미 볼 수 있던 사람만 걸러 준다.
 
 **협력업체 썸네일·추가 이미지 (2026-10-24, `0041`)**
 - `partners.thumbnail_url`·`partners.image_urls` — 코스와 같은 구조. `PUT/DELETE /admin/partners/{id}/thumbnail`, `POST/PUT /admin/partners/{id}/images`(최대 10장). 검사·상한은 `app/admin/images.py`를 코스와 같이 쓴다. 버킷은 `SUPABASE_PARTNER_BUCKET`(기본 `partner-images`) — 없으면 첫 업로드 때 서버가 public으로 만든다(`storage.ensure_public_bucket`), 환경마다 손으로 만들 필요 없음. 업체 삭제 시 파일도 지운다.

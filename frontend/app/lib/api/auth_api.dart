@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../models/user.dart';
 import '../network/api_client.dart';
 
@@ -89,6 +91,33 @@ class AuthApi {
       '/auth/logout',
       data: {'refresh_token': refreshToken},
     );
+  }
+
+  /// 프로필 사진 올리기(jpg/png/webp). 바뀐 사용자를 돌려준다.
+  Future<User> uploadProfileImage(String path) async {
+    final extension = path.split('.').last.toLowerCase();
+    final subtype = switch (extension) {
+      'png' => 'png',
+      'webp' => 'webp',
+      _ => 'jpeg',
+    };
+    final response = await _client.dio.put(
+      '/auth/me/profile-image',
+      data: FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          path,
+          filename: 'profile.$extension',
+          contentType: DioMediaType('image', subtype),
+        ),
+      }),
+    );
+    return User.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// 프로필 사진 지우기(기본 아이콘으로).
+  Future<User> deleteProfileImage() async {
+    final response = await _client.dio.delete('/auth/me/profile-image');
+    return User.fromJson(response.data as Map<String, dynamic>);
   }
 
   /// 회원 탈퇴. 서버가 PII를 익명화하고 모든 refresh 토큰을 폐기한다.

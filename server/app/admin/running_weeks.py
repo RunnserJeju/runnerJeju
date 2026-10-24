@@ -72,6 +72,7 @@ def _apply(week: RunningWeek, payload: RunningWeekCreate) -> None:
     week.starts_at = payload.starts_at
     week.ends_at = payload.ends_at
     week.is_active = payload.is_active
+    week.visibility = payload.visibility
 
 
 @router.get("/running-weeks", response_model=list[AdminRunningWeekOut])

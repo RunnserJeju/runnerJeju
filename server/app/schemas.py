@@ -11,7 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 Difficulty = Annotated[int, Field(ge=1, le=3)]
 
 # 'public'=모두, 'admin'=role='admin'인 앱 사용자만(테스트 코스).
-CourseVisibility = Literal["public", "admin"]
+# 공개 범위. admin은 role='admin'인 앱 사용자에게만 내려간다(코스·러닝위크·이벤트 공통).
+Visibility = Literal["public", "admin"]
+CourseVisibility = Visibility
 # 아트런·로드런·트레일런·챌린지런. models.COURSE_CATEGORIES와 같아야 한다.
 CourseCategory = Literal["art", "road", "trail", "challenge"]
 VerificationStatusName = Literal[
@@ -104,6 +106,7 @@ class UserOut(BaseModel):
     email: str | None
     profile_image_url: str | None
     role: str
+    created_at: datetime
 
 
 class TokenPair(BaseModel):
@@ -417,6 +420,8 @@ class RunOut(BaseModel):
     distance_meters: float
     duration_sec: int
     path: list[RunPointSchema]
+    # 이 러닝으로 코스 완주 인증이 통과했는지.
+    completed: bool = False
 
 
 class RunUploadResult(BaseModel):
@@ -590,6 +595,8 @@ class RunningWeekCreate(BaseModel):
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     is_active: bool = True
+    # 기본 admin — 운영자가 확인한 뒤 공개로 바꾼다.
+    visibility: Visibility = "admin"
 
     @model_validator(mode="after")
     def _check_period(self):
@@ -626,6 +633,7 @@ class AdminRunningWeekOut(BaseModel):
     starts_at: datetime | None
     ends_at: datetime | None
     is_active: bool
+    visibility: Visibility
     bingo_stamp_ids: list[str]
     participant_count: int = 0
     created_at: datetime
@@ -695,6 +703,7 @@ class EventCreate(BaseModel):
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     is_active: bool = True
+    visibility: Visibility = "admin"
     sort_order: int = 0
 
     @model_validator(mode="after")
@@ -722,6 +731,7 @@ class EventOut(BaseModel):
 
 class AdminEventOut(EventOut):
     is_active: bool
+    visibility: Visibility
     sort_order: int
     updated_at: datetime
 

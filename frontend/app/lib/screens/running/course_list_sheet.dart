@@ -28,6 +28,10 @@ class CourseListSheet extends StatefulWidget {
     required this.hasError,
     required this.onSelect,
     required this.onRetry,
+    this.title,
+    this.emptyTitle,
+    this.emptyMessage,
+    this.emptyIcon,
   });
 
   /// 바깥('코스 탐색' 버튼, 지도 탭)에서 시트 높이를 움직일 때 쓴다.
@@ -43,6 +47,14 @@ class CourseListSheet extends StatefulWidget {
 
   final ValueChanged<RunningCourse> onSelect;
   final VoidCallback onRetry;
+
+  /// 제목. 없으면 '내 주변 코스'/'코스 탐색'. 찜 모드가 '찜한 코스'로 바꾼다.
+  final String? title;
+
+  /// 코스가 하나도 없을 때 문구. 없으면 "아직 등록된 코스가 없어요".
+  final String? emptyTitle;
+  final String? emptyMessage;
+  final IconData? emptyIcon;
 
   /// 접힌 높이(px). 손잡이 + 제목 한 줄이 보이는 만큼.
   static const double peekHeight = 84;
@@ -145,8 +157,10 @@ class _CourseListSheetState extends State<CourseListSheet> {
                       const SizedBox(height: 10),
                       const SheetHandle(),
                       _Header(
+                        title:
+                            widget.title ??
+                            (widget.myPosition != null ? '내 주변 코스' : '코스 탐색'),
                         count: widget.courses.length,
-                        hasLocation: widget.myPosition != null,
                       ),
                       const Divider(height: 1, color: AppColors.lineSoft),
                     ],
@@ -206,10 +220,10 @@ class _CourseListSheetState extends State<CourseListSheet> {
       );
     }
 
-    return const _Empty(
-      icon: Icons.route_rounded,
-      title: '아직 등록된 코스가 없어요',
-      message: '코스가 올라오면 여기에 보여요',
+    return _Empty(
+      icon: widget.emptyIcon ?? Icons.route_rounded,
+      title: widget.emptyTitle ?? '아직 등록된 코스가 없어요',
+      message: widget.emptyMessage ?? '코스가 올라오면 여기에 보여요',
     );
   }
 }
@@ -224,10 +238,10 @@ class _NearbyCourse {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.count, required this.hasLocation});
+  const _Header({required this.title, required this.count});
 
+  final String title;
   final int count;
-  final bool hasLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -236,7 +250,7 @@ class _Header extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            hasLocation ? '내 주변 코스' : '코스 탐색',
+            title,
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,

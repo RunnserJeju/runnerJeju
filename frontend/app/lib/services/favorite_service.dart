@@ -24,10 +24,13 @@ class FavoriteService {
     }
   }
 
-  Future<bool> isFavorite(String courseId) async {
-    final ids = _ids ?? {for (final c in await loadFavoriteCourses()) c.id};
-    return ids.contains(courseId);
-  }
+  /// 찜한 코스 id 집합(세션 캐시, 없으면 받아 온다). 러닝 탭의 '찜' 칩이 코스
+  /// 목록을 거를 때 쓴다.
+  Future<Set<String>> favoriteIds() async =>
+      _ids ?? {for (final c in await loadFavoriteCourses()) c.id};
+
+  Future<bool> isFavorite(String courseId) async =>
+      (await favoriteIds()).contains(courseId);
 
   /// 찜을 토글하고 토글 후의 찜 여부를 돌려준다. 화면이 현재 상태를 알고 있으면
   /// [currently]로 넘겨 조회를 건너뛴다.

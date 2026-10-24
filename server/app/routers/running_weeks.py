@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app import bingo, running_week
 from app.db import get_db
-from app.deps import current_user_id
+from app.deps import current_user_id, current_user_is_admin
 from app.models import RunningWeek, RunningWeekParticipation
 from app.schemas import (
     PARTICIPATION_FORM_VERSION,
@@ -45,9 +45,10 @@ def _to_out(db: Session, week: RunningWeek, user_id: str) -> dict:
 def get_current_running_week(
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
     """지금 공개 중인 러닝위크. 없으면 null — 앱은 커뮤니티 배너를 숨긴다."""
-    week = running_week.current_week(db)
+    week = running_week.current_week(db, is_admin=is_admin)
     if week is None:
         return None
     return _to_out(db, week, user_id)
@@ -63,10 +64,13 @@ def participate(
     payload: RunningWeekParticipationCreate,
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
     """참가 신청. 공개 중인 회차만 받고, 한 사람이 두 번 신청하면 409."""
     week = db.get(RunningWeek, week_id)
-    if week is None or not running_week.is_visible(week, datetime.now(timezone.utc)):
+    if week is None or not running_week.is_visible(
+        week, datetime.now(timezone.utc), is_admin=is_admin
+    ):
         raise HTTPException(status_code=404, detail="진행 중인 러닝위크가 아니에요.")
 
     if running_week.participated(db, week.id, user_id):

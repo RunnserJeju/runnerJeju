@@ -524,6 +524,10 @@ class RunningWeek(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # 'public' | 'admin'. admin이면 role='admin'인 앱 사용자에게만 내려간다(코스와 같다).
+    # 기본 admin — 운영자가 확인한 뒤 공개로 바꾼다.
+    visibility: Mapped[str] = mapped_column(String(20), default="admin")
+
     # 칸 0~24에 놓을 스탬프 종류 id(문자열). 비어 있으면 빙고판을 아직 안 짠 것.
     bingo_stamp_ids: Mapped[list] = mapped_column(JSONB, default=list)
 
@@ -602,6 +606,8 @@ class Event(Base):
         DateTime(timezone=True), default=None
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 'public' | 'admin'. 러닝위크와 같다 — admin이면 운영자 계정에만 보인다.
+    visibility: Mapped[str] = mapped_column(String(20), default="admin")
     # 앱 목록 정렬. 작을수록 위, 같으면 최신순.
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 

@@ -70,7 +70,23 @@ class StampBadge extends StatelessWidget {
     );
   }
 
+  /// 도안이 있으면 도안만 그린다(도안이 자기 테두리를 가진 투명 PNG라 배경 원을 깔지
+  /// 않는다). 도안이 없거나 못 받으면 회색 원에 기본 얼굴.
   Widget _circle() {
+    final url = _designUrl;
+    if (url == null) return _defaultCircle();
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Image.network(
+        url,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => _defaultCircle(),
+      ),
+    );
+  }
+
+  Widget _defaultCircle() {
     return Container(
       width: size,
       height: size,
@@ -78,16 +94,7 @@ class StampBadge extends StatelessWidget {
         shape: BoxShape.circle,
         color: AppColors.paper,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: _designUrl != null
-          ? Image.network(
-              _designUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _DefaultFace(
-                acquiredAt: _isAcquired ? stamp?.acquiredAt : null,
-              ),
-            )
-          : _DefaultFace(acquiredAt: _isAcquired ? stamp?.acquiredAt : null),
+      child: _DefaultFace(acquiredAt: _isAcquired ? stamp?.acquiredAt : null),
     );
   }
 

@@ -13,7 +13,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/banner_carousel.dart';
 import '../../widgets/course_recommend_card.dart';
-import '../../widgets/partner_category_tile.dart';
+import '../../widgets/partner_card.dart';
 import '../notification/notification_screen.dart';
 import '../../widgets/section_title.dart';
 
@@ -92,11 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// [section]은 홈의 어느 구역에서 눌렀는지 — 로그용. 지금은 코스 큐레이션
   /// 섹션('recommended', 옛 '추천 코스' 시절 값을 그대로 쓴다)뿐이다.
-  void _openCourse(
-    String courseId, {
-    required String section,
-    int? position,
-  }) {
+  void _openCourse(String courseId, {required String section, int? position}) {
     writeLog(
       LogName.homeCourseClick,
       detail: {
@@ -361,6 +357,8 @@ class _PartnerItem extends StatelessWidget {
   final bool isLast;
   final VoidCallback? onTap;
 
+  static const double _thumbnailSize = 72;
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -376,8 +374,15 @@ class _PartnerItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            PartnerCategoryTile(category: partner.category),
-            const SizedBox(width: 16),
+            // 목록·상세와 같은 썸네일(없으면 업종 타일). 한 줄이 세 줄 글이라 72로.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox.square(
+                dimension: _thumbnailSize,
+                child: PartnerThumbnail(partner: partner, size: _thumbnailSize),
+              ),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,7 +397,7 @@ class _PartnerItem extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: 14,
                             fontWeight: FontWeight.w700,
                             color: AppColors.ink,
                             height: 1.4,
@@ -403,7 +408,7 @@ class _PartnerItem extends StatelessWidget {
                       Text(
                         partner.category.label,
                         style: const TextStyle(
-                          fontSize: 10,
+                          fontSize: 11,
                           color: AppColors.muted,
                         ),
                       ),
@@ -438,7 +443,7 @@ class _PartnerItem extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               color: AppColors.muted,
                             ),
                           ),

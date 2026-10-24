@@ -91,7 +91,7 @@ export default function CourseEditModal({ courseId, initialNotice, onClose, onCh
           />
           <ImagesSection
             urls={course.image_urls}
-            description="앱 코스 상세의 시작 버튼 아래에 옆으로 넘기며 보는 갤러리예요."
+            description="앱 코스 상세의 시작 버튼 아래에 옆으로 미는 사진 띠예요. 사진은 원본 비율 그대로 잘리지 않고 나와요."
             add={(file) => addCourseImage(course.id, file)}
             set={(urls) => setCourseImages(course.id, urls)}
             onSaved={applyMedia}

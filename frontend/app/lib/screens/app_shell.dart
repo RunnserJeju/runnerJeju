@@ -65,9 +65,7 @@ class _AppShellState extends State<AppShell> {
       ),
       RunningScreen(key: _runningKey),
       const StampScreen(),
-      ProfileScreen(
-        onOpenCourse: (courseId) => _openCourse(courseId, LogSource.favorite),
-      ),
+      ProfileScreen(onOpenCourse: _openCourse),
     ];
 
     return Scaffold(

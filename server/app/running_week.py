@@ -18,9 +18,12 @@ from app import bingo, coupon_rules, stamp_rules
 from app.models import RunningWeek, RunningWeekParticipation
 
 
-def is_visible(week: RunningWeek, now: datetime) -> bool:
-    """공지와 같은 규칙. 꺼져 있거나 공개 기간 밖이면 앱에 안 뜬다."""
+def is_visible(week: RunningWeek, now: datetime, *, is_admin: bool) -> bool:
+    """공지와 같은 규칙에 공개 범위가 더해진다. 꺼져 있거나 공개 기간 밖이면 앱에 안 뜨고,
+    visibility='admin'인 회차는 운영자 계정에만 뜬다."""
     if not week.is_active:
+        return False
+    if week.visibility != "public" and not is_admin:
         return False
     if week.starts_at is not None and week.starts_at > now:
         return False
@@ -29,15 +32,16 @@ def is_visible(week: RunningWeek, now: datetime) -> bool:
     return True
 
 
-def current_week(db: Session) -> RunningWeek | None:
-    """지금 공개 중인 러닝위크. 여럿이면 가장 늦게 시작한 회차."""
+def current_week(db: Session, *, is_admin: bool) -> RunningWeek | None:
+    """지금 공개 중인 러닝위크. 여럿이면 가장 늦게 시작한 회차. 일반 사용자에게는
+    public 회차만."""
     now = datetime.now(timezone.utc)
     weeks = db.execute(
         select(RunningWeek).order_by(
             RunningWeek.starts_at.desc().nulls_last(), RunningWeek.created_at.desc()
         )
     ).scalars()
-    return next((week for week in weeks if is_visible(week, now)), None)
+    return next((week for week in weeks if is_visible(week, now, is_admin=is_admin)), None)
 
 
 def participated(db: Session, week_id: uuid.UUID, user_id: str) -> bool:
@@ -61,7 +65,8 @@ def on_course_completed(
     db: Session, user_id: str, course_id: uuid.UUID, run_id: uuid.UUID
 ) -> None:
     """완주 인증이 통과했을 때. 러닝위크가 아니거나 참가자가 아니면 아무것도 하지 않는다."""
-    week = current_week(db)
+    # 운영자 전용 회차도 포함한다 — 참가 신청 여부가 이미 볼 수 있던 사람만 걸러 준다.
+    week = current_week(db, is_admin=True)
     if week is None or not participated(db, week.id, user_id):
         return
     stamp_rules.on_running_week_course_completed(db, user_id, week.id, course_id, run_id)

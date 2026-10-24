@@ -5,6 +5,28 @@ import { ApiError } from '../api'
 /** 서버 admin/images.MAX_EXTRA_IMAGES와 같다. */
 export const MAX_EXTRA_IMAGES = 10
 
+/** 저장 호출 하나를 감싼다 — 진행 중 표시, 실패 메시지, 성공 시 onSaved. 성공하면 true. */
+function useSaveAction<T>(onSaved: (saved: T, message: string) => void) {
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const run = async (action: () => Promise<T>, done: string, failure: string) => {
+    setError(null)
+    setSaving(true)
+    try {
+      onSaved(await action(), done)
+      return true
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : failure)
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return { error, setError, saving, run }
+}
+
 /**
  * 썸네일 한 장 등록·교체·삭제 카드. 코스·협력업체 수정 모달이 같이 쓴다.
  * T는 저장 응답(갱신된 코스/업체) — onSaved로 호출부 상태를 갈아끼운다.
@@ -24,22 +46,7 @@ export function ThumbnailSection<T>({
   hint?: string
 }) {
   const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const run = async (action: () => Promise<T>, done: string, failure: string) => {
-    setError(null)
-    setSaving(true)
-    try {
-      onSaved(await action(), done)
-      return true
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : failure)
-      return false
-    } finally {
-      setSaving(false)
-    }
-  }
+  const { error, setError, saving, run } = useSaveAction(onSaved)
 
   const doUpload = async () => {
     if (!file) {
@@ -105,22 +112,7 @@ export function ImagesSection<T>({
   const [file, setFile] = useState<File | null>(null)
   /** 파일 입력을 비우려고 업로드할 때마다 바꾼다. */
   const [inputKey, setInputKey] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const run = async (action: () => Promise<T>, done: string, failure: string) => {
-    setError(null)
-    setSaving(true)
-    try {
-      onSaved(await action(), done)
-      return true
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : failure)
-      return false
-    } finally {
-      setSaving(false)
-    }
-  }
+  const { error, saving, run } = useSaveAction(onSaved)
 
   const upload = async () => {
     if (!file) return

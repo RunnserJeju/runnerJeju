@@ -9,6 +9,7 @@ class User {
     this.nickname,
     this.email,
     this.profileImageUrl,
+    this.createdAt,
   });
 
   final String id;
@@ -17,11 +18,17 @@ class User {
   final String? email;
   final String? profileImageUrl;
 
+  /// 가입일.
+  final DateTime? createdAt;
+
   factory User.fromJson(Map<String, dynamic> json) => User(
     id: json['id'].toString(),
     role: json['role'] as String? ?? 'user',
     nickname: json['nickname'] as String?,
     email: json['email'] as String?,
     profileImageUrl: json['profile_image_url'] as String?,
+    createdAt: json['created_at'] == null
+        ? null
+        : DateTime.parse(json['created_at'] as String),
   );
 }

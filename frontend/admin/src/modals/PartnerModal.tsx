@@ -112,7 +112,7 @@ export default function PartnerModal({ partner: initial, onClose, onChanged }: P
           />
           <ImagesSection
             urls={partner.image_urls}
-            description="앱 업체 상세의 길찾기 버튼 아래에 옆으로 넘기며 보는 갤러리예요."
+            description="앱 업체 상세의 길찾기 버튼 아래에 옆으로 미는 사진 띠예요. 사진은 원본 비율 그대로 잘리지 않고 나와요."
             add={(file) => addPartnerImage(partner.id, file)}
             set={(urls) => setPartnerImages(partner.id, urls)}
             onSaved={applyMedia}

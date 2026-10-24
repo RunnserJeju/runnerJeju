@@ -368,6 +368,8 @@ export interface RunningWeek {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  /** 공개 범위. admin이면 운영자 계정에만 보인다(코스와 같다). */
+  visibility: CourseVisibility
   /** 칸 0~24에 놓은 스탬프 종류 id. 비어 있으면 빙고판을 아직 안 짠 것. */
   bingo_stamp_ids: string[]
   participant_count: number
@@ -383,6 +385,7 @@ export interface RunningWeekPayload {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  visibility: CourseVisibility
 }
 
 export interface Participation {
@@ -452,6 +455,8 @@ export interface CommunityEvent {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  /** 공개 범위. admin이면 운영자 계정에만 보인다(코스와 같다). */
+  visibility: CourseVisibility
   sort_order: number
   created_at: string
   updated_at: string
@@ -463,6 +468,7 @@ export interface CommunityEventPayload {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  visibility: CourseVisibility
   sort_order: number
 }
 
