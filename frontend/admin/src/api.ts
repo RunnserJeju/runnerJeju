@@ -355,8 +355,6 @@ export function deleteStampImage(id: string): Promise<StampDefinition> {
 
 // --- 러닝위크 -----------------------------------------------------------
 
-export const BINGO_CELLS = 25
-
 /** 러닝위크 회차. 공개 규칙은 공지와 같고, 공개 중이면 앱 커뮤니티 상단에 배너가 뜬다. */
 export interface RunningWeek {
   id: string
@@ -370,7 +368,7 @@ export interface RunningWeek {
   is_active: boolean
   /** 공개 범위. admin이면 운영자 계정에만 보인다(코스와 같다). */
   visibility: CourseVisibility
-  /** 칸 0~24에 놓은 스탬프 종류 id. 비어 있으면 빙고판을 아직 안 짠 것. */
+  /** 칸 0~24에 놓은 스탬프 종류 id. 운영툴에서 바꾸지 않는다(개발자가 코드·DB로 배치). */
   bingo_stamp_ids: string[]
   participant_count: number
   created_at: string
@@ -419,14 +417,6 @@ export function updateRunningWeek(id: string, payload: RunningWeekPayload): Prom
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  })
-}
-
-export function setRunningWeekBingo(id: string, stampIds: string[]): Promise<RunningWeek> {
-  return request(`/admin/running-weeks/${id}/bingo`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stamp_ids: stampIds }),
   })
 }
 

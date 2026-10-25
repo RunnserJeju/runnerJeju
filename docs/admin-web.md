@@ -44,7 +44,7 @@
 | `GET /admin/stamps`, `PATCH /admin/stamps/{id}` | 스탬프 종류 목록·수정 (#71). 수정은 표시 정보(이름·안내·정렬·노출)만, 지급 조건은 못 바꾼다. 종류 추가는 없음 — 코스 등록 때 코스 스탬프가 자동으로 하나 생기고, 그 밖의 종류는 개발자가 DB에 직접 넣는다(2026-10-22) |
 | `PUT/DELETE /admin/stamps/{id}/image` | 스탬프 도안 설정/교체/제거 |
 | `GET/POST /admin/running-weeks`, `PATCH /admin/running-weeks/{id}` | 러닝위크 회차 (#70) |
-| `PUT /admin/running-weeks/{id}/bingo` | 빙고 배치(스탬프 종류 25개) |
+| `PUT /admin/running-weeks/{id}/bingo` | 빙고 배치(스탬프 종류 25개). 운영 웹 UI는 없다(2026-10-25 제거) — 개발자가 코드·DB로 배치 |
 | `PUT/DELETE /admin/running-weeks/{id}/image` | 커뮤니티 배너 |
 | `GET /admin/running-weeks/{id}/participations` | 참가자 목록 |
 | `GET /admin/users` | 회원 목록 (검색·페이지네이션, 완주 수 포함) |

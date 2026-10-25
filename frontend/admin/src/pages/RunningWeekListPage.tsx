@@ -2,23 +2,19 @@ import { useCallback, useEffect, useState } from 'react'
 
 import {
   ApiError,
-  BINGO_CELLS,
   createRunningWeek,
   deleteRunningWeekImage,
   listParticipations,
   listRunningWeeks,
-  listStamps,
-  setRunningWeekBingo,
   setRunningWeekImage,
   updateRunningWeek,
   type CourseVisibility,
   type Participation,
   type RunningWeek,
   type RunningWeekPayload,
-  type StampDefinition,
 } from '../api'
+import { BANNER_SPEC, validateBannerImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
-import SearchSelect from '../components/SearchSelect'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -42,6 +38,12 @@ const VISIBILITY_LABEL: Record<Visibility, string> = {
   expired: '종료',
 }
 
+/** 공개 범위(서버 visibility). 코스와 같다. */
+const VISIBILITY_SCOPE_LABEL: Record<CourseVisibility, string> = {
+  admin: '운영자만',
+  public: '일반 사용자 포함',
+}
+
 function formatDateTime(iso: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
@@ -57,19 +59,18 @@ function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** 러닝위크 관리(#70). 회차마다 공개 기간, 커뮤니티 배너, 5x5 빙고 배치, 참가자를 다룬다. */
+/** 러닝위크 관리(#70). 회차마다 공개 기간·범위, 커뮤니티 배너, 참가자를 다룬다.
+ * 빙고판 배치는 운영툴에서 하지 않는다 — 개발자가 코드·DB로 넣는다. */
 export default function RunningWeekListPage({ onUnauthorized }: Props) {
   const [weeks, setWeeks] = useState<RunningWeek[] | null>(null)
-  const [stamps, setStamps] = useState<StampDefinition[]>([])
   const [error, setError] = useState<string | null>(null)
   /** 열린 모달. 'new'면 등록, 아니면 그 회차 수정. */
   const [editing, setEditing] = useState<'new' | RunningWeek | null>(null)
 
   const reload = useCallback(() => {
-    Promise.all([listRunningWeeks(), listStamps()])
-      .then(([loadedWeeks, loadedStamps]) => {
-        setWeeks(loadedWeeks)
-        setStamps(loadedStamps)
+    listRunningWeeks()
+      .then((loaded) => {
+        setWeeks(loaded)
         setError(null)
       })
       .catch((err: unknown) => {
@@ -109,8 +110,8 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
               <th className="nowrap">회차</th>
               <th>제목</th>
               <th>상태</th>
+              <th>공개 범위</th>
               <th>공개 기간</th>
-              <th>빙고</th>
               <th>참가자</th>
             </tr>
           </thead>
@@ -136,13 +137,13 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
                       {VISIBILITY_LABEL[visibility]}
                     </span>
                   </td>
+                  <td className={week.visibility === 'public' ? undefined : 'muted'}>
+                    {VISIBILITY_SCOPE_LABEL[week.visibility]}
+                  </td>
                   <td className="muted">
                     {week.starts_at || week.ends_at
                       ? `${formatDateTime(week.starts_at)} ~ ${formatDateTime(week.ends_at)}`
                       : '상시'}
-                  </td>
-                  <td className="muted">
-                    {week.bingo_stamp_ids.length === BINGO_CELLS ? '배치 완료' : '미배치'}
                   </td>
                   <td className="muted">{week.participant_count}명</td>
                 </tr>
@@ -155,7 +156,6 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
       {editing && (
         <RunningWeekModal
           week={editing === 'new' ? null : editing}
-          stamps={stamps}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             setEditing(saved)
@@ -169,13 +169,11 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
 
 function RunningWeekModal({
   week,
-  stamps,
   onClose,
   onSaved,
 }: {
   /** null이면 새로 등록. */
   week: RunningWeek | null
-  stamps: StampDefinition[]
   onClose: () => void
   onSaved: (week: RunningWeek) => void
 }) {
@@ -190,7 +188,6 @@ function RunningWeekModal({
       {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
       <ContentSection week={week} onSaved={saved} />
       {week && <ImageSection week={week} onSaved={saved} />}
-      {week && <BingoSection week={week} stamps={stamps} onSaved={saved} />}
       {week && <ParticipantSection week={week} />}
     </Modal>
   )
@@ -247,7 +244,7 @@ function ContentSection({
         next,
         week
           ? '저장했어요.'
-          : '등록했어요. 이어서 배너와 빙고를 설정해 주세요.',
+          : '등록했어요. 이어서 배너를 올려 주세요.',
       )
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '저장에 실패했어요.')
@@ -314,21 +311,35 @@ function ContentSection({
       <div className="field">
         <label>
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />{' '}
-          앱에 공개 <span className="hint">끄면 공개 기간 안이어도 안 보여요</span>
+          앱에 공개 <span className="hint">끄면 공개 기간·범위와 상관없이 안 보여요</span>
         </label>
       </div>
       <div className="field">
-        <label htmlFor="rw-visibility">
-          공개 범위 <span className="hint">운영자: role=admin 계정에만 보여요</span>
+        <label>
+          공개 범위 <span className="hint">공개 기간과 별개로 "누가" 보는지</span>
         </label>
-        <select
-          id="rw-visibility"
-          value={visibility}
-          onChange={(e) => setVisibility(e.target.value as CourseVisibility)}
-        >
-          <option value="admin">운영자</option>
-          <option value="public">전체 공개</option>
-        </select>
+        <div className="row" style={{ gap: 16 }}>
+          <label>
+            <input
+              type="radio"
+              name="rw-visibility"
+              value="admin"
+              checked={visibility === 'admin'}
+              onChange={() => setVisibility('admin')}
+            />{' '}
+            운영자만 <span className="hint">role=admin 계정</span>
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="rw-visibility"
+              value="public"
+              checked={visibility === 'public'}
+              onChange={() => setVisibility('public')}
+            />{' '}
+            일반 사용자 포함
+          </label>
+        </div>
       </div>
       {error && <div className="error">{error}</div>}
       <div className="submit-row">
@@ -364,12 +375,23 @@ function ImageSection({
     }
   }
 
+  const upload = async () => {
+    if (!file) return
+    // 홈 배너와 같은 규격(21:9). 서버는 픽셀을 안 보니 여기서 막는다.
+    const problem = await validateBannerImage(file)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    await run(() => setRunningWeekImage(week.id, file), '배너를 저장했어요.', '업로드에 실패했어요.')
+  }
+
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>커뮤니티 배너</h3>
       <p className="muted">
-        앱 커뮤니티 상단에 고정으로 보이고, 누르면 러닝위크 화면이 열려요. 홈 배너와 같은 가로
-        402:172 비율(약 2.3:1) 권장. 없으면 제목 카드로 보여요.
+        앱 커뮤니티 상단에 고정으로 보이고, 누르면 러닝위크 화면이 열려요. 홈 배너와 같은 규격 —{' '}
+        {BANNER_SPEC.hint}. 없으면 제목 카드로 보여요.
       </p>
       {week.image_url ? (
         <img className="thumb banner" src={week.image_url} alt="현재 배너" />
@@ -385,13 +407,7 @@ function ImageSection({
       </div>
       {error && <div className="error">{error}</div>}
       <div className="submit-row">
-        <button
-          onClick={() =>
-            file &&
-            run(() => setRunningWeekImage(week.id, file), '배너를 저장했어요.', '업로드에 실패했어요.')
-          }
-          disabled={saving || !file}
-        >
+        <button onClick={upload} disabled={saving || !file}>
           {saving ? '처리 중…' : week.image_url ? '배너 교체' : '배너 등록'}
         </button>
         {week.image_url && (
@@ -405,117 +421,6 @@ function ImageSection({
             배너 삭제
           </button>
         )}
-      </div>
-    </div>
-  )
-}
-
-function shuffled<T>(items: T[]): T[] {
-  const copy = [...items]
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[copy[i], copy[j]] = [copy[j], copy[i]]
-  }
-  return copy
-}
-
-function BingoSection({
-  week,
-  stamps,
-  onSaved,
-}: {
-  week: RunningWeek
-  stamps: StampDefinition[]
-  onSaved: (week: RunningWeek, message: string) => void
-}) {
-  const [cells, setCells] = useState<string[]>(() =>
-    week.bingo_stamp_ids.length === BINGO_CELLS
-      ? week.bingo_stamp_ids
-      : Array.from({ length: BINGO_CELLS }, () => ''),
-  )
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  // 칸에는 이 회차 전용 코스 스탬프만 놓는다(서버도 막는다).
-  const placeable = stamps.filter(
-    (s) =>
-      s.condition_type === 'running_week_course' && s.condition_params.running_week_id === week.id,
-  )
-  const active = placeable.filter((s) => s.is_active)
-  const stampOptions = [
-    { id: '', label: '비우기' },
-    ...placeable.map((stamp) => ({
-      id: stamp.id,
-      label: stamp.is_active ? stamp.name : `${stamp.name} (숨김)`,
-    })),
-  ]
-
-  const randomFill = () => {
-    setError(null)
-    if (active.length < BINGO_CELLS) {
-      setError(`노출 중인 이 회차 스탬프가 ${active.length}개라 25칸을 채울 수 없어요.`)
-      return
-    }
-    setCells(shuffled(active).slice(0, BINGO_CELLS).map((s) => s.id))
-  }
-
-  const save = async () => {
-    setError(null)
-    if (cells.some((id) => !id)) {
-      setError('25칸을 모두 채워 주세요.')
-      return
-    }
-    if (new Set(cells).size !== cells.length) {
-      setError('같은 스탬프를 두 칸에 놓을 수 없어요.')
-      return
-    }
-    setSaving(true)
-    try {
-      onSaved(await setRunningWeekBingo(week.id, cells), '빙고 배치를 저장했어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '저장에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>빙고 배치 (5x5)</h3>
-      <p className="muted">
-        칸마다 이 회차 러닝위크 코스 스탬프 하나. 참가자가 공개 기간에 그 코스를 완주하면 칸이
-        채워져요. 이 회차 스탬프 {placeable.length}개.
-      </p>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-          gap: 6,
-          marginBottom: 12,
-        }}
-      >
-        {cells.map((id, index) => (
-          <SearchSelect
-            key={index}
-            value={id}
-            title={`${index + 1}번 칸`}
-            placeholder={`${index + 1}번 칸`}
-            options={stampOptions}
-            onSelect={(picked) =>
-              setCells((prev) => prev.map((cell, i) => (i === index ? picked : cell)))
-            }
-            emptyText="스탬프가 없어요"
-          />
-        ))}
-      </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button className="secondary" onClick={randomFill} disabled={saving}>
-          랜덤 채우기
-        </button>
-        <button onClick={save} disabled={saving}>
-          {saving ? '저장 중…' : '배치 저장'}
-        </button>
       </div>
     </div>
   )
