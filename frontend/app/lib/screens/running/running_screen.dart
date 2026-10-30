@@ -41,7 +41,10 @@ import 'partner_preview_sheet.dart';
 /// 다른 탭(홈 카드·마이페이지 찜한 코스)에서 코스를 열 때는 [RunningScreenState.openCourse]로
 /// 이 화면의 코스 선택을 그대로 탄다 — 코스 상세를 따로 띄우는 전체 화면은 두지 않는다.
 class RunningScreen extends StatefulWidget {
-  const RunningScreen({super.key});
+  const RunningScreen({super.key, this.onReturnToRunningWeek});
+
+  /// 빙고판에서 넘어온 코스를 보는 동안 '빙고판으로' 버튼이 누르는 것.
+  final VoidCallback? onReturnToRunningWeek;
 
   @override
   State<RunningScreen> createState() => RunningScreenState();
@@ -58,6 +61,9 @@ class RunningScreenState extends State<RunningScreen> {
 
   List<RunningCourse> _courses = const [];
   bool _isLoadingCourses = true;
+
+  /// 지금 보는 코스가 빙고판에서 열린 것인지. 다른 경로로 코스를 고르면 풀린다.
+  bool _fromRunningWeek = false;
   Object? _coursesError;
 
   /// 찜한 코스 id. '찜' 칩을 켤 때 받아 온다(FavoriteService가 세션 캐시).
@@ -324,6 +330,7 @@ class RunningScreenState extends State<RunningScreen> {
     setState(() {
       if (_selected?.id != course.id) _isReversed = false;
       _selected = course;
+      _fromRunningWeek = source == LogSource.runningWeek;
       _selectedDetail = null;
       _detailError = null;
       _selectedIsFavorite = false;
@@ -1145,7 +1152,25 @@ class RunningScreenState extends State<RunningScreen> {
 
   /// 코스 로딩 상태를 지도 위에 얹어 알린다. 지도를 가리지 않으려고
   /// 화면 전체를 덮는 [AsyncView] 대신 작은 알약 하나만 띄운다.
+  void _returnToRunningWeek() {
+    setState(() => _fromRunningWeek = false);
+    widget.onReturnToRunningWeek?.call();
+  }
+
   Widget _statusPill() {
+    if (_fromRunningWeek &&
+        _selected != null &&
+        widget.onReturnToRunningWeek != null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: _StatusPill(
+          label: '빙고판으로 돌아가기',
+          icon: Icons.arrow_back_rounded,
+          onTap: _returnToRunningWeek,
+        ),
+      );
+    }
+
     if (_coursesError != null) {
       return Align(
         alignment: Alignment.centerLeft,

@@ -57,7 +57,7 @@ class _RunningWeekScreenState extends State<RunningWeekScreen> {
     final stamp = cell.stamp;
     if (stamp == null) return;
     final courseId = stamp.courseId;
-    if (stamp.conditionType == 'course_complete' && courseId != null) {
+    if (courseId != null) {
       Navigator.of(context).popUntil((route) => route.isFirst);
       widget.onOpenCourse(courseId);
       return;
@@ -102,13 +102,17 @@ class _RunningWeekScreenState extends State<RunningWeekScreen> {
   Widget build(BuildContext context) {
     final week = _week;
     return Scaffold(
-      backgroundColor: AppColors.paper,
+      backgroundColor: week.participated
+          ? _BingoView.background
+          : AppColors.paper,
       appBar: AppBar(title: Text(week.title)),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+          padding: week.participated
+              ? const EdgeInsets.only(bottom: 40)
+              : const EdgeInsets.fromLTRB(20, 8, 20, 40),
           children: week.participated
               ? [_BingoView(week: week, onTapCell: _openCell)]
               : [_IntroView(week: week, onStart: _start)],
@@ -163,6 +167,8 @@ class _BingoView extends StatelessWidget {
   final RunningWeek week;
   final ValueChanged<BingoCell> onTapCell;
 
+  static const Color background = Color(0xFFF5F5F5);
+
   @override
   Widget build(BuildContext context) {
     final bingo = week.bingo;
@@ -176,51 +182,209 @@ class _BingoView extends StatelessWidget {
         ),
       );
     }
+    final total = bingo.cells.length;
+    final remaining = total - bingo.acquiredCount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text.rich(
-          TextSpan(
-            style: const TextStyle(fontSize: 14, color: AppColors.textSubtle),
+        _Header(acquired: bingo.acquiredCount, remaining: remaining),
+        _StatsRow(
+          items: [
+            ('${bingo.completedLines}줄', '완성 빙고'),
+            ('${bingo.acquiredCount}', '달린 코스'),
+            ('$remaining', '남은 코스'),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextSpan(
-                text: '${bingo.completedLines}줄 빙고',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
-                ),
+              const Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '러닝 코스 빙고',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                  ),
+                  _LegendDot(color: AppColors.muted, label: '미완주'),
+                  SizedBox(width: 12),
+                  _LegendDot(color: AppColors.accent, label: '완주'),
+                ],
               ),
-              TextSpan(
-                text: '   ${bingo.acquiredCount} / ${bingo.cells.length}칸',
+              const SizedBox(height: 6),
+              const Text(
+                '제주 곳곳을 달리며 한 칸씩 채워보세요',
+                style: TextStyle(fontSize: 14, color: AppColors.muted),
               ),
+              const SizedBox(height: 16),
+              _Board(cells: bingo.cells, onTapCell: onTapCell),
+              const SizedBox(height: 16),
+              const _InfoCard(),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: Bingo.size,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-          childAspectRatio: 0.78,
-          children: [
-            for (final cell in bingo.cells)
-              _BingoCellTile(cell: cell, onTap: () => onTapCell(cell)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          '코스 칸을 누르면 그 코스 안내로 가요.',
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.5,
-            color: AppColors.textSubtle,
+      ],
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.acquired, required this.remaining});
+
+  final int acquired;
+  final int remaining;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '빙고판',
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              color: AppColors.ink,
+            ),
           ),
+          const SizedBox(height: 8),
+          Text.rich(
+            TextSpan(
+              style: const TextStyle(fontSize: 15, color: AppColors.muted),
+              children: [
+                TextSpan(
+                  text: '$acquired개',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.accent,
+                  ),
+                ),
+                TextSpan(text: ' 완주 · $remaining개 미완주'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 완성 줄·달린 코스·남은 코스. 정보 표시만 — 탭처럼 보이지 않게 모두 진한 글씨.
+class _StatsRow extends StatelessWidget {
+  const _StatsRow({required this.items});
+
+  final List<(String, String)> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: AppColors.lineSoft),
+          bottom: BorderSide(color: AppColors.lineSoft),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Row(
+        children: [
+          for (final (value, label) in items)
+            Expanded(
+              child: Column(
+                children: [
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          child: const SizedBox.square(dimension: 8),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: AppColors.muted),
         ),
       ],
+    );
+  }
+}
+
+/// 흰 카드 안에 5x5 칸. 칸 사이 선은 각 칸의 얇은 테두리가 겹쳐 1px로 보인다.
+class _Board extends StatelessWidget {
+  const _Board({required this.cells, required this.onTapCell});
+
+  final List<BingoCell> cells;
+  final ValueChanged<BingoCell> onTapCell;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.lineSoft),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          color: const Color(0xFFFAFAFA),
+          child: GridView.count(
+            crossAxisCount: Bingo.size,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              for (final cell in cells)
+                _BingoCellTile(cell: cell, onTap: () => onTapCell(cell)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -231,37 +395,50 @@ class _BingoCellTile extends StatelessWidget {
   final BingoCell cell;
   final VoidCallback onTap;
 
+  static const Color _acquiredFill = Color(0x52F0B765); // #F0B765 32%
+  static const Color _acquiredLabel = Color(0xFF804B12);
+  static const Color _lockedLabel = Color(0xFF8B8B8B);
+  static const Color _line = Color(0x1A0D0D0D); // ink 10%
+
+  /// 전용 스탬프 이름의 "러닝위크 " 접두어는 칸에선 뺀다 — 자리도 없고 모두 같은 말이다.
+  static String _label(String name) =>
+      name.replaceFirst(RegExp(r'^러닝위크\s*'), '');
+
   @override
   Widget build(BuildContext context) {
     final stamp = cell.stamp;
+    final acquired = cell.acquired;
     return Material(
-      color: cell.acquired ? Colors.white : AppColors.surfaceMuted,
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
+      color: acquired ? _acquiredFill : Colors.transparent,
       child: InkWell(
         onTap: stamp == null ? null : onTap,
-        child: Padding(
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: _line, width: 0.5),
+          ),
           padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
           child: Column(
             children: [
               Expanded(
-                child: _StampCircle(
-                  url: stamp?.imageUrl,
-                  acquired: cell.acquired,
-                ),
+                child: _StampCircle(url: stamp?.imageUrl, acquired: acquired),
               ),
               const SizedBox(height: 4),
-              Text(
-                stamp?.name ?? '',
-                // 한 줄로 고정한다. 두 줄이 되면 위 도안이 그만큼 작아져 칸마다 크기가 달라진다.
-                maxLines: 1,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 9.5,
-                  height: 1.2,
-                  fontWeight: FontWeight.w700,
-                  color: cell.acquired ? AppColors.ink : AppColors.textSubtle,
+              // 두 줄 높이를 고정해 긴 이름이 있어도 칸마다 도안 크기가 같다.
+              SizedBox(
+                height: 24,
+                child: Center(
+                  child: Text(
+                    stamp == null ? '' : _label(stamp.name),
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                      color: acquired ? _acquiredLabel : _lockedLabel,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -272,7 +449,61 @@ class _BingoCellTile extends StatelessWidget {
   }
 }
 
-/// 받았으면 도안, 못 받았으면 스탬프 탭과 같은 회색 잠금 도안.
+class _InfoCard extends StatelessWidget {
+  const _InfoCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const SizedBox.square(
+              dimension: 40,
+              child: Icon(
+                Icons.info_outline_rounded,
+                size: 20,
+                color: AppColors.accent,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '달리기를 마치면 해당 코스에 색이 채워져요.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  '빙고를 완성해보세요.',
+                  style: TextStyle(fontSize: 13, color: AppColors.muted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 받았으면 컬러 도안, 못 받았으면 같은 도안을 흑백·반투명으로. 도안이 없으면 잠금 도안.
 class _StampCircle extends StatelessWidget {
   const _StampCircle({required this.url, required this.acquired, this.size});
 
@@ -282,19 +513,31 @@ class _StampCircle extends StatelessWidget {
 
   static const String _lockedAsset = 'assets/images/stamp_locked.png';
 
+  // 채도 0 (흑백) 변환 행렬.
+  static const ColorFilter _greyscale = ColorFilter.matrix(<double>[
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0, 0, 0, 1, 0,
+  ]);
+
   @override
   Widget build(BuildContext context) {
-    final Widget child;
-    if (!acquired) {
-      child = Opacity(opacity: 0.55, child: Image.asset(_lockedAsset));
-    } else if (url case final url? when url.isNotEmpty) {
-      child = ClipOval(
-        child: CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
-          errorWidget: (_, _, _) => const _AcquiredFallback(),
-        ),
+    Widget child;
+    if (url case final url? when url.isNotEmpty) {
+      child = CachedNetworkImage(
+        imageUrl: url,
+        fit: BoxFit.contain,
+        errorWidget: (_, _, _) => const _AcquiredFallback(),
       );
+      if (!acquired) {
+        child = Opacity(
+          opacity: 0.35,
+          child: ColorFiltered(colorFilter: _greyscale, child: child),
+        );
+      }
+    } else if (!acquired) {
+      child = Opacity(opacity: 0.55, child: Image.asset(_lockedAsset));
     } else {
       child = const _AcquiredFallback();
     }

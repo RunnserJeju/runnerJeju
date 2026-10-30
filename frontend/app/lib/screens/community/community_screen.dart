@@ -22,10 +22,10 @@ class CommunityScreen extends StatefulWidget {
   final ValueChanged<String> onOpenCourse;
 
   @override
-  State<CommunityScreen> createState() => _CommunityScreenState();
+  State<CommunityScreen> createState() => CommunityScreenState();
 }
 
-class _CommunityScreenState extends State<CommunityScreen> {
+class CommunityScreenState extends State<CommunityScreen> {
   RunningWeek? _runningWeek;
 
   /// null이면 불러오는 중.
@@ -69,6 +69,16 @@ class _CommunityScreenState extends State<CommunityScreen> {
       week = null;
     }
     if (mounted) setState(() => _runningWeek = week);
+  }
+
+  /// 러닝 탭의 '빙고판으로 돌아가기'가 부른다. 배너를 누른 것과 같은 경로로 연다.
+  Future<void> openRunningWeek() async {
+    var week = _runningWeek;
+    if (week == null) {
+      await _loadRunningWeek();
+      week = _runningWeek;
+    }
+    if (week != null && mounted) await _openRunningWeek(week);
   }
 
   Future<void> _openRunningWeek(RunningWeek week) async {
