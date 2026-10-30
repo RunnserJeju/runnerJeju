@@ -377,6 +377,8 @@ class _Board extends StatelessWidget {
           child: GridView.count(
             crossAxisCount: Bingo.size,
             shrinkWrap: true,
+            // 기본값은 기기 하단 safe area만큼 아래 여백을 붙여 카드 밑이 빈다.
+            padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),
             children: [
               for (final cell in cells)
@@ -513,11 +515,12 @@ class _StampCircle extends StatelessWidget {
 
   static const String _lockedAsset = 'assets/images/stamp_locked.png';
 
-  // 채도 0 (흑백) 변환 행렬.
+  // 흑백 + 밝기를 60~180 범위로 눌러 흰 요소(손·강아지·꽃)가 연한 칸 배경에
+  // 묻히지 않게 한다. 디자인의 미획득 도안은 흰색도 #DADADA 회색으로 그려져 있다.
   static const ColorFilter _greyscale = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
-    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.0999, 0.3361, 0.0339, 0, 60, //
+    0.0999, 0.3361, 0.0339, 0, 60, //
+    0.0999, 0.3361, 0.0339, 0, 60, //
     0, 0, 0, 1, 0,
   ]);
 
@@ -532,7 +535,7 @@ class _StampCircle extends StatelessWidget {
       );
       if (!acquired) {
         child = Opacity(
-          opacity: 0.35,
+          opacity: 0.6,
           child: ColorFiltered(colorFilter: _greyscale, child: child),
         );
       }
