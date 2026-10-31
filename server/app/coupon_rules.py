@@ -41,15 +41,31 @@ DRAW_WON = "won"
 DRAW_LOST = "lost"
 DRAW_SOLD_OUT = "sold_out"
 
-# 헷갈리는 글자(0 O 1 I)를 뺀 32자. 마이그레이션 0043의 백필과 같다.
-_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+# 쿠폰 코드는 16진수 4자리("3F0A"). 말로 전달하기 쉬우라고 짧게 간다. 마이그레이션 0043의 백필과 같다.
+CODE_LEN = 4
+_CODE_ALPHABET = "0123456789ABCDEF"
 _rng = SystemRandom()
 
 
-def new_code() -> str:
-    """쿠폰 식별 코드 "ABCD-EFGH". 32^8이라 충돌은 유일 인덱스에 맡긴다."""
-    chars = [_rng.choice(_CODE_ALPHABET) for _ in range(8)]
-    return "".join(chars[:4]) + "-" + "".join(chars[4:])
+def normalize_code(raw: str) -> str | None:
+    """사람이 친 코드를 저장 형태로. 공백·하이픈 무시, 소문자 허용. 코드 꼴이 아니면 None."""
+    code = raw.strip().upper().replace(" ", "").replace("-", "")
+    if len(code) != CODE_LEN or any(ch not in _CODE_ALPHABET for ch in code):
+        return None
+    return code
+
+
+def _fresh_codes(db: Session, n: int) -> list[str]:
+    """아직 안 쓰인 코드 n개. 경우의 수가 65536뿐이라 한 번 조회해 겹치는 건 다시 뽑는다."""
+    codes: list[str] = []
+    for _ in range(20):
+        if len(codes) >= n:
+            return codes
+        cand = {"".join(_rng.choice(_CODE_ALPHABET) for _ in range(CODE_LEN)) for _ in range(n - len(codes))}
+        cand -= set(codes)
+        taken = set(db.execute(select(UserCoupon.code).where(UserCoupon.code.in_(cand))).scalars())
+        codes.extend(cand - taken)
+    raise RuntimeError("쿠폰 코드를 더 만들 수 없어요. 코드 공간이 거의 찼어요.")
 
 
 def course_grant_key(course_id: uuid.UUID) -> str:
@@ -124,11 +140,10 @@ def issue_with_stock(
     """
     if coupon.stock is not None and issued_count(db, coupon.id) + len(user_ids) > coupon.stock:
         return []
+    codes = _fresh_codes(db, len(user_ids))
     issued = [
-        UserCoupon(
-            coupon_id=coupon.id, user_id=uid, grant_key=grant_key, run_id=run_id, code=new_code()
-        )
-        for uid in user_ids
+        UserCoupon(coupon_id=coupon.id, user_id=uid, grant_key=grant_key, run_id=run_id, code=code)
+        for uid, code in zip(user_ids, codes)
     ]
     db.add_all(issued)
     return issued

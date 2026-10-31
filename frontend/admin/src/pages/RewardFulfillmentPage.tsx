@@ -17,6 +17,12 @@ interface Props {
 type Tab = 'pending' | 'all' | 'draws'
 const PAGE = 50
 
+/** 입력이 쿠폰 코드 꼴(16진수 4자리)이면 서버 저장 형태로, 아니면 null. 서버의 coupon_rules.normalize_code와 같다. */
+function asCode(raw: string): string | null {
+  const code = raw.trim().toUpperCase().replace(/[\s-]/g, '')
+  return /^[0-9A-F]{4}$/.test(code) ? code : null
+}
+
 const RESULT_LABEL: Record<CouponDraw['result'], string> = {
   won: '당첨',
   lost: '낙첨',
@@ -98,6 +104,11 @@ export default function RewardFulfillmentPage({ onUnauthorized }: Props) {
   }
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE))
+  // 코드로 찾았고 미지급 한 건이면 표 위에 크게 띄워 바로 누르게 한다.
+  const hit =
+    tab !== 'draws' && asCode(keyword) && items?.length === 1 && items[0].status === 'available'
+      ? items[0]
+      : null
 
   return (
     <>
@@ -128,9 +139,10 @@ export default function RewardFulfillmentPage({ onUnauthorized }: Props) {
         }}
       >
         <input
-          placeholder={tab === 'draws' ? '닉네임' : '쿠폰 코드(예: K7F2-9QAD) 또는 닉네임'}
+          placeholder={tab === 'draws' ? '닉네임' : '쿠폰 코드 4자리(예: 3F0A) 또는 닉네임'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          autoFocus
         />
         <button type="submit" className="secondary">
           검색
@@ -138,6 +150,22 @@ export default function RewardFulfillmentPage({ onUnauthorized }: Props) {
       </form>
       {message && <div className="notice">{message}</div>}
       {error && <div className="error">{error}</div>}
+      {hit && (
+        <div className="card reward-hit">
+          <div>
+            <code className="reward-hit-code">{hit.code}</code>
+            <div>
+              <strong>{hit.nickname ?? '(닉네임 없음)'}</strong> · {hit.benefit}
+            </div>
+            <div className="muted">
+              {hit.coupon_name} · 발급 {new Date(hit.issued_at).toLocaleDateString()}
+            </div>
+          </div>
+          <button disabled={busy === hit.id} onClick={() => complete(hit)}>
+            {busy === hit.id ? '처리 중…' : '지급완료 처리'}
+          </button>
+        </div>
+      )}
 
       {tab !== 'draws' && (
         <>

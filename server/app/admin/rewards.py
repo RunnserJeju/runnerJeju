@@ -72,12 +72,9 @@ def list_fulfillments(
     if q:
         needle = q.strip()
         if needle:
-            code = needle.upper().replace(" ", "")
-            if len(code) == 8 and "-" not in code:
-                code = code[:4] + "-" + code[4:]
-            stmt = stmt.where(
-                or_(UserCoupon.code == code, UserCoupon.user_id.in_(_users_named(needle)))
-            )
+            code = coupon_rules.normalize_code(needle)
+            by_name = UserCoupon.user_id.in_(_users_named(needle))
+            stmt = stmt.where(or_(UserCoupon.code == code, by_name) if code else by_name)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.execute(
         stmt.order_by(UserCoupon.issued_at.desc(), UserCoupon.id.desc()).limit(limit).offset(offset)

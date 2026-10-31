@@ -87,7 +87,7 @@ def _coupon(**over) -> Coupon:
 
 
 def _uc(**over) -> UserCoupon:
-    fields = dict(id=uuid.uuid4(), coupon_id=uuid.uuid4(), user_id="u1", code="ABCD-EFGH",
+    fields = dict(id=uuid.uuid4(), coupon_id=uuid.uuid4(), user_id="u1", code="3F0A",
                   issued_at=NOW, used_at=None, expired_at=None, used_partner_id=None,
                   grant_key=None)
     fields.update(over)
@@ -164,8 +164,8 @@ class TestIssueCoupon:
     def test_issues_only_to_existing_users(self):
         coupon = _coupon()
         u1, u2, ghost = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-        # 템플릿 잠금 조회 → 실존 회원 조회. ghost는 실존 안 함.
-        db = SeqFake([_Result([coupon]), _Result([u1, u2])])
+        # 템플릿 잠금 조회 → 실존 회원 조회 → 코드 중복 조회. ghost는 실존 안 함.
+        db = SeqFake([_Result([coupon]), _Result([u1, u2]), _Result([])])
 
         result = admin_coupons.issue_coupon(
             coupon.id, IssueRequest(user_ids=[u1, u2, ghost]), db
@@ -351,8 +351,8 @@ class TestCourseCompleteGrant:
     def test_grants_one_with_course_key(self):
         coupon = _coupon(trigger_type="course_complete")
         course_id = uuid.uuid4()
-        # 켜진 쿠폰 있음 → 추첨 기록 없음 → 기존 발급 없음. 확률 100이라 당첨.
-        db = SeqFake([_Result([coupon]), _Result([]), _Result([])])
+        # 켜진 쿠폰 있음 → 추첨 기록 없음 → 기존 발급 없음 → 코드 중복 없음. 확률 100이라 당첨.
+        db = SeqFake([_Result([coupon]), _Result([]), _Result([]), _Result([])])
 
         coupon_rules.on_course_completed(db, "u1", course_id)
 

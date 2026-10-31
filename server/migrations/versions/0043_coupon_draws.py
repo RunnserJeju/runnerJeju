@@ -28,9 +28,6 @@ down_revision: Union[str, Sequence[str], None] = "0042_rw_event_visibility"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# 헷갈리는 글자(0 O 1 I)를 뺀 32자. app/coupon_rules.new_code와 같다.
-_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-
 _REWARDS = (
     (1, 33, 90, "탐나는전"),
     (3, 33, 30, "핫스프링 앤 스파 종합권"),
@@ -53,11 +50,13 @@ def upgrade() -> None:
     op.execute("UPDATE coupons SET win_rate_percent = 33 WHERE trigger_type = 'course_complete'")
     op.execute("UPDATE coupons SET stock = 3 WHERE trigger_type = 'bingo_complete'")
 
-    op.add_column("user_coupons", sa.Column("code", sa.String(12), nullable=True))
-    # 서브쿼리로 만들면 행마다 재평가되지 않아(InitPlan) 같은 코드가 들어간다. 식으로 펼친다.
-    char = f"substr('{_CODE_ALPHABET}', 1 + floor(random() * 32)::int, 1)"
-    group = " || ".join([char] * 4)
-    op.execute(f"UPDATE user_coupons SET code = {group} || '-' || {group}")
+    op.add_column("user_coupons", sa.Column("code", sa.String(4), nullable=True))
+    # 16진수 4자리. 홀수 곱 mod 65536은 순열이라 기존 행끼리 겹치지 않고 순번처럼 보이지도 않는다.
+    op.execute(
+        "UPDATE user_coupons u SET code = upper(lpad(to_hex((n.rn * 40503 + 12345) % 65536), 4, '0')) "
+        "FROM (SELECT id, row_number() OVER (ORDER BY issued_at, id) - 1 AS rn FROM user_coupons) n "
+        "WHERE n.id = u.id"
+    )
     op.alter_column("user_coupons", "code", nullable=False)
     op.create_index("ux_user_coupons_code", "user_coupons", ["code"], unique=True)
 

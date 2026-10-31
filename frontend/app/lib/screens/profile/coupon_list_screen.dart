@@ -54,12 +54,12 @@ class _CouponListScreenState extends State<CouponListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.paper,
-      appBar: AppBar(title: const Text('내 쿠폰')),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: FutureBuilder<List<Coupon>>(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.paper,
+        appBar: AppBar(title: const Text('내 쿠폰')),
+        body: FutureBuilder<List<Coupon>>(
           future: _future,
           builder: (context, snapshot) => AsyncView<List<Coupon>>(
             snapshot: snapshot,
@@ -70,33 +70,49 @@ class _CouponListScreenState extends State<CouponListScreen> {
             emptyIcon: Icons.confirmation_number_outlined,
             emptyActionLabel: null,
             builder: (context, coupons) {
-              // 쓸 수 있는 것부터, 그다음 사용한 것. 만료는 서버가 목록에서 뺀다.
+              // 사용 가능 / 사용 완료 탭. 만료는 서버가 목록에서 뺀다.
               final available = coupons.where((c) => c.isAvailable).toList();
               final done = coupons.where((c) => !c.isAvailable).toList();
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+              return Column(
                 children: [
-                  if (available.isNotEmpty) ...[
-                    _Heading('사용 가능 ${available.length}'),
-                    for (final coupon in available) ...[
-                      CouponCard(
-                        coupon: coupon,
-                        onTap: () => _openDetail(coupon),
-                      ),
-                      const SizedBox(height: 10),
+                  TabBar(
+                    labelColor: AppColors.ink,
+                    unselectedLabelColor: AppColors.muted,
+                    labelStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    indicatorColor: AppColors.ink,
+                    indicatorWeight: 2,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerColor: AppColors.lineSoft,
+                    tabs: [
+                      Tab(text: '사용 가능 ${available.length}'),
+                      Tab(text: '사용 완료 ${done.length}'),
                     ],
-                  ],
-                  if (done.isNotEmpty) ...[
-                    if (available.isNotEmpty) const SizedBox(height: 16),
-                    const _Heading('지난 쿠폰'),
-                    for (final coupon in done) ...[
-                      CouponCard(
-                        coupon: coupon,
-                        onTap: () => _openDetail(coupon),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                  ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _CouponList(
+                          coupons: available,
+                          emptyText: '사용할 수 있는 쿠폰이 없어요',
+                          onRefresh: _refresh,
+                          onTap: _openDetail,
+                        ),
+                        _CouponList(
+                          coupons: done,
+                          emptyText: '사용 완료한 쿠폰이 없어요',
+                          onRefresh: _refresh,
+                          onTap: _openDetail,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               );
             },
@@ -107,23 +123,48 @@ class _CouponListScreenState extends State<CouponListScreen> {
   }
 }
 
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
+/// 탭 하나의 목록. 비어도 당겨서 새로고침이 되도록 스크롤 가능한 빈 화면을 둔다.
+class _CouponList extends StatelessWidget {
+  const _CouponList({
+    required this.coupons,
+    required this.emptyText,
+    required this.onRefresh,
+    required this.onTap,
+  });
 
-  final String text;
+  final List<Coupon> coupons;
+  final String emptyText;
+  final Future<void> Function() onRefresh;
+  final void Function(Coupon coupon) onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10, top: 4),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textSubtle,
-        ),
-      ),
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: coupons.isEmpty
+          ? ListView(
+              padding: const EdgeInsets.only(top: 80),
+              children: [
+                Center(
+                  child: Text(
+                    emptyText,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSubtle,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+              itemCount: coupons.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final coupon = coupons[index];
+                return CouponCard(coupon: coupon, onTap: () => onTap(coupon));
+              },
+            ),
     );
   }
 }

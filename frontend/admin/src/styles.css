@@ -864,3 +864,19 @@ td.nowrap {
   flex: 1;
   min-width: 0;
 }
+
+/* 경품 지급: 코드로 찾은 미지급 한 건을 표 위에 크게 */
+.reward-hit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.reward-hit-code {
+  display: inline-block;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  margin-bottom: 4px;
+}

@@ -121,9 +121,9 @@ class _CodeBox extends StatelessWidget {
                 Text(
                   code,
                   style: const TextStyle(
-                    fontSize: 26,
+                    fontSize: 34,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
+                    letterSpacing: 8,
                     color: AppColors.ink,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),

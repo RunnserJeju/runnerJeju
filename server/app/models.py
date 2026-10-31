@@ -809,8 +809,8 @@ class UserCoupon(Base):
         UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
-    # 사용자가 캡처·구두로 알려 주는 식별 코드("ABCD-EFGH"). 운영툴 경품 지급 처리가 이걸로 찾는다.
-    code: Mapped[str] = mapped_column(String(12), unique=True)
+    # 사용자가 알려 주는 식별 코드("AB6D"). 운영툴 경품 지급 처리가 이걸로 찾는다.
+    code: Mapped[str] = mapped_column(String(4), unique=True)
     # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}", 빙고판 완성: "bingo:{week_id}",
     # 빙고 줄 리워드: "bingo_lines:{week_id}:{lines}"). 운영자 수동 지급은 None.
     grant_key: Mapped[str | None] = mapped_column(String(100), default=None)
