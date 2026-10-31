@@ -453,8 +453,10 @@ class VerificationOut(BaseModel):
     earned_stamp_id: uuid.UUID | None = None
     # 이 러닝으로 새로 받은 코스완료 쿠폰(user_coupon id). 없으면 None.
     earned_coupon_id: uuid.UUID | None = None
-    # 이 러닝으로 받은 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 스페셜 쿠폰(빙고판 완성).
+    # 이 러닝으로 받은 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순).
     earned_running_week_stamp_ids: list[uuid.UUID] = []
+    # 이 러닝으로 받은 러닝위크 쿠폰(줄 리워드 줄 수 순 → 스페셜). 구 앱용 단일 필드는 첫 장.
+    earned_running_week_coupon_ids: list[uuid.UUID] = []
     earned_bingo_coupon_id: uuid.UUID | None = None
 
 
@@ -805,17 +807,25 @@ class UserListOut(BaseModel):
 # expired_at(만료, 서버가 알아챈 시점에 저장) · valid_until(아직 저장 전인 만료)로 계산한다.
 
 CouponStatus = Literal["available", "used", "expired"]
-CouponTriggerType = Literal["manual", "course_complete", "bingo_complete"]
+CouponTriggerType = Literal["manual", "course_complete", "bingo_complete", "bingo_lines"]
+# partner_pin: 앱에서 업체 번호 입력. kakao_channel: 카카오톡 채널 문의 후 운영자가 지급완료 처리.
+CouponRedeemType = Literal["partner_pin", "kakao_channel"]
+CouponDrawResult = Literal["won", "lost", "sold_out"]
 
 
 class CouponUpdate(BaseModel):
-    """쿠폰 수정(PATCH). 지급 조건은 못 바꾼다 — 이름·혜택·설명·유효기간·사용 업체·켜고 끄기."""
+    """쿠폰 수정(PATCH). 지급 조건·사용 방식은 못 바꾼다 — 이름·혜택·설명·유효기간·확률·수량·
+    사용 업체·켜고 끄기."""
 
     name: str = Field(min_length=1, max_length=200)
     benefit: str = Field(min_length=1, max_length=500)
     description: str | None = None
     valid_until: datetime | None = None
     is_active: bool = False
+    # 조건을 채웠을 때 지급될 확률(%). 100이면 확정.
+    win_rate_percent: int = Field(default=100, ge=0, le=100)
+    # 총 발급 수량. None이면 무제한. 이미 발급된 수보다 작게 줄여도 기존 발급은 그대로다.
+    stock: int | None = Field(default=None, ge=0)
     # 쓸 수 있는 업체. 비우면 모든 업체.
     partner_ids: list[uuid.UUID] = Field(default_factory=list)
 
@@ -829,6 +839,11 @@ class CouponOut(BaseModel):
     benefit: str
     valid_until: datetime | None
     trigger_type: CouponTriggerType
+    # bingo_lines의 기준 줄 수. 다른 조건은 None.
+    lines: int | None = None
+    redeem_type: CouponRedeemType = "partner_pin"
+    win_rate_percent: int = 100
+    stock: int | None = None
     is_active: bool
     partner_ids: list[uuid.UUID]
     created_at: datetime
@@ -850,6 +865,7 @@ class IssuedCouponOut(BaseModel):
     """발급 현황 한 행 — 누구에게 발급됐고 어디서 썼는지."""
 
     id: uuid.UUID  # user_coupon id
+    code: str
     user_id: uuid.UUID
     nickname: str | None  # 탈퇴/미설정이면 null
     issued_at: datetime
@@ -863,10 +879,53 @@ class IssuedListOut(BaseModel):
     items: list[IssuedCouponOut]
 
 
+class RewardFulfillmentOut(BaseModel):
+    """운영툴 경품 지급 처리 한 행 — kakao_channel 쿠폰의 발급분."""
+
+    id: uuid.UUID  # user_coupon id
+    code: str
+    user_id: uuid.UUID
+    nickname: str | None
+    coupon_id: uuid.UUID
+    coupon_name: str
+    benefit: str
+    lines: int | None
+    issued_at: datetime
+    used_at: datetime | None
+    valid_until: datetime | None
+    status: CouponStatus
+
+
+class RewardFulfillmentListOut(BaseModel):
+    total: int
+    items: list[RewardFulfillmentOut]
+
+
+class CouponDrawOut(BaseModel):
+    """추첨 기록 한 행. 문의 대응용(왜 안 받았나)."""
+
+    id: uuid.UUID
+    coupon_id: uuid.UUID
+    coupon_name: str
+    user_id: uuid.UUID
+    nickname: str | None
+    grant_key: str
+    result: CouponDrawResult
+    code: str | None  # 당첨이면 발급된 쿠폰 코드
+    drawn_at: datetime
+
+
+class CouponDrawListOut(BaseModel):
+    total: int
+    items: list[CouponDrawOut]
+
+
 class MyCouponOut(BaseModel):
     """앱: 내 쿠폰 한 장. 혜택·유효기간은 템플릿을 라이브 참조."""
 
     id: uuid.UUID  # user_coupon id
+    # 운영자에게 알려 주는 식별 코드. kakao_channel 수령 화면에 보인다.
+    code: str
     name: str
     description: str | None
     benefit: str
@@ -874,6 +933,7 @@ class MyCouponOut(BaseModel):
     used_at: datetime | None
     valid_until: datetime | None
     status: CouponStatus
+    redeem_type: CouponRedeemType = "partner_pin"
     # 쓸 수 있는 업체 id. None이면 모든 업체.
     partner_ids: list[uuid.UUID] | None
     used_partner_name: str | None

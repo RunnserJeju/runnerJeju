@@ -53,9 +53,12 @@
 | `GET /admin/stats/courses` | 이용 통계 — 코스별 지표(완주·찜·이용자, 정렬) |
 | `GET /admin/coupons` | 쿠폰 목록 (+발급/사용 수) |
 | `GET /admin/coupons/{id}` | 쿠폰 상세 |
-| `PATCH /admin/coupons/{id}` | 쿠폰 수정 (이름·혜택·설명·유효기간·사용 업체·on/off) |
-| `POST /admin/coupons/{id}/issue` | 지급 (user_ids 대량) |
-| `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·사용여부·사용 업체, 닉네임) |
+| `PATCH /admin/coupons/{id}` | 쿠폰 수정 (이름·혜택·설명·유효기간·확률·수량·사용 업체·on/off) |
+| `POST /admin/coupons/{id}/issue` | 지급 (user_ids 대량, 재고 검사) |
+| `GET /admin/coupons/{id}/issued` | 발급 현황 (누구에게·코드·사용여부·사용 업체, 닉네임) |
+| `GET /admin/rewards/fulfillments` | 경품(kakao_channel) 발급 목록 (미지급 필터, 코드·닉네임 검색) |
+| `POST /admin/rewards/fulfillments/{id}/complete` | 경품 지급완료 처리 (조건부 UPDATE, 409/410) |
+| `GET /admin/rewards/draws` | 쿠폰 추첨 기록 (won/lost/sold_out) |
 | `GET /admin/geo/geocode` | 주소→좌표 변환 (코스 등록 화면용) |
 
 공개로 남는 것: `GET /courses`, `GET /courses/{id}`, `GET /courses/{id}/gpx`(업로드한 GPX 원본 내려받기, 원본 없으면 404), `GET /notices`.
@@ -187,9 +190,10 @@
 - **인증 응답 (팝업)**: 모두 **이번 러닝으로 새로 받은 것만** 담는다(`stamps.run_id`·`user_coupons.run_id`) — 재완주 때는 팝업이 다시 뜨지 않는다. `VerificationOut.earned_stamp_id`·`earned_coupon_id` — 앱이 스탬프 연출 뒤 쿠폰 획득 연출에 쓴다. 이어서 `earned_running_week_stamp_ids`(이번 러닝으로 받은 러닝위크 스탬프)·`earned_bingo_coupon_id`(스페셜 쿠폰)를 연출한다. 이번 러닝 판별은 `stamps.run_id`·`user_coupons.run_id`(`0037`).
 - **모듈 (2026-10-21)**: 러닝위크 기간에만 도는 보상은 `app/running_week.py` 진입점(`on_course_completed`)에서만 시작한다. 여기서 공개 중인 회차·참가 여부를 판단하고 `coupon_rules`(쿠폰 발급)·`bingo`(빙고판 계산·빙고 보상)·`stamp_rules`(스탬프 발급)를 부른다. 이 셋은 기간을 모른다. 코스 완주 스탬프만 상시(`verifications`가 직접 호출). **코스완료 쿠폰도 공개 중인 회차의 참가 신청자에게만 준다** — 쿠폰 "활성화" 스위치와 둘 다 켜져야 지급.
 - **러닝위크 전용 스탬프 (2026-10-22)**: 스탬프 조건 `running_week_course {running_week_id, course_id}`. 코드가 만들지 않는다 — 개발자가 회차·코스마다 DB에 직접 넣는다(키 이름은 `stamp_rules.CONDITION_TYPES`와 정확히 같게). 앱에 보이는 이름에는 회차를 넣지 않는다. 공개 중인 회차에 **참가 신청한 사람**이 기간에 완주하면 코스 스탬프와 함께 받는다. 신청 전 완주는 소급하지 않지만 신청 뒤 같은 코스를 다시 완주하면 그때 받는다(완주 인증마다 검사, 발급은 사람·스탬프당 1회). **빙고 칸은 이 회차 전용 스탬프만** 놓을 수 있다(422) — 그래서 러닝위크 전 완주는 칸을 채우지 않는다. 회차 번호는 `running_weeks.round`(`0038`, 유일, 등록 때 비우면 다음 번호)이고 앱에는 내리지 않는다. 인증 응답 `earned_running_week_stamp_ids`가 전용 스탬프 → 빙고 스탬프(줄 수 순)를 담는다.
-- **빙고 보상 (2026-10-21)**: 스탬프 조건 `bingo_lines {running_week_id, lines}` — 그 회차 빙고판에서 N줄 이상 채우면 발급. 1~12줄 스탬프를 줄 수마다 하나씩 개발자가 DB에 넣는다(12줄 = 판 전체 = 스페셜 스탬프). 판정은 완주 인증 직후: **공개 중인 회차 + 참가 신청자**만, 줄 수 기준 이하를 모두 발급하므로 한 번에 두 줄이 생겨도 단계를 건너뛰지 않는다. 빙고 칸에는 그 회차 러닝위크 코스 스탬프만 놓을 수 있다(422). 1·3·5줄 배송 리워드는 아직 없다.
+- **빙고 보상 (2026-10-21)**: 스탬프 조건 `bingo_lines {running_week_id, lines}` — 그 회차 빙고판에서 N줄 이상 채우면 발급. 1~12줄 스탬프를 줄 수마다 하나씩 개발자가 DB에 넣는다(12줄 = 판 전체 = 스페셜 스탬프). 판정은 완주 인증 직후: **공개 중인 회차 + 참가 신청자**만, 줄 수 기준 이하를 모두 발급하므로 한 번에 두 줄이 생겨도 단계를 건너뛰지 않는다. 빙고 칸에는 그 회차 러닝위크 코스 스탬프만 놓을 수 있다(422). 1·3·5줄 리워드는 쿠폰(`bingo_lines`)으로 준다(아래 추첨·재고·경품).
 - **앱 API** (`/me/coupons`): `GET`(목록, 만료 제외, `partner_ids` null=모든 업체) · `GET /{id}` · `POST /{id}/use`(조건부 UPDATE로 중복 사용 방지, 만료면 410).
-- **안 한 것**: 회수(revoke)·per-issuance 만료·복권/룰렛 연출·1·3·5줄 리워드(선착순 배송).
+- **추첨·재고·경품 (2026-10-31, `0043`)**: 지급은 전부 추첨이다 — `coupons.win_rate_percent`(%, 100이면 확정, 운영툴에서 수정). 추첨 결과는 `coupon_draws`(쿠폰·사용자·grant_key 유일)에 `won|lost|sold_out`으로 남겨 **낙첨해도 같은 조건으로 다시 뽑지 않는다**(추첨 도입 전 확정 발급분은 `user_coupons` grant_key로 같이 막는다). `coupons.stock`(null=무제한)은 총 발급 상한이고 원본은 발급 행 수다 — 재고 있는 쿠폰은 템플릿 행을 `SELECT … FOR UPDATE`로 잠근 뒤 기록 확인·세기·발급을 하므로(`coupon_rules.draw`, 운영자 수동 발급도 `lock_coupon → issue_with_stock`) 동시에 들어와도 수량을 넘지 않는다. 심은 값: 코스 완주 33%, 스페셜 쿠폰 100% 선착순 3장, 새 조건 `bingo_lines {lines}`(1·3·5줄 리워드, 33/33/50%, 90/30/4장, 수령 기한 = 회차 종료+30일). **사용 방식** `coupons.redeem_type`: `partner_pin`(기존) / `kakao_channel`(경품) — 경품은 앱에서 사용 처리하지 않고(`/use` 400) 쿠폰함에서 누르면 수령 안내 화면(코드·받는 방법·카카오톡 채널 '제주러닝위크' `https://pf.kakao.com/_xiUEbX` 열기)이 뜬다. 사용자가 1:1 채팅으로 캡처를 보내면 운영자가 "경품 지급" 메뉴에서 `user_coupons.code`("ABCD-EFGH", 유일, 기존 행 백필)로 찾아 지급완료(`used_at`)를 누른다. 인증 응답에 `earned_running_week_coupon_ids`(줄 리워드 줄 수 순 → 스페셜) 추가, `earned_bingo_coupon_id`는 첫 장(구 앱 호환). 25칸 완성은 12줄이라 5줄 리워드 추첨은 그 전에 끝나 있다.
+- **안 한 것**: 회수(revoke)·per-issuance 만료·복권/룰렛 연출·낙첨 안내(무음).
 
 ## 목표 서버 구조
 

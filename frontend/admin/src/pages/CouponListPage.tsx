@@ -27,14 +27,27 @@ const TRIGGER_LABEL: Record<CouponTriggerType, string> = {
   manual: '운영자 지급',
   course_complete: '코스 완주',
   bingo_complete: '빙고판 완성',
+  bingo_lines: '빙고 줄 완성',
 }
 
 const TRIGGER_HINT: Record<CouponTriggerType, string> = {
   manual: '"지급" 탭에서 회원을 골라 직접 줘요.',
   course_complete:
-    '러닝위크 참가자가 공개 기간에 아무 코스나 완주하면 자동으로 한 장. 코스마다 한 번.',
+    '러닝위크 참가자가 공개 기간에 아무 코스나 완주하면 확률대로 추첨해 한 장. 코스마다 한 번.',
   bingo_complete:
-    '러닝위크 빙고판 25칸을 다 채우면(=25개 코스 완주) 자동으로 한 장. 참가 신청한 사람만, 회차마다 한 번.',
+    '러닝위크 빙고판 25칸을 다 채우면(=25개 코스 완주) 확률대로 추첨해 한 장. 참가 신청한 사람만, 회차마다 한 번.',
+  bingo_lines:
+    '러닝위크 빙고 줄이 기준에 닿으면 확률대로 추첨해 한 장. 기준마다 회차당 한 번, 낙첨하면 다시 뽑지 않아요.',
+}
+
+const REDEEM_LABEL: Record<Coupon['redeem_type'], string> = {
+  partner_pin: '업체에서 번호 입력',
+  kakao_channel: '카카오톡 채널 문의 → 경품 지급 처리',
+}
+
+function triggerLabel(coupon: Coupon): string {
+  const base = TRIGGER_LABEL[coupon.trigger_type] ?? coupon.trigger_type
+  return coupon.lines != null ? `${base} (${coupon.lines}줄)` : base
 }
 
 /**
@@ -92,8 +105,10 @@ export default function CouponListPage({ onUnauthorized }: Props) {
             <tr>
               <th>이름</th>
               <th>지급 조건</th>
+              <th>확률</th>
+              <th>수량</th>
               <th>상태</th>
-              <th>사용 업체</th>
+              <th>사용 방식</th>
               <th>유효기간</th>
               <th>발급 / 사용</th>
             </tr>
@@ -105,13 +120,23 @@ export default function CouponListPage({ onUnauthorized }: Props) {
                   <strong>{coupon.name}</strong>
                   <div className="muted clamp">{coupon.benefit}</div>
                 </td>
-                <td>{TRIGGER_LABEL[coupon.trigger_type] ?? coupon.trigger_type}</td>
+                <td>{triggerLabel(coupon)}</td>
+                <td className="muted">
+                  {coupon.trigger_type === 'manual' ? '—' : `${coupon.win_rate_percent}%`}
+                </td>
+                <td className="muted">
+                  {coupon.stock == null
+                    ? '무제한'
+                    : `${coupon.issued_count} / ${coupon.stock} (남음 ${Math.max(coupon.stock - coupon.issued_count, 0)})`}
+                </td>
                 <td>
                   <span className={`badge ${coupon.is_active ? 'live' : 'expired'}`}>
                     {coupon.is_active ? '활성화' : '비활성화'}
                   </span>
                 </td>
-                <td className="muted">{partnerLabel(coupon)}</td>
+                <td className="muted">
+                  {coupon.redeem_type === 'kakao_channel' ? '카카오톡 채널 문의' : partnerLabel(coupon)}
+                </td>
                 <td className="muted">
                   {coupon.valid_until ? new Date(coupon.valid_until).toLocaleString() : '무기한'}
                 </td>
@@ -157,14 +182,12 @@ function CouponModal({
         <button className={tab === 'edit' ? 'active' : undefined} onClick={() => setTab('edit')}>
           수정
         </button>
-        {coupon.trigger_type === 'manual' && (
-          <button
-            className={tab === 'issue' ? 'active' : undefined}
-            onClick={() => setTab('issue')}
-          >
-            지급
-          </button>
-        )}
+        <button
+          className={tab === 'issue' ? 'active' : undefined}
+          onClick={() => setTab('issue')}
+        >
+          지급
+        </button>
         <button
           className={tab === 'issued' ? 'active' : undefined}
           onClick={() => setTab('issued')}
@@ -193,6 +216,8 @@ interface FormValues {
   description: string
   validUntil: string
   isActive: boolean
+  winRatePercent: string
+  stock: string
   partnerIds: string[]
 }
 
@@ -209,6 +234,8 @@ function CouponEditForm({
     description: coupon.description ?? '',
     validUntil: toLocalInput(coupon.valid_until),
     isActive: coupon.is_active,
+    winRatePercent: String(coupon.win_rate_percent),
+    stock: coupon.stock == null ? '' : String(coupon.stock),
     partnerIds: coupon.partner_ids,
   })
   const [error, setError] = useState<string | null>(null)
@@ -232,12 +259,24 @@ function CouponEditForm({
       setError('혜택을 입력해 주세요.')
       return
     }
+    const winRate = Number(values.winRatePercent)
+    if (!Number.isInteger(winRate) || winRate < 0 || winRate > 100) {
+      setError('지급 확률은 0~100 사이 정수로 입력해 주세요.')
+      return
+    }
+    const stock = values.stock.trim() === '' ? null : Number(values.stock)
+    if (stock != null && (!Number.isInteger(stock) || stock < 0)) {
+      setError('수량은 0 이상 정수로 입력하거나 비워 주세요.')
+      return
+    }
     const payload: CouponPayload = {
       name,
       benefit,
       description: values.description.trim() || null,
       valid_until: values.validUntil ? new Date(values.validUntil).toISOString() : null,
       is_active: values.isActive,
+      win_rate_percent: winRate,
+      stock,
       partner_ids: values.partnerIds,
     }
     setSaving(true)
@@ -258,8 +297,19 @@ function CouponEditForm({
         <div className="field">
           <label>지급 조건</label>
           <div>
-            <strong>{TRIGGER_LABEL[coupon.trigger_type] ?? coupon.trigger_type}</strong>
+            <strong>{triggerLabel(coupon)}</strong>
             <div className="hint">{TRIGGER_HINT[coupon.trigger_type]} 조건은 여기서 못 바꿔요.</div>
+          </div>
+        </div>
+        <div className="field">
+          <label>사용 방식</label>
+          <div>
+            <strong>{REDEEM_LABEL[coupon.redeem_type]}</strong>
+            {coupon.redeem_type === 'kakao_channel' && (
+              <div className="hint">
+                앱 쿠폰함에서는 사용 처리가 안 되고, "경품 지급" 메뉴에서 운영자가 지급완료를 눌러야 사용완료가 돼요.
+              </div>
+            )}
           </div>
         </div>
         <div className="field">
@@ -292,9 +342,47 @@ function CouponEditForm({
             onChange={(e) => set({ description: e.target.value })}
           />
         </div>
+        {coupon.trigger_type !== 'manual' && (
+          <div className="field">
+            <label htmlFor="coupon-win-rate">
+              지급 확률(%){' '}
+              <span className="hint">조건을 채운 사람 중 이 비율만 받아요. 100이면 전원. 낙첨은 다시 뽑지 않아요</span>
+            </label>
+            <input
+              id="coupon-win-rate"
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={values.winRatePercent}
+              onChange={(e) => set({ winRatePercent: e.target.value })}
+              style={{ width: 120 }}
+            />
+          </div>
+        )}
+        <div className="field">
+          <label htmlFor="coupon-stock">
+            수량{' '}
+            <span className="hint">
+              총 발급 상한. 비우면 무제한. 자동 지급·운영자 지급 모두 포함해 세고, 소진되면 확률과 무관하게 안 나가요
+              {coupon.stock != null && ` (지금까지 ${coupon.issued_count}장 발급)`}
+            </span>
+          </label>
+          <input
+            id="coupon-stock"
+            type="number"
+            min={0}
+            step={1}
+            value={values.stock}
+            placeholder="무제한"
+            onChange={(e) => set({ stock: e.target.value })}
+            style={{ width: 120 }}
+          />
+        </div>
         <div className="field">
           <label htmlFor="coupon-valid-until">
-            유효기간 <span className="hint">비우면 무기한. 지나면 발급된 쿠폰이 만료돼요</span>
+            {coupon.redeem_type === 'kakao_channel' ? '수령 기한' : '유효기간'}{' '}
+            <span className="hint">비우면 무기한. 지나면 발급된 쿠폰이 만료돼요</span>
           </label>
           <input
             id="coupon-valid-until"
@@ -303,12 +391,14 @@ function CouponEditForm({
             onChange={(e) => set({ validUntil: e.target.value })}
           />
         </div>
-        <PartnerPicker
-          selectedIds={values.partnerIds}
-          onChange={(ids) => set({ partnerIds: ids })}
-          label="사용 가능 업체"
-          hint="비워 두면 모든 협력업체에서 쓸 수 있어요"
-        />
+        {coupon.redeem_type === 'partner_pin' && (
+          <PartnerPicker
+            selectedIds={values.partnerIds}
+            onChange={(ids) => set({ partnerIds: ids })}
+            label="사용 가능 업체"
+            hint="비워 두면 모든 협력업체에서 쓸 수 있어요"
+          />
+        )}
         <div className="field">
           <label>
             <input
@@ -456,6 +546,8 @@ const STATUS_LABEL: Record<IssuedCoupon['status'], string> = {
   expired: '만료',
 }
 
+export { STATUS_LABEL }
+
 function IssuedSection({ coupon }: { coupon: Coupon }) {
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
@@ -485,6 +577,7 @@ function IssuedSection({ coupon }: { coupon: Coupon }) {
           <thead>
             <tr>
               <th>회원</th>
+              <th>코드</th>
               <th>발급</th>
               <th>상태</th>
               <th>사용 업체</th>
@@ -495,6 +588,9 @@ function IssuedSection({ coupon }: { coupon: Coupon }) {
             {items.map((item) => (
               <tr key={item.id}>
                 <td>{item.nickname ?? <span className="muted">(탈퇴/미설정)</span>}</td>
+                <td className="nowrap">
+                  <code>{item.code}</code>
+                </td>
                 <td className="muted nowrap">{new Date(item.issued_at).toLocaleString()}</td>
                 <td>
                   <span
@@ -503,7 +599,14 @@ function IssuedSection({ coupon }: { coupon: Coupon }) {
                     {STATUS_LABEL[item.status]}
                   </span>
                 </td>
-                <td>{item.used_partner_name ?? (item.used_at ? '(삭제된 업체)' : '—')}</td>
+                <td>
+                  {item.used_partner_name ??
+                    (item.used_at
+                      ? coupon.redeem_type === 'kakao_channel'
+                        ? '운영자 지급완료'
+                        : '(삭제된 업체)'
+                      : '—')}
+                </td>
                 <td className="muted nowrap">
                   {item.used_at ? new Date(item.used_at).toLocaleString() : '—'}
                 </td>

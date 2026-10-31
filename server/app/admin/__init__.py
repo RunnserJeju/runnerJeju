@@ -18,6 +18,7 @@ from app.admin import (
     home,
     notices,
     partners,
+    rewards,
     running_weeks,
     stamps,
     user_logs,
@@ -39,6 +40,7 @@ admin_router.include_router(users.router)
 admin_router.include_router(metrics_router)
 admin_router.include_router(user_logs.router)
 admin_router.include_router(coupons.router)
+admin_router.include_router(rewards.router)
 admin_router.include_router(geo.router)
 admin_router.include_router(partners.router)
 admin_router.include_router(home.router)

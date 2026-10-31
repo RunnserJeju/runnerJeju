@@ -39,8 +39,8 @@ class _RunResultScreenState extends State<RunResultScreen> {
 
   bool _runningWeekCelebrated = false;
 
-  /// 빙고판을 다 채워 받은 스페셜 쿠폰. 코스완료 쿠폰 아래에 같이 보여준다.
-  Coupon? _bingoCoupon;
+  /// 이 러닝으로 받은 러닝위크 쿠폰(줄 리워드·스페셜). 코스완료 쿠폰 아래에 같이 보여준다.
+  final List<Coupon> _runningWeekCoupons = [];
   String? _saveError;
   bool _saving = true;
 
@@ -161,19 +161,25 @@ class _RunResultScreenState extends State<RunResultScreen> {
   }
 
   /// 쿠폰 조회 실패도 저장을 실패로 만들지 않는다. 마이페이지에서 다시 볼 수 있다.
-  Future<void> _loadCoupon(String couponId, {bool bingo = false}) async {
+  Future<void> _loadCoupon(String couponId, {bool runningWeek = false}) async {
     try {
       final coupon = await Services.instance.coupon.loadCoupon(couponId);
       if (!mounted) return;
-      setState(() => bingo ? _bingoCoupon = coupon : _earnedCoupon = coupon);
+      setState(() {
+        if (runningWeek) {
+          _runningWeekCoupons.add(coupon);
+        } else {
+          _earnedCoupon = coupon;
+        }
+      });
       await showCouponCelebration(context, coupon);
     } catch (_) {
       // 무시.
     }
   }
 
-  /// 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 스페셜 쿠폰을 코스 스탬프·쿠폰 팝업 뒤에
-  /// 이어서 보여준다. 재시도로 같은 검증을 다시 받아도 한 번만.
+  /// 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 러닝위크 쿠폰(줄 리워드 → 스페셜)을
+  /// 코스 스탬프·쿠폰 팝업 뒤에 이어서 보여준다. 재시도로 같은 검증을 다시 받아도 한 번만.
   Future<void> _celebrateRunningWeek(RunVerification verification) async {
     if (_runningWeekCelebrated) return;
     _runningWeekCelebrated = true;
@@ -186,8 +192,10 @@ class _RunResultScreenState extends State<RunResultScreen> {
         // 무시: 스탬프 탭에서 볼 수 있다.
       }
     }
-    final couponId = verification.earnedBingoCouponId;
-    if (couponId != null) await _loadCoupon(couponId, bingo: true);
+    for (final couponId in verification.runningWeekCouponIds) {
+      if (!mounted) return;
+      await _loadCoupon(couponId, runningWeek: true);
+    }
   }
 
   void _close() {
@@ -254,9 +262,9 @@ class _RunResultScreenState extends State<RunResultScreen> {
               const SizedBox(height: 12),
               CouponCard(coupon: _earnedCoupon!),
             ],
-            if (_bingoCoupon != null) ...[
+            for (final coupon in _runningWeekCoupons) ...[
               const SizedBox(height: 12),
-              CouponCard(coupon: _bingoCoupon!),
+              CouponCard(coupon: coupon),
             ],
             const SizedBox(height: 20),
             Card(

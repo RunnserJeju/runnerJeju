@@ -9,6 +9,7 @@ import EventListPage from './pages/EventListPage'
 import HomeCurationPage from './pages/HomeCurationPage'
 import LogsPage from './pages/LogsPage'
 import PartnerListPage from './pages/PartnerListPage'
+import RewardFulfillmentPage from './pages/RewardFulfillmentPage'
 import RunningWeekListPage from './pages/RunningWeekListPage'
 import StampListPage from './pages/StampListPage'
 import UsersPage from './pages/UsersPage'
@@ -30,6 +31,7 @@ type Page =
   | 'running-weeks'
   | 'events'
   | 'coupons'
+  | 'rewards'
   | 'dashboard'
   | 'course-stats'
   | 'users'
@@ -58,6 +60,7 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
       { key: 'running-weeks', label: '러닝위크' },
       { key: 'events', label: '이벤트' },
       { key: 'coupons', label: '쿠폰' },
+      { key: 'rewards', label: '경품 지급' },
     ],
   },
 ]
@@ -161,6 +164,9 @@ export default function App() {
           )}
           {page === 'coupons' && (
             <CouponListPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+          )}
+          {page === 'rewards' && (
+            <RewardFulfillmentPage onUnauthorized={() => setAuth({ status: 'anon' })} />
           )}
           {page === 'events' && (
             <EventListPage onUnauthorized={() => setAuth({ status: 'anon' })} />

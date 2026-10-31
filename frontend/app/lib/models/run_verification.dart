@@ -49,6 +49,7 @@ class RunVerification {
     this.earnedStampId,
     this.earnedCouponId,
     this.earnedRunningWeekStampIds = const [],
+    this.earnedRunningWeekCouponIds = const [],
     this.earnedBingoCouponId,
   });
 
@@ -74,8 +75,16 @@ class RunVerification {
   /// 이 러닝으로 받은 러닝위크 스탬프 id. 코스 전용 스탬프 먼저, 빙고 스탬프는 줄 수 순.
   final List<String> earnedRunningWeekStampIds;
 
-  /// 이 러닝으로 빙고판을 다 채워 받은 스페셜 쿠폰 id.
+  /// 이 러닝으로 받은 러닝위크 쿠폰 id(줄 리워드는 줄 수 순, 스페셜 쿠폰이 마지막).
+  final List<String> earnedRunningWeekCouponIds;
+
+  /// 구 서버 호환용 단일 필드(첫 장). 새 서버는 목록도 같이 준다.
   final String? earnedBingoCouponId;
+
+  /// 축하 팝업에 쓸 러닝위크 쿠폰 id. 목록이 비어 있고 단일 필드만 있으면 그걸 쓴다.
+  List<String> get runningWeekCouponIds => earnedRunningWeekCouponIds.isNotEmpty
+      ? earnedRunningWeekCouponIds
+      : [?earnedBingoCouponId];
 
   /// 일치율을 백분율 문자열로. 아직 없으면 null.
   String? get matchRateLabel =>
@@ -95,7 +104,13 @@ class RunVerification {
         earnedStampId: json['earned_stamp_id']?.toString(),
         earnedCouponId: json['earned_coupon_id']?.toString(),
         earnedRunningWeekStampIds: [
-          for (final id in json['earned_running_week_stamp_ids'] as List? ?? const [])
+          for (final id
+              in json['earned_running_week_stamp_ids'] as List? ?? const [])
+            id.toString(),
+        ],
+        earnedRunningWeekCouponIds: [
+          for (final id
+              in json['earned_running_week_coupon_ids'] as List? ?? const [])
             id.toString(),
         ],
         earnedBingoCouponId: json['earned_bingo_coupon_id']?.toString(),

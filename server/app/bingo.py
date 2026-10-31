@@ -76,12 +76,14 @@ def board(db: Session, week: RunningWeek, user_id: str) -> dict | None:
 def grant_rewards(
     db: Session, user_id: str, week: RunningWeek, run_id: uuid.UUID | None
 ) -> None:
-    """줄 수만큼 빙고 스탬프를, 판을 다 채웠으면 스페셜 쿠폰을 준다. 커밋은 부르는 쪽이 한다."""
+    """줄 수만큼 빙고 스탬프와 줄 리워드 추첨을, 판을 다 채웠으면 스페셜 쿠폰을 준다. 커밋은 부르는 쪽이 한다."""
     # 같은 요청에서 막 발급한 코스 스탬프까지 세야 한다.
     db.flush()
     current = board(db, week, user_id)
     if current is None:
         return
-    stamp_rules.on_bingo_progress(db, user_id, week.id, current["completed_lines"], run_id)
+    lines = current["completed_lines"]
+    stamp_rules.on_bingo_progress(db, user_id, week.id, lines, run_id)
+    coupon_rules.on_bingo_lines(db, user_id, week.id, lines, run_id)
     if all(cell["acquired"] for cell in current["cells"]):
         coupon_rules.on_bingo_completed(db, user_id, week.id, run_id)

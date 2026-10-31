@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app import coupon_rules
 from app.db import get_db
 from app.deps import current_user_id
 from app.models import Coupon, CouponPartner, Partner, UserCoupon
@@ -92,6 +93,7 @@ def _rows_to_out(db: Session, rows: list) -> list[dict]:
     return [
         {
             "id": uc.id,
+            "code": uc.code,
             "name": coupon.name,
             "description": coupon.description,
             "benefit": coupon.benefit,
@@ -101,6 +103,7 @@ def _rows_to_out(db: Session, rows: list) -> list[dict]:
             "status": _effective_status(
                 uc.used_at, coupon.valid_until, now, uc.expired_at
             ),
+            "redeem_type": coupon.redeem_type,
             "partner_ids": allowed.get(coupon.id),
             "used_partner_name": names.get(uc.used_partner_id),
         }
@@ -164,6 +167,9 @@ def use_coupon(
     (영향 행 0 → 이미 사용 → 409). 유효기간이 지났으면 expired_at을 남기고 410.
     """
     uc, coupon = _mine_or_404(db, user_coupon_id, user_id)
+    if coupon.redeem_type == coupon_rules.REDEEM_KAKAO_CHANNEL:
+        # 경품 쿠폰은 운영자만 지급완료 처리한다(admin/rewards.py).
+        raise HTTPException(status_code=400, detail="운영자가 지급 처리하는 쿠폰이에요.")
     if uc.used_at is not None:
         raise HTTPException(status_code=409, detail="이미 사용한 쿠폰이에요.")
 
@@ -192,6 +198,7 @@ def use_coupon(
     # 응답에 쓸 값을 커밋(=세션 expire) 전에 확보한다.
     response = {
         "id": uc.id,
+        "code": uc.code,
         "name": coupon.name,
         "description": coupon.description,
         "benefit": coupon.benefit,
@@ -199,6 +206,7 @@ def use_coupon(
         "used_at": now,
         "valid_until": coupon.valid_until,
         "status": "used",
+        "redeem_type": coupon.redeem_type,
         "partner_ids": allowed,
         "used_partner_name": partner.name,
     }

@@ -9,6 +9,7 @@ import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/coupon_card.dart';
 import 'coupon_use_screen.dart';
+import 'reward_claim_screen.dart';
 
 /// 내 쿠폰함. 마이페이지에서 들어오며, 쿠폰을 누르면 상세 시트에서 사용으로 이어진다.
 class CouponListScreen extends StatefulWidget {
@@ -38,7 +39,15 @@ class _CouponListScreenState extends State<CouponListScreen> {
   }
 
   /// 사용했거나 만료로 판명나면 목록을 다시 받는다 — 둘 다 서버 목록이 달라진다.
+  /// 경품 쿠폰은 앱에서 사용 처리하지 않으므로 수령 안내 화면으로 바로 간다.
   Future<void> _openDetail(Coupon coupon) async {
+    if (coupon.isReward) {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => RewardClaimScreen(coupon: coupon)),
+      );
+      if (mounted) _refresh();
+      return;
+    }
     final changed = await showCouponDetail(context, coupon);
     if (changed != null && mounted) _refresh();
   }

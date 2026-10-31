@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from app import coupon_rules
 from app.admin import coupons as admin_coupons
-from app.models import Coupon, Partner, UserCoupon
+from app.models import Coupon, CouponDraw, Partner, UserCoupon
 from app.routers import coupons as app_coupons
 from app.schemas import CouponUseRequest, IssueRequest
 
@@ -61,6 +61,15 @@ class SeqFake:
     def add(self, obj):
         self.added.append(obj)
 
+    def add_all(self, objs):
+        self.added.extend(objs)
+
+    def flush(self):
+        pass
+
+    def rollback(self):
+        pass
+
     def commit(self):
         self.committed = True
 
@@ -71,13 +80,14 @@ class SeqFake:
 def _coupon(**over) -> Coupon:
     fields = dict(id=uuid.uuid4(), name="가을쿠폰", benefit="아메리카노 1잔",
                   description=None, valid_until=None, trigger_type="manual",
-                  is_active=True)
+                  trigger_params=None, redeem_type="partner_pin", win_rate_percent=100,
+                  stock=None, is_active=True)
     fields.update(over)
     return Coupon(**fields)
 
 
 def _uc(**over) -> UserCoupon:
-    fields = dict(id=uuid.uuid4(), coupon_id=uuid.uuid4(), user_id="u1",
+    fields = dict(id=uuid.uuid4(), coupon_id=uuid.uuid4(), user_id="u1", code="ABCD-EFGH",
                   issued_at=NOW, used_at=None, expired_at=None, used_partner_id=None,
                   grant_key=None)
     fields.update(over)
@@ -154,7 +164,8 @@ class TestIssueCoupon:
     def test_issues_only_to_existing_users(self):
         coupon = _coupon()
         u1, u2, ghost = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-        db = SeqFake([_Result([u1, u2])], gets={Coupon: coupon})  # ghost는 실존 안 함
+        # 템플릿 잠금 조회 → 실존 회원 조회. ghost는 실존 안 함.
+        db = SeqFake([_Result([coupon]), _Result([u1, u2])])
 
         result = admin_coupons.issue_coupon(
             coupon.id, IssueRequest(user_ids=[u1, u2, ghost]), db
@@ -165,7 +176,7 @@ class TestIssueCoupon:
         assert db.committed is True
 
     def test_404_when_coupon_missing(self):
-        db = SeqFake([])
+        db = SeqFake([_Result([])])
         with pytest.raises(HTTPException) as exc:
             admin_coupons.issue_coupon(
                 uuid.uuid4(), IssueRequest(user_ids=[uuid.uuid4()]), db
@@ -340,17 +351,21 @@ class TestCourseCompleteGrant:
     def test_grants_one_with_course_key(self):
         coupon = _coupon(trigger_type="course_complete")
         course_id = uuid.uuid4()
-        db = SeqFake([_Result([coupon]), _Result([])])  # 켜진 쿠폰 있음, 기존 발급 없음
+        # 켜진 쿠폰 있음 → 추첨 기록 없음 → 기존 발급 없음. 확률 100이라 당첨.
+        db = SeqFake([_Result([coupon]), _Result([]), _Result([])])
 
         coupon_rules.on_course_completed(db, "u1", course_id)
 
-        assert len(db.added) == 1
-        assert db.added[0].coupon_id == coupon.id
-        assert db.added[0].grant_key == f"course:{course_id}"
+        issued = [o for o in db.added if isinstance(o, UserCoupon)]
+        draws = [o for o in db.added if isinstance(o, CouponDraw)]
+        assert len(issued) == 1 and len(draws) == 1
+        assert issued[0].coupon_id == coupon.id
+        assert issued[0].grant_key == f"course:{course_id}"
+        assert draws[0].result == "won" and draws[0].user_coupon_id == issued[0].id
 
     def test_skips_when_already_granted(self):
         coupon = _coupon(trigger_type="course_complete")
-        db = SeqFake([_Result([coupon]), _Result([uuid.uuid4()])])
+        db = SeqFake([_Result([coupon]), _Result([]), _Result([uuid.uuid4()])])
 
         coupon_rules.on_course_completed(db, "u1", uuid.uuid4())
 
