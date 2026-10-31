@@ -664,6 +664,10 @@ class AdminParticipationOut(BaseModel):
 # --- 공지사항 -------------------------------------------------------------
 
 
+# 공지 버튼의 앱 화면 연결 접두사. 값(app:running-week 등)은 개발자가 DB에 직접 넣는다.
+NOTICE_APP_LINK_PREFIX = "app:"
+
+
 class NoticeCreate(BaseModel):
     """공지 작성. 노출 기간은 생략 가능하며 null은 '제한 없음'이다."""
 
@@ -671,6 +675,24 @@ class NoticeCreate(BaseModel):
     body: str = Field(min_length=1)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
+    # 상세 아래 버튼. 외부 주소(http/https)거나, 개발자가 넣어 둔 앱 화면(app:…)을 그대로
+    # 돌려보낸 값. 앱 화면 값을 새로 만들거나 바꾸는 건 라우터가 막는다(admin/notices).
+    link_url: str | None = Field(default=None, max_length=500)
+    link_label: str | None = Field(default=None, max_length=40)
+
+    @field_validator("link_url", "link_label", mode="before")
+    @classmethod
+    def _blank_to_none(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+        return value or None
+
+    @field_validator("link_url")
+    @classmethod
+    def _check_link(cls, value: str | None) -> str | None:
+        if value is None or value.startswith(("http://", "https://", NOTICE_APP_LINK_PREFIX)):
+            return value
+        raise ValueError("링크는 http:// 또는 https://로 시작해야 해요.")
 
     @model_validator(mode="after")
     def _check_period(self):
@@ -692,6 +714,8 @@ class NoticeOut(BaseModel):
     body: str
     # 있으면 앱이 홈 상단 배너로도 그린다. 이미지는 전용 엔드포인트로 올린다.
     image_url: str | None
+    link_url: str | None = None
+    link_label: str | None = None
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime

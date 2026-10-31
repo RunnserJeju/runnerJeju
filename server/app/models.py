@@ -478,6 +478,11 @@ class Notice(Base):
     # 있으면 홈 상단 캐러셀에도 실린다. PUT/DELETE /admin/notices/{id}/image로 관리.
     image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
+    # 상세 아래 버튼. 외부 주소(http/https, 운영툴 입력) 또는 앱 화면(`app:running-week` 등,
+    # 개발자가 DB에 직접 넣음 — 운영툴은 못 바꾼다, admin/notices). label null이면 앱 기본 문구.
+    link_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    link_label: Mapped[str | None] = mapped_column(String(40), default=None)
+
     # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
     # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).
     starts_at: Mapped[datetime | None] = mapped_column(

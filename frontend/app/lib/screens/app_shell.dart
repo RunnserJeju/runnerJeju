@@ -39,7 +39,8 @@ class _AppShellState extends State<AppShell> {
     _runningKey.currentState?.openCourse(courseId, source: source);
   }
 
-  /// 빙고판에서 연 코스를 보다가 돌아갈 때. 빙고판은 코스를 열 때 이미 닫혔으므로
+  /// 커뮤니티 탭으로 옮겨 러닝위크를 연다. 공지 버튼도 이걸 쓴다.
+  /// 빙고판에서 연 코스를 보다가 돌아갈 때는, 빙고판이 코스를 열 때 이미 닫혔으므로
   /// (RunningWeekScreen._openCell의 popUntil) 커뮤니티 탭으로 옮겨 배너를 누른
   /// 것과 똑같이 다시 연다 — 스택에는 늘 빙고판 한 장만 쌓인다.
   void _returnToRunningWeek() {
@@ -68,6 +69,7 @@ class _AppShellState extends State<AppShell> {
         onShowMap: () => setState(() => _index = _runningTab),
         onOpenCourse: (courseId) => _openCourse(courseId, LogSource.home),
         onOpenPartner: (partner) => _openPartner(partner, LogSource.home),
+        onOpenRunningWeek: _returnToRunningWeek,
       ),
       CommunityScreen(
         key: _communityKey,

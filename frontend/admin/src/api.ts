@@ -89,15 +89,23 @@ export interface Notice {
   title: string
   body: string
   image_url: string | null
+  /** 상세 아래 버튼. 외부 주소, 또는 개발자가 넣은 앱 화면(app:…) — 후자는 여기서 못 바꾼다. */
+  link_url: string | null
+  link_label: string | null
   starts_at: string | null
   ends_at: string | null
   created_at: string
 }
 
+/** 앱 화면 연결 접두사. 서버 schemas.NOTICE_APP_LINK_PREFIX와 같다. */
+export const NOTICE_APP_LINK_PREFIX = 'app:'
+
 /** 등록/수정(전체 교체) 페이로드. 서버 NoticeCreate/NoticeUpdate와 1:1. */
 export interface NoticePayload {
   title: string
   body: string
+  link_url: string | null
+  link_label: string | null
   starts_at: string | null
   ends_at: string | null
 }

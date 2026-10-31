@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app import storage
 from app.db import get_db
 from app.models import Notice
-from app.schemas import NoticeCreate, NoticeOut, NoticeUpdate
+from app.schemas import NOTICE_APP_LINK_PREFIX, NoticeCreate, NoticeOut, NoticeUpdate
 
 router = APIRouter(tags=["notices"])
 
@@ -30,6 +30,15 @@ _ALLOWED_IMAGE_TYPES = {
     "image/png": "png",
     "image/webp": "webp",
 }
+
+
+def _check_link_editable(link_url: str | None, current: str | None) -> None:
+    """앱 화면 연결(app:…)은 개발자가 DB에 넣는다. 운영툴은 있던 값을 그대로 돌려보내거나
+    지울 수만 있고, 새로 만들거나 다른 화면으로 바꾸지는 못한다."""
+    if link_url and link_url.startswith(NOTICE_APP_LINK_PREFIX) and link_url != current:
+        raise HTTPException(
+            status_code=422, detail="앱 화면 연결은 개발자가 직접 설정해요. 외부 링크만 넣을 수 있어요."
+        )
 
 
 def _load_notice_or_404(db: Session, notice_id: uuid.UUID) -> Notice:
@@ -57,9 +66,12 @@ def create_notice(
     db: Session = Depends(get_db),
 ):
     """공지를 등록한다. (관리자 전용 — 라우터 레벨에서 강제)"""
+    _check_link_editable(payload.link_url, None)
     notice = Notice(
         title=payload.title,
         body=payload.body,
+        link_url=payload.link_url,
+        link_label=payload.link_label,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
     )
@@ -79,9 +91,12 @@ def update_notice(
 ):
     """공지를 수정한다(전체 교체). (관리자 전용 — 라우터 레벨에서 강제)"""
     notice = _load_notice_or_404(db, notice_id)
+    _check_link_editable(payload.link_url, notice.link_url)
 
     notice.title = payload.title
     notice.body = payload.body
+    notice.link_url = payload.link_url
+    notice.link_label = payload.link_label
     notice.starts_at = payload.starts_at
     notice.ends_at = payload.ends_at
 
