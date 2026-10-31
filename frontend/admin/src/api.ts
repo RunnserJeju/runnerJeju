@@ -310,7 +310,10 @@ export interface StampDefinition {
   id: string
   name: string
   description: string | null
+  /** 직접 올린 도안. 등록/교체/삭제 기준. */
   image_url: string | null
+  /** 앱이 실제로 그리는 도안. 직접 올린 게 없으면 코스 카테고리 기본 도안. */
+  display_image_url: string | null
   condition_type: StampConditionType
   condition_params: StampConditionParams
   is_active: boolean

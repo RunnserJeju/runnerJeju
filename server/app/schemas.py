@@ -504,7 +504,10 @@ class AdminStampDefinitionOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    # 직접 올린 도안. 등록/교체/삭제는 이걸 기준으로 한다.
     image_url: str | None
+    # 앱이 실제로 그리는 도안 — 직접 올린 것이 없으면 코스 카테고리 기본 도안.
+    display_image_url: str | None = None
     condition_type: str
     condition_params: dict
     is_active: bool
@@ -802,7 +805,7 @@ class UserListOut(BaseModel):
 # expired_at(만료, 서버가 알아챈 시점에 저장) · valid_until(아직 저장 전인 만료)로 계산한다.
 
 CouponStatus = Literal["available", "used", "expired"]
-CouponTriggerType = Literal["manual", "course_complete"]
+CouponTriggerType = Literal["manual", "course_complete", "bingo_complete"]
 
 
 class CouponUpdate(BaseModel):

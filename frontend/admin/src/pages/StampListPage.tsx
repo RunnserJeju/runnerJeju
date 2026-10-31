@@ -119,8 +119,8 @@ export default function StampListPage({ onUnauthorized }: Props) {
               return (
                 <tr key={stamp.id} onClick={() => setEditing(stamp)}>
                   <td style={{ width: 64 }}>
-                    {stamp.image_url ? (
-                      <img className="thumb round" src={stamp.image_url} alt="" />
+                    {stamp.display_image_url ? (
+                      <img className="thumb round" src={stamp.display_image_url} alt="" />
                     ) : (
                       <div className="thumb round placeholder">없음</div>
                     )}
@@ -328,10 +328,10 @@ function StampImageSection({
       <p className="muted">
         앱이 원 안에 꽉 채워 그려요. 바꾸면 이미 받은 사람에게도 반영돼요. {STAMP_SPEC.hint}.
       </p>
-      {stamp.image_url ? (
-        <img className="thumb large round" src={stamp.image_url} alt="현재 도안" />
+      {stamp.display_image_url ? (
+        <img className="thumb large round" src={stamp.display_image_url} alt="현재 도안" />
       ) : (
-        <p className="muted">등록된 도안이 없어요(앱은 기본 도안을 써요).</p>
+        <p className="muted">등록된 도안이 없어요.</p>
       )}
       <div className="field" style={{ marginTop: 12 }}>
         <input

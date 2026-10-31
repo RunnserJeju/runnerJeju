@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/stamp_badge.dart';
+import '../../widgets/stamp_tone.dart';
 
 /// 스탬프함. 스탬프 종류 전체를 카드 그리드로 깔고, 받은 것은 색상·못 받은 것은 흑백.
 /// 스탬프는 코스와 분리됐다(#71) — 코스 완주 스탬프면 코스 정보를 곁들인다.
@@ -87,6 +88,7 @@ class _StampScreenState extends State<StampScreen> {
                   StampBadge(
                     stamp: stamp,
                     name: slot.name,
+                    imageUrl: slot.imageUrl,
                     acquired: slot.acquired,
                     size: 132,
                   ),
@@ -402,10 +404,8 @@ class _StampCard extends StatelessWidget {
   }
 }
 
-/// 원형 스탬프 도안. 받았으면 DB 이미지, 못 받았으면 회색 도안을 반투명으로.
-///
-/// 미완주를 DB 이미지의 흑백 처리로 그리지 않는 이유: 난이도별 도안 색이 달라
-/// 흑백으로 바꾸면 진하기가 제각각이다(빨강이 제일 진함).
+/// 원형 스탬프 도안. 받았으면 컬러, 못 받았으면 같은 도안을 흑백·반투명으로.
+/// 도안이 없을 때만 회색 잠금 도안.
 class _StampImage extends StatelessWidget {
   const _StampImage({required this.url, required this.acquired});
 
@@ -418,26 +418,30 @@ class _StampImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!acquired) {
-      return Opacity(
-        opacity: 0.55,
-        child: Image.asset(_lockedAsset, width: _size, height: _size),
-      );
+    final url = this.url;
+    if (url == null || url.isEmpty) {
+      if (!acquired) {
+        return Opacity(
+          opacity: 0.55,
+          child: Image.asset(_lockedAsset, width: _size, height: _size),
+        );
+      }
+      return const SizedBox(width: _size, height: _size, child: _Fallback());
     }
-    return SizedBox(
+    Widget image = SizedBox(
       width: _size,
       height: _size,
       child: ClipOval(
-        child: url != null && url!.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: url!,
-                fit: BoxFit.cover,
-                placeholder: (_, _) => const _Fallback(),
-                errorWidget: (_, _, _) => const _Fallback(),
-              )
-            : const _Fallback(),
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          placeholder: (_, _) => const _Fallback(),
+          errorWidget: (_, _, _) => const _Fallback(),
+        ),
       ),
     );
+    if (!acquired) image = stampLockedTone(image);
+    return image;
   }
 }
 

@@ -25,16 +25,26 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
+  static const _communityTab = 1;
   static const _runningTab = 2;
 
   /// 다른 탭에서 코스를 열 때 러닝 탭의 선택을 바깥에서 움직이려고 둔다.
   /// 러닝 탭은 IndexedStack 안에서 계속 살아 있어 State가 늘 붙어 있다.
   final GlobalKey<RunningScreenState> _runningKey = GlobalKey();
+  final GlobalKey<CommunityScreenState> _communityKey = GlobalKey();
 
   /// 러닝 탭으로 옮기고 그 코스를 지도에서 고른 상태로 연다.
   void _openCourse(String courseId, LogSource source) {
     setState(() => _index = _runningTab);
     _runningKey.currentState?.openCourse(courseId, source: source);
+  }
+
+  /// 빙고판에서 연 코스를 보다가 돌아갈 때. 빙고판은 코스를 열 때 이미 닫혔으므로
+  /// (RunningWeekScreen._openCell의 popUntil) 커뮤니티 탭으로 옮겨 배너를 누른
+  /// 것과 똑같이 다시 연다 — 스택에는 늘 빙고판 한 장만 쌓인다.
+  void _returnToRunningWeek() {
+    setState(() => _index = _communityTab);
+    _communityKey.currentState?.openRunningWeek();
   }
 
   /// 러닝 탭으로 옮기고 협력업체 모드에서 그 업체를 고른 상태로 연다.
@@ -60,10 +70,14 @@ class _AppShellState extends State<AppShell> {
         onOpenPartner: (partner) => _openPartner(partner, LogSource.home),
       ),
       CommunityScreen(
+        key: _communityKey,
         onOpenCourse: (courseId) =>
             _openCourse(courseId, LogSource.runningWeek),
       ),
-      RunningScreen(key: _runningKey),
+      RunningScreen(
+        key: _runningKey,
+        onReturnToRunningWeek: _returnToRunningWeek,
+      ),
       const StampScreen(),
       ProfileScreen(onOpenCourse: _openCourse),
     ];
