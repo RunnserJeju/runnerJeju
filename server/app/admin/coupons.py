@@ -1,10 +1,11 @@
 """운영자 전용 쿠폰 API — 목록/상세/수정 + 지급 + 발급 현황.
 
 쿠폰 템플릿(coupons)은 코드가 심는다(app/coupon_rules.py). 운영툴에서 만들어 봤자
-지급 조건을 붙일 수 없어 제작·삭제는 없고, 이름·혜택·설명·유효기간·사용 업체·켜고
-끄기만 고친다. 발급 현황은 누구에게 발급됐고 어느 업체에서 썼는지를 보여준다.
+지급 조건을 붙일 수 없어 제작·삭제는 없고, 이름·혜택·설명·유효기간·확률·수량·사용 업체·
+켜고 끄기만 고친다. 발급 현황은 누구에게 발급됐고 어느 업체에서 썼는지를 보여준다.
 
-이용완료(사용)는 유저 앱(app/routers/coupons.py의 /me/coupons)에서 처리한다.
+이용완료(사용)는 유저 앱(app/routers/coupons.py의 /me/coupons)에서, kakao_channel 쿠폰의
+지급완료는 운영툴(app/admin/rewards.py)에서 처리한다.
 """
 
 import uuid
@@ -14,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import coupon_rules
 from app.db import get_db
 from app.models import Coupon, CouponPartner, Partner, User, UserCoupon
 from app.schemas import (
@@ -83,6 +85,10 @@ def _to_out(coupon: Coupon, issued_count: int, used_count: int) -> dict:
         "benefit": coupon.benefit,
         "valid_until": coupon.valid_until,
         "trigger_type": coupon.trigger_type,
+        "lines": coupon_rules.lines_of(coupon),
+        "redeem_type": coupon.redeem_type,
+        "win_rate_percent": coupon.win_rate_percent,
+        "stock": coupon.stock,
         "is_active": coupon.is_active,
         "partner_ids": [link.partner_id for link in coupon.partners],
         "created_at": coupon.created_at,
@@ -132,6 +138,8 @@ def update_coupon(
     coupon.description = (payload.description or "").strip() or None
     coupon.valid_until = payload.valid_until
     coupon.is_active = payload.is_active
+    coupon.win_rate_percent = payload.win_rate_percent
+    coupon.stock = payload.stock
     # 통째로 갈아끼우지 않고 차이만 반영한다 — 같은 (쿠폰, 업체) PK를 지웠다 다시 넣는
     # flush에 기대지 않으려고.
     current = {link.partner_id: link for link in coupon.partners}
@@ -155,8 +163,12 @@ def issue_coupon(
 
     존재하는 비탈퇴 회원에게만 발급하고, 실제 발급된 수를 돌려준다. 입력 중복은 무시.
     같은 쿠폰을 같은 사람에게 여러 번(다른 호출로) 발급하는 건 허용한다(각각 한 장).
+    재고가 있는 쿠폰은 템플릿을 잠근 뒤 세어, 자동 지급과 동시에 들어와도 수량을 넘지 않는다.
+    잔여를 넘기면 한 장도 발급하지 않고 400.
     """
-    _load_coupon_or_404(db, coupon_id)
+    coupon = coupon_rules.lock_coupon(db, coupon_id)
+    if coupon is None:
+        raise HTTPException(status_code=404, detail="쿠폰을 찾을 수 없어요.")
 
     unique_ids = set(payload.user_ids)
     valid_ids = set(
@@ -166,10 +178,16 @@ def issue_coupon(
             )
         ).scalars()
     )
-    for uid in valid_ids:
-        db.add(UserCoupon(coupon_id=coupon_id, user_id=str(uid)))
+    if not valid_ids:
+        db.commit()
+        return {"issued": 0}
+    issued = coupon_rules.issue_with_stock(db, coupon, [str(uid) for uid in valid_ids])
+    if not issued:
+        remaining = max((coupon.stock or 0) - coupon_rules.issued_count(db, coupon.id), 0)
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"수량이 부족해요. 남은 수량 {remaining}장")
     db.commit()
-    return {"issued": len(valid_ids)}
+    return {"issued": len(issued)}
 
 
 @router.get("/coupons/{coupon_id}/issued", response_model=IssuedListOut)
@@ -225,6 +243,7 @@ def list_issued(
     items = [
         {
             "id": uc.id,
+            "code": uc.code,
             "user_id": uuid.UUID(uc.user_id),
             "nickname": nickname.get(uuid.UUID(uc.user_id)),
             "issued_at": uc.issued_at,

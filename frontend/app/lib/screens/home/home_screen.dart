@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/course_partner.dart';
 import '../../models/home_curation.dart';
@@ -30,6 +31,7 @@ class HomeScreen extends StatefulWidget {
     required this.onShowMap,
     required this.onOpenCourse,
     required this.onOpenPartner,
+    required this.onOpenRunningWeek,
   });
 
   /// '지도로 보기'를 눌렀을 때. 러닝 탭으로 옮겨 준다.
@@ -40,6 +42,9 @@ class HomeScreen extends StatefulWidget {
 
   /// 추천 협력 업체 줄을 눌렀을 때. 러닝 탭으로 옮겨 그 업체 핀을 고른 상태로 연다.
   final ValueChanged<CoursePartner> onOpenPartner;
+
+  /// 러닝위크로 연결된 공지의 버튼을 눌렀을 때. 커뮤니티 탭으로 옮겨 러닝위크를 연다.
+  final VoidCallback onOpenRunningWeek;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -154,7 +159,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         LogKeys.position: banners.indexOf(notice),
                       },
                     );
-                    showNoticeDetail(context, notice);
+                    showNoticeDetail(
+                      context,
+                      notice,
+                      onOpenRunningWeek: widget.onOpenRunningWeek,
+                    );
                   },
                 );
               },
@@ -463,8 +472,12 @@ class _PartnerItem extends StatelessWidget {
   }
 }
 
-/// 공지 상세 바텀시트. 배너를 누르면 연다.
-void showNoticeDetail(BuildContext context, Notice notice) {
+/// 공지 상세 바텀시트. 배너를 누르면 연다. 링크가 있으면 맨 아래에 버튼.
+void showNoticeDetail(
+  BuildContext context,
+  Notice notice, {
+  required VoidCallback onOpenRunningWeek,
+}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -519,6 +532,34 @@ void showNoticeDetail(BuildContext context, Notice notice) {
               const SizedBox(height: 16),
               Text(notice.body, style: const TextStyle(height: 1.5)),
               const SizedBox(height: 12),
+              if (notice.link case final link?) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () async {
+                      // 시트를 닫은 뒤엔 이 context를 못 쓴다 — 미리 잡아 둔다.
+                      final messenger = ScaffoldMessenger.of(context);
+                      Navigator.of(context).pop();
+                      switch (link) {
+                        case RunningWeekLink():
+                          onOpenRunningWeek();
+                        case ExternalLink(:final uri):
+                          final opened = await launchUrl(
+                            uri,
+                            mode: LaunchMode.externalApplication,
+                          );
+                          if (!opened) {
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text('링크를 열지 못했어요.')),
+                            );
+                          }
+                      }
+                    },
+                    child: Text(notice.linkLabel ?? link.defaultLabel),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

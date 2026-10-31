@@ -93,7 +93,9 @@ class CouponCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          coupon.status.label,
+                          coupon.isReward && coupon.status == CouponStatus.used
+                              ? '지급 완료'
+                              : coupon.status.label,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -119,15 +121,16 @@ class CouponCard extends StatelessWidget {
         final when = coupon.usedAt == null
             ? ''
             : Formatters.date(coupon.usedAt!);
+        if (coupon.isReward) return '$when 경품 지급';
         return where == null ? '$when 사용' : '$when · $where에서 사용';
       case CouponStatus.expired:
         return coupon.validUntil == null
             ? '기간이 지났어요'
             : '${Formatters.date(coupon.validUntil!)}까지였어요';
       case CouponStatus.available:
-        return coupon.validUntil == null
-            ? '기한 없음'
-            : '${Formatters.date(coupon.validUntil!)}까지';
+        if (coupon.validUntil == null) return '기한 없음';
+        final until = Formatters.date(coupon.validUntil!);
+        return coupon.isReward ? '$until까지 수령' : '$until까지';
     }
   }
 }

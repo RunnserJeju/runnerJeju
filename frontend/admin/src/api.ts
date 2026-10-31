@@ -89,15 +89,23 @@ export interface Notice {
   title: string
   body: string
   image_url: string | null
+  /** 상세 아래 버튼. 외부 주소, 또는 개발자가 넣은 앱 화면(app:…) — 후자는 여기서 못 바꾼다. */
+  link_url: string | null
+  link_label: string | null
   starts_at: string | null
   ends_at: string | null
   created_at: string
 }
 
+/** 앱 화면 연결 접두사. 서버 schemas.NOTICE_APP_LINK_PREFIX와 같다. */
+export const NOTICE_APP_LINK_PREFIX = 'app:'
+
 /** 등록/수정(전체 교체) 페이로드. 서버 NoticeCreate/NoticeUpdate와 1:1. */
 export interface NoticePayload {
   title: string
   body: string
+  link_url: string | null
+  link_label: string | null
   starts_at: string | null
   ends_at: string | null
 }
@@ -594,7 +602,9 @@ export function setPartnerImages(id: string, imageUrls: string[]): Promise<Partn
 // 템플릿 행은 서버 마이그레이션이 심는다 — 여기서는 수정·지급·현황만.
 
 /** 지급 조건. 서버 app/coupon_rules.TRIGGER_TYPES와 같다. */
-export type CouponTriggerType = 'manual' | 'course_complete' | 'bingo_complete'
+export type CouponTriggerType = 'manual' | 'course_complete' | 'bingo_complete' | 'bingo_lines'
+/** 사용 방식. partner_pin: 앱에서 업체 번호 입력. kakao_channel: 카카오톡 채널 문의 → 운영자가 지급완료. */
+export type CouponRedeemType = 'partner_pin' | 'kakao_channel'
 
 export interface Coupon {
   id: string
@@ -603,6 +613,13 @@ export interface Coupon {
   benefit: string
   valid_until: string | null
   trigger_type: CouponTriggerType
+  /** bingo_lines의 기준 줄 수. 다른 조건은 null. */
+  lines: number | null
+  redeem_type: CouponRedeemType
+  /** 조건을 채웠을 때 지급될 확률(%). 100이면 확정. */
+  win_rate_percent: number
+  /** 총 발급 수량. null이면 무제한. */
+  stock: number | null
   /** 끄면 자동 지급이 멈춘다. 이미 발급된 쿠폰은 그대로 쓸 수 있다. */
   is_active: boolean
   /** 쓸 수 있는 업체. 비어 있으면 모든 업체. */
@@ -618,6 +635,8 @@ export interface CouponPayload {
   description: string | null
   valid_until: string | null
   is_active: boolean
+  win_rate_percent: number
+  stock: number | null
   partner_ids: string[]
 }
 
@@ -625,6 +644,7 @@ export type CouponStatus = 'available' | 'used' | 'expired'
 
 export interface IssuedCoupon {
   id: string
+  code: string
   user_id: string
   nickname: string | null
   issued_at: string
@@ -661,6 +681,71 @@ export function listIssuedCoupons(
 ): Promise<{ total: number; items: IssuedCoupon[] }> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
   return request(`/admin/coupons/${id}/issued?${params}`)
+}
+
+// --- 경품 지급 처리 -------------------------------------------------------
+// kakao_channel 쿠폰은 사용자가 카카오톡 채널로 캡처를 보내고, 운영자가 코드로 찾아 지급완료를 누른다.
+
+export interface RewardFulfillment {
+  id: string
+  code: string
+  user_id: string
+  nickname: string | null
+  coupon_id: string
+  coupon_name: string
+  benefit: string
+  lines: number | null
+  issued_at: string
+  used_at: string | null
+  valid_until: string | null
+  status: CouponStatus
+}
+
+export function listRewardFulfillments(
+  pendingOnly: boolean,
+  q: string,
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: RewardFulfillment[] }> {
+  const params = new URLSearchParams({
+    pending_only: String(pendingOnly),
+    limit: String(limit),
+    offset: String(offset),
+  })
+  if (q.trim()) params.set('q', q.trim())
+  return request(`/admin/rewards/fulfillments?${params}`)
+}
+
+/** 지급완료 처리. 이미 처리됐으면 409, 수령 기한이 지났으면 410. */
+export function completeRewardFulfillment(userCouponId: string): Promise<RewardFulfillment> {
+  return request(`/admin/rewards/fulfillments/${userCouponId}/complete`, { method: 'POST' })
+}
+
+export type CouponDrawResult = 'won' | 'lost' | 'sold_out'
+
+export interface CouponDraw {
+  id: string
+  coupon_id: string
+  coupon_name: string
+  user_id: string
+  nickname: string | null
+  grant_key: string
+  result: CouponDrawResult
+  /** 당첨이면 발급된 쿠폰 코드. */
+  code: string | null
+  drawn_at: string
+}
+
+export function listCouponDraws(
+  couponId: string | null,
+  q: string,
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: CouponDraw[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (couponId) params.set('coupon_id', couponId)
+  if (q.trim()) params.set('q', q.trim())
+  return request(`/admin/rewards/draws?${params}`)
 }
 
 // --- 홈 구성 ------------------------------------------------------------

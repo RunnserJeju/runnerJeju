@@ -494,7 +494,7 @@ class _InfoCard extends StatelessWidget {
                 ),
                 SizedBox(height: 3),
                 Text(
-                  '빙고를 완성해보세요.',
+                  '1줄/3줄/5줄을 완성하면 추첨으로 경품을 드려요.\n(재고 소진 시 조기 마감)',
                   style: TextStyle(fontSize: 13, color: AppColors.muted),
                 ),
               ],

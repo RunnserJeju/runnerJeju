@@ -66,16 +66,24 @@ def _running_week_stamp_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
     return [row[0] for row in sorted(rows, key=order)]
 
 
-def _bingo_coupon_id(db: Session, run_id: uuid.UUID) -> uuid.UUID | None:
-    """이 러닝으로 받은 스페셜 쿠폰."""
-    return db.execute(
-        select(UserCoupon.id)
+def _running_week_coupon_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
+    """이 러닝으로 받은 러닝위크 쿠폰. 줄 리워드는 줄 수 순, 스페셜 쿠폰이 마지막."""
+    rows = db.execute(
+        select(UserCoupon.id, Coupon.trigger_type, Coupon.trigger_params)
         .join(Coupon, UserCoupon.coupon_id == Coupon.id)
         .where(
-            UserCoupon.run_id == run_id, Coupon.trigger_type == coupon_rules.BINGO_COMPLETE
+            UserCoupon.run_id == run_id,
+            Coupon.trigger_type.in_((coupon_rules.BINGO_LINES, coupon_rules.BINGO_COMPLETE)),
         )
-        .limit(1)
-    ).scalar_one_or_none()
+    ).all()
+
+    def order(row) -> int:
+        _, trigger_type, params = row
+        if trigger_type == coupon_rules.BINGO_LINES:
+            return int((params or {}).get("lines", 0))
+        return 10_000
+
+    return [row[0] for row in sorted(rows, key=order)]
 
 
 def _to_out(db: Session, verification: Verification) -> dict:
@@ -84,7 +92,7 @@ def _to_out(db: Session, verification: Verification) -> dict:
     stamp_id = _earned_stamp_id(db, run_id, verification.course_id) if matched else None
     coupon_id = _earned_coupon_id(db, run_id, verification.course_id) if matched else None
     week_stamp_ids = _running_week_stamp_ids(db, verification.run_id) if matched else []
-    bingo_coupon_id = _bingo_coupon_id(db, verification.run_id) if matched else None
+    week_coupon_ids = _running_week_coupon_ids(db, verification.run_id) if matched else []
 
     return {
         "id": verification.id,
@@ -97,7 +105,8 @@ def _to_out(db: Session, verification: Verification) -> dict:
         "earned_stamp_id": stamp_id,
         "earned_coupon_id": coupon_id,
         "earned_running_week_stamp_ids": week_stamp_ids,
-        "earned_bingo_coupon_id": bingo_coupon_id,
+        "earned_running_week_coupon_ids": week_coupon_ids,
+        "earned_bingo_coupon_id": week_coupon_ids[0] if week_coupon_ids else None,
     }
 
 

@@ -478,6 +478,11 @@ class Notice(Base):
     # 있으면 홈 상단 캐러셀에도 실린다. PUT/DELETE /admin/notices/{id}/image로 관리.
     image_url: Mapped[str | None] = mapped_column(String(500), default=None)
 
+    # 상세 아래 버튼. 외부 주소(http/https, 운영툴 입력) 또는 앱 화면(`app:running-week` 등,
+    # 개발자가 DB에 직접 넣음 — 운영툴은 못 바꾼다, admin/notices). label null이면 앱 기본 문구.
+    link_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    link_label: Mapped[str | None] = mapped_column(String(40), default=None)
+
     # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
     # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).
     starts_at: Mapped[datetime | None] = mapped_column(
@@ -735,8 +740,18 @@ class Coupon(Base):
         DateTime(timezone=True), default=None
     )
 
-    # 'manual' | 'course_complete' | 'bingo_complete'. coupon_rules.TRIGGER_TYPES와 같아야 한다.
+    # 'manual' | 'course_complete' | 'bingo_complete' | 'bingo_lines'. coupon_rules.TRIGGER_TYPES와
+    # 같아야 한다.
     trigger_type: Mapped[str] = mapped_column(String(30), default="manual")
+    # 조건별 파라미터. bingo_lines: {lines}. 나머지는 None.
+    trigger_params: Mapped[dict | None] = mapped_column(JSONB, default=None)
+    # 조건을 채웠을 때 지급될 확률(%). 100이면 확정. 추첨 결과는 CouponDraw에 남겨 다시 뽑지 않는다.
+    win_rate_percent: Mapped[int] = mapped_column(Integer, default=100)
+    # 총 발급 수량. None이면 무제한. 발급 행 수가 원본이고 이 값은 상한(coupon_rules.issue_with_stock).
+    stock: Mapped[int | None] = mapped_column(Integer, default=None)
+    # 'partner_pin': 앱에서 업체 번호 입력 → 사용완료. 'kakao_channel': 카카오톡 채널로 문의하고
+    # 운영자가 운영툴에서 지급완료 처리. coupon_rules.REDEEM_TYPES와 같아야 한다.
+    redeem_type: Mapped[str] = mapped_column(String(20), default="partner_pin")
     # 켜져 있을 때만 자동 지급한다. 기본 꺼짐 — 러닝위크 기간에 운영자가 켠다.
     # 이미 발급된 쿠폰은 꺼도 그대로 쓸 수 있다.
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -794,8 +809,10 @@ class UserCoupon(Base):
         UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[str] = mapped_column(String(100), index=True)
-    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}", 빙고판 완성: "bingo:{week_id}").
-    # 운영자 수동 지급은 None.
+    # 사용자가 알려 주는 식별 코드("AB6D"). 운영툴 경품 지급 처리가 이걸로 찾는다.
+    code: Mapped[str] = mapped_column(String(4), unique=True)
+    # 자동 발급의 중복 방지 키(코스완료: "course:{course_id}", 빙고판 완성: "bingo:{week_id}",
+    # 빙고 줄 리워드: "bingo_lines:{week_id}:{lines}"). 운영자 수동 지급은 None.
     grant_key: Mapped[str | None] = mapped_column(String(100), default=None)
     # 달려서 받은 쿠폰이면 그 러닝. 완주 결과 화면이 "이번에 받은 쿠폰"을 찾는 데 쓴다.
     run_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -816,4 +833,35 @@ class UserCoupon(Base):
         ForeignKey("partners.id", ondelete="SET NULL"),
         default=None,
         index=True,
+    )
+
+
+class CouponDraw(Base):
+    """쿠폰 추첨 기록. (쿠폰, 사용자, grant_key)당 한 번 — 낙첨해도 같은 조건으로 다시 뽑지 않는다.
+
+    result: 'won'(쿠폰 발급) | 'lost' | 'sold_out'(재고 소진으로 추첨 없이 미지급).
+    """
+
+    __tablename__ = "coupon_draws"
+    __table_args__ = (
+        UniqueConstraint("coupon_id", "user_id", "grant_key", name="uq_coupon_draw"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    coupon_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+    grant_key: Mapped[str] = mapped_column(String(100))
+    result: Mapped[str] = mapped_column(String(10))
+    user_coupon_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_coupons.id", ondelete="SET NULL"), default=None
+    )
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), default=None
+    )
+    drawn_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
