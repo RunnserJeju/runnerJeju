@@ -3,18 +3,19 @@ import 'package:flutter/material.dart';
 import '../models/run_stamp.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import 'stamp_tone.dart';
 
 /// 스탬프 도안. 획득/미획득 두 상태를 그린다.
 ///
-/// 획득이면 색상 도안 + 스탬프 이름 + (기본 도안 한정) 획득일, 미획득이면 회색 도안을
-/// 흐릿하게(난이도별 색 도안을 흑백 처리하면 진하기가 제각각이라 회색 도안을
-/// 따로 쓴다). [stamp]가 있으면 도안/획득일 출처로 쓰고, 미획득처럼
-/// 스탬프가 없을 땐 [name]/[acquired]만으로 그린다.
+/// 획득이면 색상 도안 + 스탬프 이름 + (기본 도안 한정) 획득일, 미획득이면 같은 도안을
+/// 흑백·반투명으로(도안이 없으면 회색 잠금 도안). [stamp]가 있으면 도안/획득일
+/// 출처로 쓰고, 미획득처럼 스탬프가 없을 땐 [name]/[imageUrl]/[acquired]로 그린다.
 class StampBadge extends StatelessWidget {
   const StampBadge({
     super.key,
     this.stamp,
     this.name,
+    this.imageUrl,
     this.acquired,
     this.size = 104,
     this.onTap,
@@ -27,10 +28,13 @@ class StampBadge extends StatelessWidget {
   /// 스탬프 이름. 없으면 [stamp]에서 가져온다.
   final String? name;
 
+  /// 도안 URL. [stamp]가 없을 때(미획득) 쓴다.
+  final String? imageUrl;
+
   /// 획득 여부. 없으면 [stamp] 유무로 판단한다.
   final bool? acquired;
 
-  /// 미획득일 때의 회색 도안. 코스 도안 대신 늘 이걸 쓴다.
+  /// 도안이 없는 미획득 스탬프의 회색 잠금 도안.
   static const String _lockedAsset = 'assets/images/stamp_locked.png';
 
   final double size;
@@ -42,17 +46,22 @@ class StampBadge extends StatelessWidget {
   String get _name => name ?? stamp!.name;
   bool get _isAcquired => acquired ?? (stamp != null);
 
-  /// 원 안에 그릴 도안 URL. 획득한 스탬프의 도안.
-  String? get _designUrl => stamp?.imageUrl;
+  /// 원 안에 그릴 도안 URL.
+  String? get _designUrl => stamp?.imageUrl ?? imageUrl;
 
   @override
   Widget build(BuildContext context) {
-    final circle = _isAcquired
-        ? _circle()
-        : Opacity(
-            opacity: 0.5,
-            child: Image.asset(_lockedAsset, width: size, height: size),
-          );
+    final Widget circle;
+    if (_isAcquired) {
+      circle = _circle();
+    } else if (_designUrl != null) {
+      circle = stampLockedTone(_circle());
+    } else {
+      circle = Opacity(
+        opacity: 0.5,
+        child: Image.asset(_lockedAsset, width: size, height: size),
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,

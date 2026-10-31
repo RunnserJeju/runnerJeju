@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/transient_messenger.dart';
+import '../../widgets/stamp_tone.dart';
 import 'participation_form_screen.dart';
 import 'running_week.dart';
 import 'running_week_banner.dart';
@@ -402,9 +403,9 @@ class _BingoCellTile extends StatelessWidget {
   static const Color _lockedLabel = Color(0xFF8B8B8B);
   static const Color _line = Color(0x1A0D0D0D); // ink 10%
 
-  /// 전용 스탬프 이름의 "러닝위크 " 접두어는 칸에선 뺀다 — 자리도 없고 모두 같은 말이다.
+  /// 전용 스탬프 이름의 "[러닝위크] " 접두어는 칸에선 뺀다 — 자리도 없고 모두 같은 말이다.
   static String _label(String name) =>
-      name.replaceFirst(RegExp(r'^러닝위크\s*'), '');
+      name.replaceFirst(RegExp(r'^\[러닝위크\]\s*'), '');
 
   @override
   Widget build(BuildContext context) {
@@ -515,15 +516,6 @@ class _StampCircle extends StatelessWidget {
 
   static const String _lockedAsset = 'assets/images/stamp_locked.png';
 
-  // 흑백 + 밝기를 60~180 범위로 눌러 흰 요소(손·강아지·꽃)가 연한 칸 배경에
-  // 묻히지 않게 한다. 디자인의 미획득 도안은 흰색도 #DADADA 회색으로 그려져 있다.
-  static const ColorFilter _greyscale = ColorFilter.matrix(<double>[
-    0.0999, 0.3361, 0.0339, 0, 60, //
-    0.0999, 0.3361, 0.0339, 0, 60, //
-    0.0999, 0.3361, 0.0339, 0, 60, //
-    0, 0, 0, 1, 0,
-  ]);
-
   @override
   Widget build(BuildContext context) {
     Widget child;
@@ -533,12 +525,7 @@ class _StampCircle extends StatelessWidget {
         fit: BoxFit.contain,
         errorWidget: (_, _, _) => const _AcquiredFallback(),
       );
-      if (!acquired) {
-        child = Opacity(
-          opacity: 0.6,
-          child: ColorFiltered(colorFilter: _greyscale, child: child),
-        );
-      }
+      if (!acquired) child = stampLockedTone(child);
     } else if (!acquired) {
       child = Opacity(opacity: 0.55, child: Image.asset(_lockedAsset));
     } else {

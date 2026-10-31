@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session
 from app import storage
 from app.db import get_db
 from app.models import Stamp, StampDefinition
+from app.routers.stamps import course_id_of
 from app.schemas import AdminStampDefinitionOut, StampDefinitionUpdate
+from app.stamp_images import course_categories, resolve_image_url
 
 router = APIRouter(tags=["stamps"])
 
@@ -47,10 +49,28 @@ def _issued_counts(db: Session, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     return {definition_id: count for definition_id, count in rows}
 
 
-def _to_out(definition: StampDefinition, issued_count: int) -> AdminStampDefinitionOut:
+def _to_out(
+    definition: StampDefinition, issued_count: int, category: str | None
+) -> AdminStampDefinitionOut:
     out = AdminStampDefinitionOut.model_validate(definition)
     out.issued_count = issued_count
+    out.display_image_url = resolve_image_url(definition, category)
     return out
+
+
+def _category_of(db: Session, definition: StampDefinition) -> str | None:
+    course_id = course_id_of(definition)
+    if course_id is None:
+        return None
+    return course_categories(db, [course_id]).get(course_id)
+
+
+def _single_out(db: Session, definition: StampDefinition) -> AdminStampDefinitionOut:
+    return _to_out(
+        definition,
+        _issued_counts(db, [definition.id]).get(definition.id, 0),
+        _category_of(db, definition),
+    )
 
 
 @router.get("/stamps", response_model=list[AdminStampDefinitionOut])
@@ -64,7 +84,13 @@ def list_stamp_definitions(db: Session = Depends(get_db)):
         ).scalars()
     )
     counts = _issued_counts(db, [d.id for d in definitions])
-    return [_to_out(d, counts.get(d.id, 0)) for d in definitions]
+    categories = course_categories(
+        db, {cid for d in definitions if (cid := course_id_of(d)) is not None}
+    )
+    return [
+        _to_out(d, counts.get(d.id, 0), categories.get(course_id_of(d)))
+        for d in definitions
+    ]
 
 
 @router.patch("/stamps/{stamp_id}", response_model=AdminStampDefinitionOut)
@@ -81,7 +107,7 @@ def update_stamp_definition(
     definition.sort_order = payload.sort_order
     db.commit()
     db.refresh(definition)
-    return _to_out(definition, _issued_counts(db, [definition.id]).get(definition.id, 0))
+    return _single_out(db, definition)
 
 
 @router.put("/stamps/{stamp_id}/image", response_model=AdminStampDefinitionOut)
@@ -123,7 +149,7 @@ def set_stamp_image(
     definition.image_url = new_url
     db.commit()
     db.refresh(definition)
-    return _to_out(definition, _issued_counts(db, [definition.id]).get(definition.id, 0))
+    return _single_out(db, definition)
 
 
 @router.delete("/stamps/{stamp_id}/image", response_model=AdminStampDefinitionOut)
@@ -134,4 +160,4 @@ def delete_stamp_image(stamp_id: uuid.UUID, db: Session = Depends(get_db)):
         definition.image_url = None
         db.commit()
         db.refresh(definition)
-    return _to_out(definition, _issued_counts(db, [definition.id]).get(definition.id, 0))
+    return _single_out(db, definition)
