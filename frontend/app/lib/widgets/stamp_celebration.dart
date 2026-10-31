@@ -213,9 +213,11 @@ class _StampFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 도안이 투명 PNG라 어두운 배경·빛이 비치지 않게 흰 원을 깐다.
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
+        color: Colors.white,
         boxShadow: [
           BoxShadow(
             color: AppColors.accent.withValues(alpha: 0.6),
