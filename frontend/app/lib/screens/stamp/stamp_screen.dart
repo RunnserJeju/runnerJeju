@@ -319,9 +319,7 @@ class _StampGrid extends StatelessWidget {
                   final slot = slots[index];
                   return _StampCard(
                     slot: slot,
-                    onTap: slot.acquired || slot.description != null
-                        ? () => onTapStamp(slot)
-                        : null,
+                    onTap: () => onTapStamp(slot),
                   );
                 },
               ),
@@ -363,14 +361,16 @@ class _StampCard extends StatelessWidget {
             children: [
               _StampImage(url: slot.imageUrl, acquired: acquired),
               const SizedBox(height: 10),
+              // 두 줄까지, 넘으면 말줄임. 칸 높이(mainAxisExtent)는 고정이라 두 줄이어도 안 늘어난다.
               Text(
                 slot.name,
-                maxLines: 1,
+                maxLines: 2,
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
+                  height: 1.25,
                   color: acquired ? AppColors.ink : AppColors.muted,
                 ),
               ),
