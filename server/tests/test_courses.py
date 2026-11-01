@@ -844,43 +844,58 @@ def _definition(**overrides) -> StampDefinition:
 class TestStampImage:
     """스탬프 도안 등록/삭제. 도안은 스탬프 종류에 있고 스탬프 전용 버킷을 쓴다(#71)."""
 
-    def _patch_storage(self, monkeypatch, *, url="https://cdn/stamp-new.png"):
+    PUBLIC = f"https://cdn/storage/v1/object/public/{storage.SUPABASE_STAMP_BUCKET}/"
+
+    def _patch_storage(self, monkeypatch):
+        """upload_fixed는 올린 경로를 기록하고 그 public URL을 돌려준다."""
         deleted: list[str] = []
-        buckets: list = []
-        monkeypatch.setattr(
-            storage,
-            "upload_image",
-            lambda content, *, content_type, extension, bucket=None: buckets.append(bucket)
-            or url,
-        )
+        uploads: list = []
+
+        def upload_fixed(content, *, path, content_type, bucket):
+            uploads.append((path, bucket))
+            return self.PUBLIC + path
+
+        monkeypatch.setattr(storage, "upload_fixed", upload_fixed)
         monkeypatch.setattr(
             storage, "delete_image", lambda old, *, bucket=None: deleted.append(old)
         )
-        return deleted, buckets
+        return deleted, uploads
 
-    def test_sets_image_when_none(self, monkeypatch):
-        deleted, buckets = self._patch_storage(monkeypatch)
+    def test_sets_image_at_fixed_path_with_version(self, monkeypatch):
+        deleted, uploads = self._patch_storage(monkeypatch)
         definition = _definition()
 
         result = admin_stamps_router.set_stamp_image(
             definition.id, FakeUpload(), _StampFakeSession(definition)
         )
 
-        assert definition.image_url == "https://cdn/stamp-new.png"
-        assert result.image_url == "https://cdn/stamp-new.png"
+        path = f"stamps/{definition.id}.png"
+        assert uploads == [(path, storage.SUPABASE_STAMP_BUCKET)]
+        assert result.image_url.startswith(self.PUBLIC + path + "?v=")
         assert deleted == []
-        assert buckets == [storage.SUPABASE_STAMP_BUCKET]
 
-    def test_replaces_url_but_keeps_old_file(self, monkeypatch):
-        deleted, _ = self._patch_storage(monkeypatch)
-        definition = _definition(image_url="https://cdn/stamp-old.png")
+    def test_replace_overwrites_same_managed_path(self, monkeypatch):
+        deleted, uploads = self._patch_storage(monkeypatch)
+        definition = _definition(image_url=self.PUBLIC + "runningweek/gapado.png?v=1")
 
         admin_stamps_router.set_stamp_image(
             definition.id, FakeUpload(), _StampFakeSession(definition)
         )
 
-        assert definition.image_url == "https://cdn/stamp-new.png"
+        assert uploads == [("runningweek/gapado.png", storage.SUPABASE_STAMP_BUCKET)]
         assert deleted == []
+
+    def test_replace_moves_legacy_root_file_and_deletes_it(self, monkeypatch):
+        deleted, uploads = self._patch_storage(monkeypatch)
+        old = self.PUBLIC + "0a8aec84-2a37-4a25-8085-0b156595ab8d.png"
+        definition = _definition(image_url=old)
+
+        admin_stamps_router.set_stamp_image(
+            definition.id, FakeUpload(), _StampFakeSession(definition)
+        )
+
+        assert uploads == [(f"stamps/{definition.id}.png", storage.SUPABASE_STAMP_BUCKET)]
+        assert deleted == [old]
 
     def test_rejects_non_image_type(self, monkeypatch):
         self._patch_storage(monkeypatch)
@@ -906,7 +921,7 @@ class TestStampImage:
 
         assert exc_info.value.status_code == 404
 
-    def test_delete_clears_url_but_keeps_file(self, monkeypatch):
+    def test_delete_clears_url_and_file(self, monkeypatch):
         deleted, _ = self._patch_storage(monkeypatch)
         definition = _definition(image_url="https://cdn/stamp-old.png")
 
@@ -916,7 +931,7 @@ class TestStampImage:
 
         assert definition.image_url is None
         assert result.image_url is None
-        assert deleted == []
+        assert deleted == ["https://cdn/stamp-old.png"]
 
 
 class TestStampToOut:

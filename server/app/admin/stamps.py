@@ -7,6 +7,7 @@
 /stamps/{id}/image로 분리했다(공지 배너와 같은 방식).
 """
 
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -110,17 +111,26 @@ def update_stamp_definition(
     return _single_out(db, definition)
 
 
+def _fixed_path(definition: StampDefinition, extension: str) -> str:
+    """도안을 올릴 고정 경로. 스탬프마다 한 파일이고 교체는 같은 자리에 덮어쓴다.
+
+    이미 버킷 안 폴더(`runningweek/{코스}`, `stamps/…`)에 있으면 그 이름을 지킨다 — 사람이
+    알아볼 수 있게 붙인 이름이다. 아니면 `stamps/{id}`. 루트의 uuid 파일은 옛 방식이라 옮긴다.
+    """
+    current = storage.object_path(definition.image_url or "", bucket=storage.SUPABASE_STAMP_BUCKET)
+    if current and "/" in current:
+        return current.rsplit(".", 1)[0] + f".{extension}"
+    return f"stamps/{definition.id}.{extension}"
+
+
 @router.put("/stamps/{stamp_id}/image", response_model=AdminStampDefinitionOut)
 def set_stamp_image(
     stamp_id: uuid.UUID,
     file: UploadFile = File(..., description="스탬프 도안 (jpg/png/webp)"),
     db: Session = Depends(get_db),
 ):
-    """도안을 올린다(교체 포함).
-
-    교체해도 옛 파일은 Storage에 남긴다 — 도안 하나를 여러 스탬프가 같이 쓰던
-    시절의 파일이 있어(난이도별 도안) 지우면 다른 스탬프까지 깨진다.
-    """
+    """도안을 올린다(교체 포함). 고정 경로에 덮어쓰고 URL에 `?v=시각`을 붙여 캐시를 깬다.
+    경로가 바뀌는 경우(확장자 변경, 옛 uuid 파일)에만 옛 파일을 지운다."""
     definition = _load_or_404(db, stamp_id)
 
     extension = _ALLOWED_IMAGE_TYPES.get(file.content_type or "")
@@ -136,28 +146,31 @@ def set_stamp_image(
     if not content:
         raise HTTPException(status_code=422, detail="빈 파일이에요.")
 
+    path = _fixed_path(definition, extension)
     try:
-        new_url = storage.upload_image(
-            content,
-            content_type=file.content_type,
-            extension=extension,
-            bucket=storage.SUPABASE_STAMP_BUCKET,
+        new_url = storage.upload_fixed(
+            content, path=path, content_type=file.content_type, bucket=storage.SUPABASE_STAMP_BUCKET
         )
     except storage.StorageUploadError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    definition.image_url = new_url
+    old_url = definition.image_url
+    definition.image_url = f"{new_url}?v={int(time.time())}"
     db.commit()
     db.refresh(definition)
+    if old_url and storage.object_path(old_url, bucket=storage.SUPABASE_STAMP_BUCKET) != path:
+        storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
     return _single_out(db, definition)
 
 
 @router.delete("/stamps/{stamp_id}/image", response_model=AdminStampDefinitionOut)
 def delete_stamp_image(stamp_id: uuid.UUID, db: Session = Depends(get_db)):
-    """도안을 뗀다(컬럼만 NULL). Storage 파일은 지우지 않는다."""
+    """도안을 뗀다. 스탬프마다 파일이 하나뿐이라 Storage 파일도 지운다(실패는 무시)."""
     definition = _load_or_404(db, stamp_id)
     if definition.image_url:
+        old_url = definition.image_url
         definition.image_url = None
         db.commit()
         db.refresh(definition)
+        storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
     return _single_out(db, definition)

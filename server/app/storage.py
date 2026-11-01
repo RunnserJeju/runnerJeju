@@ -125,6 +125,14 @@ def upload_fixed(content: bytes, *, path: str, content_type: str, bucket: str) -
     return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
 
 
+def object_path(image_url: str, *, bucket: str) -> str | None:
+    """public URL에서 버킷 안 오브젝트 경로를 뽑는다(`?v=` 같은 쿼리는 뗀다). 다른 버킷이면 None."""
+    marker = f"/object/public/{bucket}/"
+    if marker not in image_url:
+        return None
+    return image_url.split(marker, 1)[1].split("?", 1)[0]
+
+
 def delete_image(image_url: str, *, bucket: str | None = None) -> None:
     """`upload_image`가 돌려준 public URL로 Storage 오브젝트를 지운다.
 
@@ -139,10 +147,9 @@ def delete_image(image_url: str, *, bucket: str | None = None) -> None:
         return
 
     bucket = bucket or SUPABASE_STORAGE_BUCKET
-    marker = f"/object/public/{bucket}/"
-    if marker not in image_url:
+    path = object_path(image_url, bucket=bucket)
+    if path is None:
         return
-    path = image_url.split(marker, 1)[1]
 
     try:
         httpx.delete(
