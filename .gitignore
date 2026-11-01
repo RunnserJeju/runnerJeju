@@ -34,3 +34,6 @@ server/static/
 frontend/app/android/key.properties
 *.jks
 frontend/admin/*.tsbuildinfo
+
+# 시나리오 테스트 리포트(실행할 때마다 생김)
+server/test-reports/

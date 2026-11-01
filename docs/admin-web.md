@@ -107,6 +107,15 @@
 
 ## 스탬프 도안 (백엔드, 2026-09-02)
 
+> **2026-11-01 고정 경로·덮어쓰기**: 운영툴 도안 업로드는 더 이상 uuid 파일을 매번 새로 만들지 않는다.
+> 스탬프마다 파일 하나 — 이미 버킷 폴더 안에 있으면 그 이름(`runningweek/{코스 슬러그}.png`)을 지키고,
+> 아니면 `stamps/{정의 id}.{ext}` — 에 `x-upsert`로 덮어쓰고 URL 뒤에 `?v=시각`을 붙여 CDN·앱 캐시를 깬다
+> (`admin/stamps._fixed_path`). 경로가 바뀔 때(확장자 변경, 옛 루트 uuid 파일)와 도안을 뗄 때는 옛 파일을 지운다.
+> 배경: 9/28 코스 25개 등록 때 같은 placeholder 도안이 코스마다 uuid로 올라가 25벌이 생겼고, 10/1에
+> 삭제 로직이 빠진 뒤 코스·스탬프가 다시 만들어지면서 고아 파일이 쌓였다. 2026-11-01 dev·live 양쪽
+> `course-stamps`를 정리해 `category/` 4장 + `runningweek/` 25장만 남겼다(`difficulty/`는 0040 이후 참조 없어 삭제).
+> 스토리지 키는 ASCII만 받아(`InvalidKey`) 코스 이름은 로마자 슬러그로 적는다.
+
 > **2026-10-22 카테고리 기본 도안 (`0040`)**: 코스 완주 스탬프는 `image_url`이 비어 있으면
 > 코스 `category`(art/road/trail/challenge)별 고정 파일을 쓴다(`app/stamp_images.py`, Storage
 > `course-stamps/category/{category}_run.png`). DB에 URL을 두지 않아 코스 카테고리를 바꾸면 도안도

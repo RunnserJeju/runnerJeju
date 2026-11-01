@@ -127,7 +127,7 @@ export default function CouponListPage({ onUnauthorized }: Props) {
                 <td className="muted">
                   {coupon.stock == null
                     ? '무제한'
-                    : `${coupon.issued_count} / ${coupon.stock} (남음 ${Math.max(coupon.stock - coupon.issued_count, 0)})`}
+                    : `${coupon.issued_count} / ${coupon.stock} (잔여 ${Math.max(coupon.stock - coupon.issued_count, 0)})`}
                 </td>
                 <td>
                   <span className={`badge ${coupon.is_active ? 'live' : 'expired'}`}>

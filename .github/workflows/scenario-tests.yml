@@ -1,0 +1,64 @@
+# 러닝위크 지급 시나리오 테스트. 진짜 Postgres(Docker)를 띄워 시나리오를 돌리고,
+# 실행 페이지에 요약표를, Artifacts에 HTML 리포트(scenario-report)를 올린다.
+# 실행 방법·리포트 읽는 법: server/tests/scenarios/README.md
+name: 시나리오 테스트
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/scenario-tests.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/scenario-tests.yml"
+  # Actions 탭에서 "Run workflow" 버튼으로 직접 돌릴 수 있게 한다.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scenario-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          # 운영 이미지(server/Dockerfile)와 같은 Python
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: 의존성 설치
+        run: uv sync --locked
+
+      - name: 시나리오 실행
+        run: uv run pytest -m scenario -q
+
+      - name: 실행 페이지에 요약 쓰기
+        if: always()
+        run: |
+          if [ -f test-reports/latest/summary.md ]; then
+            cat test-reports/latest/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "리포트가 만들어지지 않았어요. '시나리오 실행' 단계의 로그를 확인하세요(Docker·마이그레이션 실패 등)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: HTML 리포트 올리기
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-report
+          path: server/test-reports/latest/
+          if-no-files-found: ignore
+          retention-days: 90

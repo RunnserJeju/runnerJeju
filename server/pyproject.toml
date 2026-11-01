@@ -19,7 +19,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=8.0",
+    "testcontainers[postgres]>=4.15.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -30,3 +33,6 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 시나리오 테스트는 Docker의 진짜 Postgres가 필요해서 평소 pytest에서는 뺀다. `pytest -m scenario`로만 돈다.
+addopts = "-m 'not scenario'"
+markers = ["scenario: 시나리오 테스트 — Docker(Postgres)가 필요하다"]
