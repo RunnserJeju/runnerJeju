@@ -880,3 +880,8 @@ td.nowrap {
   letter-spacing: 6px;
   margin-bottom: 4px;
 }
+
+/* 러닝위크: 아래 참가자 표가 보여 주는 회차 */
+tbody tr.selected {
+  background: #eef3ff;
+}

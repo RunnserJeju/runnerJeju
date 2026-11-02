@@ -59,19 +59,26 @@ function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** 러닝위크 관리(#70). 회차마다 공개 기간·범위, 커뮤니티 배너, 참가자를 다룬다.
+/** 러닝위크 관리(#70). 위 표는 회차(배너·기간·범위), 아래 표는 고른 회차의 참가자.
  * 빙고판 배치는 운영툴에서 하지 않는다 — 개발자가 코드·DB로 넣는다. */
 export default function RunningWeekListPage({ onUnauthorized }: Props) {
   const [weeks, setWeeks] = useState<RunningWeek[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** 열린 모달. 'new'면 등록, 아니면 그 회차 수정. */
   const [editing, setEditing] = useState<'new' | RunningWeek | null>(null)
+  /** 아래 참가자 표가 보여 주는 회차. 처음엔 공개 중인 회차, 없으면 맨 위. */
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const reload = useCallback(() => {
     listRunningWeeks()
       .then((loaded) => {
         setWeeks(loaded)
         setError(null)
+        setSelectedId((current) => {
+          if (current && loaded.some((w) => w.id === current)) return current
+          const now = new Date()
+          return (loaded.find((w) => visibilityOf(w, now) === 'live') ?? loaded[0])?.id ?? null
+        })
       })
       .catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 401) {
@@ -87,6 +94,7 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
   }, [reload])
 
   const now = new Date()
+  const selected = weeks?.find((w) => w.id === selectedId) ?? null
 
   return (
     <>
@@ -113,13 +121,18 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
               <th>공개 범위</th>
               <th>공개 기간</th>
               <th>참가자</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {weeks.map((week) => {
               const visibility = visibilityOf(week, now)
               return (
-                <tr key={week.id} onClick={() => setEditing(week)}>
+                <tr
+                  key={week.id}
+                  className={week.id === selectedId ? 'selected' : undefined}
+                  onClick={() => setSelectedId(week.id)}
+                >
                   <td style={{ width: 104 }}>
                     {week.image_url ? (
                       <img className="thumb wide" src={week.image_url} alt="" />
@@ -146,12 +159,25 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
                       : '상시'}
                   </td>
                   <td className="muted">{week.participant_count}명</td>
+                  <td className="nowrap">
+                    <button
+                      className="secondary small"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setEditing(week)
+                      }}
+                    >
+                      수정
+                    </button>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       )}
+
+      {selected && <ParticipantSection week={selected} />}
 
       {editing && (
         <RunningWeekModal
@@ -188,7 +214,6 @@ function RunningWeekModal({
       {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
       <ContentSection week={week} onSaved={saved} />
       {week && <ImageSection week={week} onSaved={saved} />}
-      {week && <ParticipantSection week={week} />}
     </Modal>
   )
 }
@@ -476,9 +501,14 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
   }
 
   return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>참가자</h3>
-      <p className="muted">개인정보라 신청일로부터 1년이 지나면 폐기해야 해요(폐기 예정일 열 참고).</p>
+    <div className="card" style={{ marginTop: 24 }}>
+      <h3 style={{ marginTop: 0 }}>
+        참가자 — {week.round}회 {week.title}
+        {rows && <span className="muted"> · {rows.length}명</span>}
+      </h3>
+      <p className="muted">
+        위 표에서 회차를 누르면 바뀌어요. 개인정보라 신청일로부터 1년이 지나면 폐기해야 해요(폐기 예정일 열 참고).
+      </p>
       {error && <div className="error">{error}</div>}
       {rows == null && !error && <p className="muted">불러오는 중…</p>}
       {rows && rows.length === 0 && <p className="muted">아직 참가자가 없어요.</p>}
