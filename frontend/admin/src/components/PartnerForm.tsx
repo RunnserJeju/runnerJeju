@@ -1,6 +1,13 @@
 import { useRef, useState } from 'react'
 
-import { ApiError, geocode, type GeocodeResult, type Partner, type PartnerPayload } from '../api'
+import {
+  ApiError,
+  geocode,
+  type CourseVisibility,
+  type GeocodeResult,
+  type Partner,
+  type PartnerPayload,
+} from '../api'
 
 /** 입력 중 값. 좌표도 직접 입력할 수 있어 문자열로 들고, 제출 시 validatePartner가 바꾼다. */
 export interface PartnerFormValues {
@@ -12,6 +19,8 @@ export interface PartnerFormValues {
   instagram: string
   benefit: string
   couponPin: string
+  /** 'public' | 'admin'. 새 업체는 전체 공개로 시작한다. */
+  visibility: CourseVisibility
   /** detail(JSONB). 운영자가 직접 고치지 않는다 — 업종 선택이 category만 바꾸고
    * 나머지 키는 받은 그대로 돌려보낸다. */
   detail: Record<string, unknown>
@@ -27,6 +36,7 @@ export function emptyPartnerValues(): PartnerFormValues {
     instagram: '',
     benefit: '',
     couponPin: '',
+    visibility: 'public',
     detail: {},
   }
 }
@@ -41,6 +51,7 @@ export function valuesFromPartner(partner: Partner): PartnerFormValues {
     instagram: partner.instagram ?? '',
     benefit: partner.benefit ?? '',
     couponPin: partner.coupon_pin ?? '',
+    visibility: partner.visibility ?? 'public',
     detail: partner.detail ?? {},
   }
 }
@@ -78,6 +89,7 @@ export function validatePartner(
       instagram: optional(values.instagram),
       benefit: optional(values.benefit),
       coupon_pin: couponPin || null,
+      visibility: values.visibility,
       detail: values.detail,
     },
   }
@@ -180,6 +192,19 @@ export default function PartnerForm({ values, onChange }: Props) {
                 {category.label}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="partner-visibility">
+            공개 범위 <span className="hint">운영자면 관리자 앱 계정에만 보여요</span>
+          </label>
+          <select
+            id="partner-visibility"
+            value={values.visibility}
+            onChange={(e) => set('visibility', e.target.value as CourseVisibility)}
+          >
+            <option value="public">전체 공개</option>
+            <option value="admin">운영자</option>
           </select>
         </div>
       </div>

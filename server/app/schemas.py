@@ -173,6 +173,8 @@ class PartnerPayload(BaseModel):
     benefit: str | None = Field(default=None, max_length=500)
     # 쿠폰 사용 번호. 숫자 4자리, 업체끼리 겹치면 409. 비우면 이 업체에서 쿠폰을 못 쓴다.
     coupon_pin: str | None = Field(default=None, pattern=r"^\d{4}$")
+    # 'public' | 'admin'. admin이면 관리자 앱 계정에만 보인다(코스와 같은 규칙).
+    visibility: Visibility = "public"
     # 형태 미정인 부가 정보. 서버는 내용을 해석하지 않는다.
     detail: dict = Field(default_factory=dict)
 
@@ -239,6 +241,7 @@ class PartnerOut(PartnerSummary):
     coupon_used_count: int = 0
     # 쿠폰 사용 번호. 운영 웹에만 실린다(PartnerSummary에는 없음).
     coupon_pin: str | None = None
+    visibility: Visibility = "public"
     created_at: datetime
     updated_at: datetime
 
@@ -440,6 +443,18 @@ class VerificationCreate(BaseModel):
     course_id: uuid.UUID
 
 
+class VerificationCouponDraw(BaseModel):
+    """러닝 검증 응답에 실리는 추첨 한 건. 낙첨이면 user_coupon_id가 None."""
+
+    coupon_id: uuid.UUID
+    # 지급 조건(coupon_rules.TRIGGER_TYPES). 앱이 코스완주 팝업과 러닝위크 팝업을 나눠 띄운다.
+    trigger_type: str
+    name: str
+    benefit: str
+    result: Literal["won", "lost", "sold_out"]
+    user_coupon_id: uuid.UUID | None = None
+
+
 class VerificationOut(BaseModel):
     id: uuid.UUID
     run_id: uuid.UUID
@@ -458,6 +473,9 @@ class VerificationOut(BaseModel):
     # 이 러닝으로 받은 러닝위크 쿠폰(줄 리워드 줄 수 순 → 스페셜). 구 앱용 단일 필드는 첫 장.
     earned_running_week_coupon_ids: list[uuid.UUID] = []
     earned_bingo_coupon_id: uuid.UUID | None = None
+    # 이 러닝에서 한 쿠폰 추첨 전부(낙첨·소진 포함). 코스완주 → 줄 리워드 줄 수 순 → 스페셜.
+    # 앱은 이 목록으로 당첨/꽝 팝업을 띄운다. 위 id 필드들은 구 앱용으로 남긴다.
+    coupon_draws: list[VerificationCouponDraw] = []
 
 
 # --- 스탬프 --------------------------------------------------------------

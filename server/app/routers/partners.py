@@ -20,6 +20,13 @@ from app.schemas import PartnerCourseRef, PartnerSummary, PartnerWithCourses
 router = APIRouter(tags=["partners"])
 
 
+def visible_partners(stmt, is_admin: bool):
+    """일반 사용자에게는 visibility='public'인 업체만. 코스(visible_courses)와 같은 규칙."""
+    if is_admin:
+        return stmt
+    return stmt.where(Partner.visibility == "public")
+
+
 @router.get("/partners", response_model=list[PartnerWithCourses])
 def list_partners(
     db: Session = Depends(get_db),
@@ -28,11 +35,16 @@ def list_partners(
 ):
     """협력업체 전체(이름순)와 각 업체에 연결된 코스.
 
-    연결 코스는 코스 목록과 같은 공개 규칙(visible_courses)을 따른다 — 일반 사용자에게
-    admin 전용 코스로 넘어가는 버튼이 생기지 않게. 업체 자체는 공개 코스에 안 걸려
-    있어도 보여준다(지도에서 협력업체만 둘러볼 수도 있다).
+    업체는 visibility='public'만(관리자 앱 계정은 전부). 연결 코스는 코스 목록과 같은
+    공개 규칙(visible_courses)을 따른다 — 일반 사용자에게 admin 전용 코스로 넘어가는
+    버튼이 생기지 않게. 업체 자체는 공개 코스에 안 걸려 있어도 보여준다(지도에서
+    협력업체만 둘러볼 수도 있다).
     """
-    partners = list(db.execute(select(Partner).order_by(Partner.name)).scalars())
+    partners = list(
+        db.execute(
+            visible_partners(select(Partner), is_admin).order_by(Partner.name)
+        ).scalars()
+    )
 
     links = db.execute(
         visible_courses(

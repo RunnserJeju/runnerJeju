@@ -69,7 +69,7 @@ def list_courses(db: Session = Depends(get_db)):
     """전체 코스 목록. (관리자 전용 — 라우터 레벨에서 강제)"""
     courses = db.execute(select(Course).order_by(Course.created_at.desc())).scalars().all()
     counts = _completed_counts(db, [course.id for course in courses])
-    return [_to_summary(course, counts.get(course.id, 0), False) for course in courses]
+    return [_to_summary(course, counts.get(course.id, 0), False, is_admin=True) for course in courses]
 
 
 @router.get("/courses/{course_id}", response_model=CourseSummary)
@@ -77,7 +77,7 @@ def get_course(course_id: uuid.UUID, db: Session = Depends(get_db)):
     """코스 상세(경로 포함). (관리자 전용 — 라우터 레벨에서 강제)"""
     course = _load_course_or_404(db, course_id)
     counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
+    return _to_summary(course, counts.get(course.id, 0), False, is_admin=True)
 
 
 @router.patch("/courses/{course_id}", response_model=CourseSummary)
@@ -115,7 +115,7 @@ def update_course(
     counts = _completed_counts(db, [course.id])
 
     # is_completed_by_me는 앱 사용자 기준 값이라 운영자에겐 의미가 없다 — False 고정.
-    return _to_summary(course, counts.get(course.id, 0), False)
+    return _to_summary(course, counts.get(course.id, 0), False, is_admin=True)
 
 
 @router.post("/courses/gpx", response_model=CourseSummary, status_code=201)
@@ -205,7 +205,7 @@ def create_course_from_gpx(
 
     # 방금 만든 코스라 완주자는 아직 없다. 썸네일은 아직 없다 — 등록 직후
     # PUT /courses/{id}/thumbnail으로 따로 올린다.
-    return _to_summary(course, 0, False)
+    return _to_summary(course, 0, False, is_admin=True)
 
 
 def _load_course_or_404(db: Session, course_id: uuid.UUID) -> Course:
@@ -306,7 +306,7 @@ def replace_course_gpx(
     db.refresh(course)
 
     counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
+    return _to_summary(course, counts.get(course.id, 0), False, is_admin=True)
 
 
 @router.put("/courses/{course_id}/thumbnail", response_model=CourseSummary)
@@ -348,7 +348,7 @@ def set_course_thumbnail(
         storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
 
     counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
+    return _to_summary(course, counts.get(course.id, 0), False, is_admin=True)
 
 
 @router.delete("/courses/{course_id}/thumbnail", response_model=CourseSummary)
@@ -370,7 +370,7 @@ def delete_course_thumbnail(
         storage.delete_image(old_url, bucket=storage.SUPABASE_COURSE_BUCKET)
 
     counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
+    return _to_summary(course, counts.get(course.id, 0), False, is_admin=True)
 
 
 @router.post("/courses/{course_id}/images", response_model=CourseSummary)
@@ -403,7 +403,7 @@ def add_course_image(
     db.refresh(course)
 
     counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
+    return _to_summary(course, counts.get(course.id, 0), False, is_admin=True)
 
 
 @router.put("/courses/{course_id}/images", response_model=CourseSummary)
@@ -432,4 +432,4 @@ def set_course_images(
         storage.delete_image(url, bucket=storage.SUPABASE_COURSE_BUCKET)
 
     counts = _completed_counts(db, [course.id])
-    return _to_summary(course, counts.get(course.id, 0), False)
+    return _to_summary(course, counts.get(course.id, 0), False, is_admin=True)

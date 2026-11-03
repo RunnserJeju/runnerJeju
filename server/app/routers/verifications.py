@@ -9,7 +9,16 @@ from app import coupon_rules, running_week, stamp_rules
 from app import verification as verification_logic
 from app.db import get_db
 from app.deps import current_user_id
-from app.models import Coupon, Course, Run, Stamp, StampDefinition, UserCoupon, Verification
+from app.models import (
+    Coupon,
+    CouponDraw,
+    Course,
+    Run,
+    Stamp,
+    StampDefinition,
+    UserCoupon,
+    Verification,
+)
 from app.schemas import VerificationCreate, VerificationOut
 
 router = APIRouter(tags=["verifications"])
@@ -86,6 +95,43 @@ def _running_week_coupon_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
     return [row[0] for row in sorted(rows, key=order)]
 
 
+def _coupon_draws(db: Session, run_id: uuid.UUID) -> list[dict]:
+    """이 러닝에서 한 추첨 전부. 코스완주 → 줄 리워드 줄 수 순 → 스페셜."""
+    rows = db.execute(
+        select(
+            CouponDraw.coupon_id,
+            Coupon.name,
+            Coupon.benefit,
+            CouponDraw.result,
+            CouponDraw.user_coupon_id,
+            Coupon.trigger_type,
+            Coupon.trigger_params,
+        )
+        .join(Coupon, CouponDraw.coupon_id == Coupon.id)
+        .where(CouponDraw.run_id == run_id)
+    ).all()
+
+    def order(row) -> int:
+        trigger_type, params = row[5], row[6]
+        if trigger_type == coupon_rules.COURSE_COMPLETE:
+            return 0
+        if trigger_type == coupon_rules.BINGO_LINES:
+            return int((params or {}).get("lines", 0))
+        return 10_000
+
+    return [
+        {
+            "coupon_id": row[0],
+            "trigger_type": row[5],
+            "name": row[1],
+            "benefit": row[2],
+            "result": row[3],
+            "user_coupon_id": row[4],
+        }
+        for row in sorted(rows, key=order)
+    ]
+
+
 def _to_out(db: Session, verification: Verification) -> dict:
     matched = verification.status == "matched"
     run_id = verification.run_id
@@ -93,6 +139,7 @@ def _to_out(db: Session, verification: Verification) -> dict:
     coupon_id = _earned_coupon_id(db, run_id, verification.course_id) if matched else None
     week_stamp_ids = _running_week_stamp_ids(db, verification.run_id) if matched else []
     week_coupon_ids = _running_week_coupon_ids(db, verification.run_id) if matched else []
+    draws = _coupon_draws(db, run_id) if matched else []
 
     return {
         "id": verification.id,
@@ -107,6 +154,7 @@ def _to_out(db: Session, verification: Verification) -> dict:
         "earned_running_week_stamp_ids": week_stamp_ids,
         "earned_running_week_coupon_ids": week_coupon_ids,
         "earned_bingo_coupon_id": week_coupon_ids[0] if week_coupon_ids else None,
+        "coupon_draws": draws,
     }
 
 

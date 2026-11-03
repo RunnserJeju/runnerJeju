@@ -21,7 +21,8 @@ Future<void> showStampCelebration(BuildContext context, RunStamp stamp) async {
 
   await showGeneralDialog<void>(
     context: context,
-    barrierDismissible: true,
+    // 바깥 터치는 닫기가 아니라 건너뛰기(_StampCelebrationState._onTap)로 받는다 — 쿠폰 팝업과 같다.
+    barrierDismissible: false,
     barrierLabel: '닫기',
     barrierColor: Colors.black.withValues(alpha: 0.7),
     transitionDuration: const Duration(milliseconds: 200),
@@ -129,6 +130,15 @@ class _StampCelebrationState extends State<_StampCelebration>
     );
   }
 
+  /// 연출 중이면 끝 장면으로 건너뛰고(색종이는 그때 터진다), 끝났으면 닫는다.
+  void _onTap() {
+    if (_controller.isCompleted) {
+      Navigator.of(context).pop();
+    } else {
+      _controller.value = 1.0;
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -145,57 +155,61 @@ class _StampCelebrationState extends State<_StampCelebration>
             ? 0.0
             : sin(_controller.value * 90) * 10 * _shake.value;
 
-        return Transform.translate(
-          offset: Offset(shake, 0),
-          child: Center(
-            child: Material(
-              type: MaterialType.transparency,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    clipBehavior: Clip.none,
-                    children: [
-                      Opacity(
-                        opacity: _fadeIn.value,
-                        child: Transform.rotate(
-                          angle: _tilt.value,
-                          child: Transform.scale(
-                            scale: _scale.value,
-                            child: _StampFace(stamp: widget.stamp),
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onTap,
+          child: Transform.translate(
+            offset: Offset(shake, 0),
+            child: Center(
+              child: Material(
+                type: MaterialType.transparency,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        Opacity(
+                          opacity: _fadeIn.value,
+                          child: Transform.rotate(
+                            angle: _tilt.value,
+                            child: Transform.scale(
+                              scale: _scale.value,
+                              child: _StampFace(stamp: widget.stamp),
+                            ),
                           ),
                         ),
-                      ),
-                      ConfettiWidget(
-                        confettiController: _confetti,
-                        blastDirectionality: BlastDirectionality.explosive,
-                        numberOfParticles: 40,
-                        emissionFrequency: 0.6,
-                        minBlastForce: 10,
-                        maxBlastForce: 40,
-                        gravity: 0.25,
-                        colors: const [
-                          AppColors.accent,
-                          AppColors.tintAmber,
-                          AppColors.tintBlue,
-                          Colors.white,
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-                  Opacity(
-                    opacity: _caption.value,
-                    child: Transform.translate(
-                      offset: Offset(0, 16 * (1 - _caption.value)),
-                      child: _Caption(
-                        courseName: widget.stamp.name,
-                        onClose: () => Navigator.of(context).pop(),
+                        ConfettiWidget(
+                          confettiController: _confetti,
+                          blastDirectionality: BlastDirectionality.explosive,
+                          numberOfParticles: 40,
+                          emissionFrequency: 0.6,
+                          minBlastForce: 10,
+                          maxBlastForce: 40,
+                          gravity: 0.25,
+                          colors: const [
+                            AppColors.accent,
+                            AppColors.tintAmber,
+                            AppColors.tintBlue,
+                            Colors.white,
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 28),
+                    Opacity(
+                      opacity: _caption.value,
+                      child: Transform.translate(
+                        offset: Offset(0, 16 * (1 - _caption.value)),
+                        child: _Caption(
+                          courseName: widget.stamp.name,
+                          onClose: () => Navigator.of(context).pop(),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

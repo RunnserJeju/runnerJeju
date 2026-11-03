@@ -32,7 +32,10 @@ def _to_summary(
     completed_count: int,
     is_completed_by_me: bool,
     stamp_image_url: str | None = None,
+    *,
+    is_admin: bool = False,
 ) -> dict:
+    """is_admin이 아니면 연결 업체 중 visibility='public'만 싣는다. 운영 웹은 True로 부른다."""
     path = course.path or []
 
     return {
@@ -47,7 +50,9 @@ def _to_summary(
         "restrooms": course.restrooms or [],
         # partner_links는 selectin으로 미리 불러와 있어 코스마다 추가 조회가 없다.
         "partners": [
-            PartnerSummary.model_validate(link.partner) for link in course.partner_links
+            PartnerSummary.model_validate(link.partner)
+            for link in course.partner_links
+            if is_admin or link.partner.visibility == "public"
         ],
         "description": course.description,
         "estimated_time_min": course.estimated_time_min,
@@ -192,7 +197,11 @@ def list_courses(
 
     return [
         _to_summary(
-            course, counts.get(course.id, 0), course.id in mine, images.get(course.id)
+            course,
+            counts.get(course.id, 0),
+            course.id in mine,
+            images.get(course.id),
+            is_admin=is_admin,
         )
         for course in courses
     ]
@@ -217,7 +226,11 @@ def get_course(
     mine = _my_completed_course_ids(db, user_id, [course.id])
     images = _stamp_images(db, [course])
     summary = _to_summary(
-        course, counts.get(course.id, 0), course.id in mine, images.get(course.id)
+        course,
+        counts.get(course.id, 0),
+        course.id in mine,
+        images.get(course.id),
+        is_admin=is_admin,
     )
 
     # 응답을 다 만든 뒤 조회를 기록한다 — 여기 commit이 세션을 expire시켜도 이미 dict로

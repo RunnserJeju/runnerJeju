@@ -36,6 +36,52 @@ enum VerificationStatus {
       );
 }
 
+enum CouponDrawResult {
+  won,
+  lost,
+  soldOut;
+
+  static CouponDrawResult fromWire(String? wire) => switch (wire) {
+    'won' => won,
+    'sold_out' => soldOut,
+    _ => lost,
+  };
+}
+
+/// 이 러닝에서 한 쿠폰 추첨 한 건. 당첨이면 [userCouponId]로 쿠폰을 불러오고, 낙첨·소진이면
+/// 이름·혜택만으로 '다음 기회에' 팝업을 띄운다.
+class CouponDraw {
+  const CouponDraw({
+    required this.couponId,
+    required this.triggerType,
+    required this.name,
+    required this.benefit,
+    required this.result,
+    this.userCouponId,
+  });
+
+  final String couponId;
+
+  /// 서버 coupon_rules의 지급 조건. 'course_complete' | 'bingo_lines' | 'bingo_complete' | 'manual'.
+  final String triggerType;
+  final String name;
+  final String benefit;
+  final CouponDrawResult result;
+  final String? userCouponId;
+
+  bool get won => result == CouponDrawResult.won && userCouponId != null;
+  bool get isCourse => triggerType == 'course_complete';
+
+  factory CouponDraw.fromJson(Map<String, dynamic> json) => CouponDraw(
+    couponId: json['coupon_id'].toString(),
+    triggerType: json['trigger_type'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    benefit: json['benefit'] as String? ?? '',
+    result: CouponDrawResult.fromWire(json['result'] as String?),
+    userCouponId: json['user_coupon_id']?.toString(),
+  );
+}
+
 /// 러닝 경로가 코스와 일치하는지에 대한 검증 결과.
 class RunVerification {
   const RunVerification({
@@ -51,6 +97,7 @@ class RunVerification {
     this.earnedRunningWeekStampIds = const [],
     this.earnedRunningWeekCouponIds = const [],
     this.earnedBingoCouponId,
+    this.couponDraws = const [],
   });
 
   final String id;
@@ -80,6 +127,15 @@ class RunVerification {
 
   /// 구 서버 호환용 단일 필드(첫 장). 새 서버는 목록도 같이 준다.
   final String? earnedBingoCouponId;
+
+  /// 이 러닝에서 한 쿠폰 추첨 전부(낙첨·소진 포함). 코스완주 → 줄 리워드 줄 수 순 → 스페셜.
+  /// 구 서버는 비어 있고, 그때는 위 당첨 id 필드로 팝업을 띄운다.
+  final List<CouponDraw> couponDraws;
+
+  List<CouponDraw> get courseDraws =>
+      [for (final d in couponDraws) if (d.isCourse) d];
+  List<CouponDraw> get runningWeekDraws =>
+      [for (final d in couponDraws) if (!d.isCourse) d];
 
   /// 축하 팝업에 쓸 러닝위크 쿠폰 id. 목록이 비어 있고 단일 필드만 있으면 그걸 쓴다.
   List<String> get runningWeekCouponIds => earnedRunningWeekCouponIds.isNotEmpty
@@ -114,5 +170,9 @@ class RunVerification {
             id.toString(),
         ],
         earnedBingoCouponId: json['earned_bingo_coupon_id']?.toString(),
+        couponDraws: [
+          for (final d in json['coupon_draws'] as List? ?? const [])
+            CouponDraw.fromJson(d as Map<String, dynamic>),
+        ],
       );
 }
