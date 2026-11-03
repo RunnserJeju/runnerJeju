@@ -33,6 +33,8 @@ export interface Partner extends PartnerSummary {
   coupon_used_count: number
   /** 쿠폰 사용 번호(숫자 4자리). 없으면 이 업체에서 쿠폰을 못 쓴다. */
   coupon_pin: string | null
+  /** 공개 범위. admin이면 관리자 앱 계정에만 보인다(코스와 같은 규칙). */
+  visibility: CourseVisibility
   created_at: string
   updated_at: string
 }
@@ -47,6 +49,7 @@ export interface PartnerPayload {
   instagram: string | null
   benefit: string | null
   coupon_pin: string | null
+  visibility: CourseVisibility
   detail: Record<string, unknown>
 }
 

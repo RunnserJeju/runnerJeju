@@ -66,6 +66,7 @@ def _to_out(partner: Partner, course_count: int, coupon_used_count: int = 0) -> 
         course_count=course_count,
         coupon_used_count=coupon_used_count,
         coupon_pin=partner.coupon_pin,
+        visibility=partner.visibility,
         created_at=partner.created_at,
         updated_at=partner.updated_at,
     )
@@ -97,6 +98,7 @@ def _apply(partner: Partner, payload: PartnerPayload) -> None:
     partner.instagram = (payload.instagram or "").strip() or None
     partner.benefit = (payload.benefit or "").strip() or None
     partner.coupon_pin = payload.coupon_pin
+    partner.visibility = payload.visibility
     partner.detail = payload.detail
 
 

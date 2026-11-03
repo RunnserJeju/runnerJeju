@@ -55,7 +55,11 @@ def list_favorites(
 
     return [
         _to_summary(
-            course, counts.get(course.id, 0), course.id in mine, images.get(course.id)
+            course,
+            counts.get(course.id, 0),
+            course.id in mine,
+            images.get(course.id),
+            is_admin=is_admin,
         )
         for course in courses
     ]

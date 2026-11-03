@@ -225,6 +225,10 @@ class Partner(Base):
     # 쓴 것으로 처리된다. 비어 있으면 이 업체에서는 쿠폰을 쓸 수 없다. 앱에 내려가지 않는다.
     coupon_pin: Mapped[str | None] = mapped_column(String(4), unique=True, default=None)
 
+    # 'public' | 'admin'. 코스와 같은 규칙 — admin이면 role='admin'인 앱 사용자에게만
+    # 내려간다(앱 협력업체 목록·코스의 연결 업체·홈 큐레이션 모두). 쿠폰 번호 사용은 막지 않는다.
+    visibility: Mapped[str] = mapped_column(String(20), default="public", server_default="public")
+
     # 목록 카드 썸네일과 상세 갤러리 이미지(순서대로). 코스와 같은 구조, 전용 엔드포인트가 채운다.
     thumbnail_url: Mapped[str | None] = mapped_column(String(500), default=None)
     image_urls: Mapped[list] = mapped_column(JSONB, default=list)
