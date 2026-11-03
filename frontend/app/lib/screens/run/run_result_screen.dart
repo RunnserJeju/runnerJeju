@@ -37,6 +37,9 @@ class _RunResultScreenState extends State<RunResultScreen> {
   /// 완주로 받은 코스완료 쿠폰. 스탬프 팝업이 닫힌 뒤 이어서 보여준다.
   Coupon? _earnedCoupon;
 
+  /// 코스완료 쿠폰 추첨 팝업(당첨·낙첨)은 한 번만. 재시도로 같은 검증을 다시 받아도 막는다.
+  bool _courseDrawCelebrated = false;
+
   bool _runningWeekCelebrated = false;
 
   /// 이 러닝으로 받은 러닝위크 쿠폰(줄 리워드·스페셜). 코스완료 쿠폰 아래에 같이 보여준다.
@@ -122,10 +125,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
       if (stampId != null && stampId != _uploadResult?.earnedStampId) {
         await _loadStamp(stampId);
       }
-      final couponId = verification.earnedCouponId;
-      if (couponId != null && _earnedCoupon == null) {
-        await _loadCoupon(couponId);
-      }
+      await _celebrateCourseDraw(verification);
       await _celebrateRunningWeek(verification);
     } catch (e) {
       if (!mounted) return;
@@ -178,7 +178,35 @@ class _RunResultScreenState extends State<RunResultScreen> {
     }
   }
 
-  /// 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 러닝위크 쿠폰(줄 리워드 → 스페셜)을
+  /// 추첨 한 건의 팝업. 당첨이면 쿠폰을 불러와 획득 팝업, 아니면 '다음 기회에' 팝업.
+  Future<void> _celebrateDraw(CouponDraw draw, {bool runningWeek = false}) async {
+    if (!mounted) return;
+    if (draw.won) {
+      await _loadCoupon(draw.userCouponId!, runningWeek: runningWeek);
+    } else {
+      await showCouponMiss(context, name: draw.name, benefit: draw.benefit);
+    }
+  }
+
+  /// 코스완료 쿠폰 추첨 팝업. 구 서버는 추첨 목록이 없어 당첨 id로만 띄운다.
+  Future<void> _celebrateCourseDraw(RunVerification verification) async {
+    if (_courseDrawCelebrated) return;
+    final draws = verification.courseDraws;
+    if (draws.isEmpty) {
+      final couponId = verification.earnedCouponId;
+      if (couponId != null && _earnedCoupon == null) {
+        _courseDrawCelebrated = true;
+        await _loadCoupon(couponId);
+      }
+      return;
+    }
+    _courseDrawCelebrated = true;
+    for (final draw in draws) {
+      await _celebrateDraw(draw);
+    }
+  }
+
+  /// 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 러닝위크 쿠폰 추첨(줄 리워드 → 스페셜)을
   /// 코스 스탬프·쿠폰 팝업 뒤에 이어서 보여준다. 재시도로 같은 검증을 다시 받아도 한 번만.
   Future<void> _celebrateRunningWeek(RunVerification verification) async {
     if (_runningWeekCelebrated) return;
@@ -192,9 +220,17 @@ class _RunResultScreenState extends State<RunResultScreen> {
         // 무시: 스탬프 탭에서 볼 수 있다.
       }
     }
-    for (final couponId in verification.runningWeekCouponIds) {
-      if (!mounted) return;
-      await _loadCoupon(couponId, runningWeek: true);
+    final draws = verification.runningWeekDraws;
+    if (draws.isEmpty) {
+      // 구 서버: 당첨 id만 온다.
+      for (final couponId in verification.runningWeekCouponIds) {
+        if (!mounted) return;
+        await _loadCoupon(couponId, runningWeek: true);
+      }
+      return;
+    }
+    for (final draw in draws) {
+      await _celebrateDraw(draw, runningWeek: true);
     }
   }
 

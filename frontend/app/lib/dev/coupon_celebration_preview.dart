@@ -40,6 +40,9 @@ class _PreviewState extends State<_Preview> {
 
   void _show() => showCouponCelebration(context, _coupon);
 
+  void _showMiss() =>
+      showCouponMiss(context, name: _coupon.name, benefit: _coupon.benefit);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,7 +50,20 @@ class _PreviewState extends State<_Preview> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
-          child: FilledButton(onPressed: _show, child: const Text('다시 보기')),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton(onPressed: _show, child: const Text('당첨')),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _showMiss,
+                  child: const Text('다음 기회에'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
