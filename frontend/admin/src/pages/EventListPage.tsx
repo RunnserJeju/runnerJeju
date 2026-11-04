@@ -13,6 +13,7 @@ import {
   type CommunityEventPayload,
 } from '../api'
 import Modal from '../components/Modal'
+import SortTh, { useSort } from '../components/SortTh'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -78,6 +79,13 @@ export default function EventListPage({ onUnauthorized }: Props) {
   }, [reload])
 
   const now = new Date()
+  const { sort, toggle, sorted } = useSort(events, {
+    title: (e) => e.title,
+    status: (e) => VISIBILITY_LABEL[visibilityOf(e, now)],
+    period: (e) => e.starts_at ?? e.ends_at,
+    order: (e) => e.sort_order,
+    created: (e) => e.created_at,
+  })
 
   return (
     <>
@@ -96,15 +104,25 @@ export default function EventListPage({ onUnauthorized }: Props) {
           <thead>
             <tr>
               <th></th>
-              <th>제목</th>
-              <th>상태</th>
-              <th>노출 기간</th>
-              <th>정렬</th>
-              <th>등록일</th>
+              <SortTh sortKey="title" sort={sort} onToggle={toggle}>
+                제목
+              </SortTh>
+              <SortTh sortKey="status" sort={sort} onToggle={toggle}>
+                상태
+              </SortTh>
+              <SortTh sortKey="period" sort={sort} onToggle={toggle}>
+                노출 기간
+              </SortTh>
+              <SortTh sortKey="order" sort={sort} onToggle={toggle}>
+                정렬
+              </SortTh>
+              <SortTh sortKey="created" sort={sort} onToggle={toggle}>
+                등록일
+              </SortTh>
             </tr>
           </thead>
           <tbody>
-            {events.map((event) => {
+            {sorted!.map((event) => {
               const visibility = visibilityOf(event, now)
               return (
                 <tr key={event.id} onClick={() => setEditing(event)}>

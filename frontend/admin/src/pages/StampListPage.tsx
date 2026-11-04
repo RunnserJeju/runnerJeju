@@ -16,6 +16,7 @@ import {
 } from '../api'
 import { STAMP_SPEC, validateStampImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
+import SortTh, { useSort } from '../components/SortTh'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -67,6 +68,13 @@ export default function StampListPage({ onUnauthorized }: Props) {
   const [weeks, setWeeks] = useState<RunningWeek[]>([])
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<StampDefinition | null>(null)
+  const { sort, toggle, sorted } = useSort(stamps, {
+    name: (s) => s.name,
+    condition: (s) => CONDITION_LABEL[s.condition_type] ?? s.condition_type,
+    active: (s) => s.is_active,
+    issued: (s) => s.issued_count,
+    order: (s) => s.sort_order,
+  })
 
   const reload = useCallback(() => {
     Promise.all([listStamps(), listCourses(), listRunningWeeks()])
@@ -106,15 +114,25 @@ export default function StampListPage({ onUnauthorized }: Props) {
           <thead>
             <tr>
               <th></th>
-              <th>이름</th>
-              <th>획득 조건</th>
-              <th>상태</th>
-              <th>받은 사람</th>
-              <th>정렬</th>
+              <SortTh sortKey="name" sort={sort} onToggle={toggle}>
+                이름
+              </SortTh>
+              <SortTh sortKey="condition" sort={sort} onToggle={toggle}>
+                획득 조건
+              </SortTh>
+              <SortTh sortKey="active" sort={sort} onToggle={toggle}>
+                상태
+              </SortTh>
+              <SortTh sortKey="issued" sort={sort} onToggle={toggle}>
+                받은 사람
+              </SortTh>
+              <SortTh sortKey="order" sort={sort} onToggle={toggle}>
+                정렬
+              </SortTh>
             </tr>
           </thead>
           <tbody>
-            {stamps.map((stamp) => {
+            {sorted!.map((stamp) => {
               const detail = conditionDetail(stamp, courses, weeks)
               return (
                 <tr key={stamp.id} onClick={() => setEditing(stamp)}>

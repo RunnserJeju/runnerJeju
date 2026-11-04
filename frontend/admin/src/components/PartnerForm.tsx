@@ -3,7 +3,8 @@ import { useRef, useState } from 'react'
 import {
   ApiError,
   geocode,
-  type CourseVisibility,
+  type PartnerVisibility,
+  PARTNER_VISIBILITY_LABEL,
   type GeocodeResult,
   type Partner,
   type PartnerPayload,
@@ -20,7 +21,7 @@ export interface PartnerFormValues {
   benefit: string
   couponPin: string
   /** 'public' | 'admin'. 새 업체는 전체 공개로 시작한다. */
-  visibility: CourseVisibility
+  visibility: PartnerVisibility
   /** detail(JSONB). 운영자가 직접 고치지 않는다 — 업종 선택이 category만 바꾸고
    * 나머지 키는 받은 그대로 돌려보낸다. */
   detail: Record<string, unknown>
@@ -196,15 +197,19 @@ export default function PartnerForm({ values, onChange }: Props) {
         </div>
         <div className="field">
           <label htmlFor="partner-visibility">
-            공개 범위 <span className="hint">운영자면 관리자 앱 계정에만 보여요</span>
+            공개 범위{' '}
+            <span className="hint">운영자만: 관리자 앱 계정에만 · 숨김: 앱 어디에도 안 보여요</span>
           </label>
           <select
             id="partner-visibility"
             value={values.visibility}
-            onChange={(e) => set('visibility', e.target.value as CourseVisibility)}
+            onChange={(e) => set('visibility', e.target.value as PartnerVisibility)}
           >
-            <option value="public">전체 공개</option>
-            <option value="admin">운영자</option>
+            {(Object.keys(PARTNER_VISIBILITY_LABEL) as PartnerVisibility[]).map((v) => (
+              <option key={v} value={v}>
+                {PARTNER_VISIBILITY_LABEL[v]}
+              </option>
+            ))}
           </select>
         </div>
       </div>

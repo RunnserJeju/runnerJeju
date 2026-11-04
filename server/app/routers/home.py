@@ -19,19 +19,19 @@ from app.schemas import HomeCurationItem, HomeCurationOut
 router = APIRouter(tags=["home"])
 
 
-def load_curation(db: Session, *, is_admin: bool = True) -> HomeCurationOut:
-    """두 섹션의 구성(고른 순서대로). 운영 웹 조회(app.admin.home)도 같이 쓴다.
+def load_curation(
+    db: Session, *, is_admin: bool = False, all_partners: bool = False
+) -> HomeCurationOut:
+    """두 섹션의 구성(고른 순서대로). 운영 웹 조회(app.admin.home)는 all_partners=True.
 
-    업체는 is_admin이 아니면 visibility='public'만 — 앱은 GET /partners에 없는 id를 못 그린다.
+    업체는 visible_partners 규칙으로 거른다 — 앱은 GET /partners에 없는 id를 못 그린다.
     코스 큐레이션은 지금처럼 전부 싣는다(앱이 코스 목록과 맞춰 거른다).
     """
     courses = db.execute(select(CourseCuration).order_by(CourseCuration.sort_order)).scalars()
-    partners = db.execute(
-        visible_partners(
-            select(PartnerCuration).join(Partner, Partner.id == PartnerCuration.partner_id),
-            is_admin,
-        ).order_by(PartnerCuration.sort_order)
-    ).scalars()
+    partner_stmt = select(PartnerCuration).join(Partner, Partner.id == PartnerCuration.partner_id)
+    if not all_partners:
+        partner_stmt = visible_partners(partner_stmt, is_admin)
+    partners = db.execute(partner_stmt.order_by(PartnerCuration.sort_order)).scalars()
     return HomeCurationOut(
         courses=[
             HomeCurationItem(id=row.course_id, describe=row.describe, detail=row.detail or {})

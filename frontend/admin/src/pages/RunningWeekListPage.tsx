@@ -15,6 +15,7 @@ import {
 } from '../api'
 import { BANNER_SPEC, validateBannerImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
+import SortTh, { useSort } from '../components/SortTh'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -68,6 +69,14 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
   const [editing, setEditing] = useState<'new' | RunningWeek | null>(null)
   /** 아래 참가자 표가 보여 주는 회차. 처음엔 공개 중인 회차, 없으면 맨 위. */
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const { sort, toggle, sorted } = useSort(weeks, {
+    round: (w) => w.round,
+    title: (w) => w.title,
+    status: (w) => VISIBILITY_LABEL[visibilityOf(w, new Date())],
+    scope: (w) => VISIBILITY_SCOPE_LABEL[w.visibility],
+    period: (w) => w.starts_at ?? w.ends_at,
+    participants: (w) => w.participant_count,
+  })
 
   const reload = useCallback(() => {
     listRunningWeeks()
@@ -115,17 +124,29 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
           <thead>
             <tr>
               <th></th>
-              <th className="nowrap">회차</th>
-              <th>제목</th>
-              <th>상태</th>
-              <th>공개 범위</th>
-              <th>공개 기간</th>
-              <th>참가자</th>
+              <SortTh sortKey="round" sort={sort} onToggle={toggle} className="nowrap">
+                회차
+              </SortTh>
+              <SortTh sortKey="title" sort={sort} onToggle={toggle}>
+                제목
+              </SortTh>
+              <SortTh sortKey="status" sort={sort} onToggle={toggle}>
+                상태
+              </SortTh>
+              <SortTh sortKey="scope" sort={sort} onToggle={toggle}>
+                공개 범위
+              </SortTh>
+              <SortTh sortKey="period" sort={sort} onToggle={toggle}>
+                공개 기간
+              </SortTh>
+              <SortTh sortKey="participants" sort={sort} onToggle={toggle}>
+                참가자
+              </SortTh>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {weeks.map((week) => {
+            {sorted!.map((week) => {
               const visibility = visibilityOf(week, now)
               return (
                 <tr
@@ -462,6 +483,15 @@ function csvCell(value: string | number): string {
 function ParticipantSection({ week }: { week: RunningWeek }) {
   const [rows, setRows] = useState<Participation[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { sort, toggle, sorted } = useSort(rows, {
+    created: (r) => r.created_at,
+    name: (r) => r.name,
+    phone: (r) => r.phone,
+    gender: (r) => GENDER_LABEL[r.gender],
+    age: (r) => r.age,
+    residence: (r) => RESIDENCE_LABEL[r.residence],
+    expires: (r) => r.expires_at,
+  })
 
   useEffect(() => {
     listParticipations(week.id)
@@ -517,17 +547,31 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
           <table>
             <thead>
               <tr>
-                <th>신청일</th>
-                <th>이름</th>
-                <th>연락처</th>
-                <th>성별</th>
-                <th>나이</th>
-                <th>거주지</th>
-                <th>폐기 예정</th>
+                <SortTh sortKey="created" sort={sort} onToggle={toggle}>
+                  신청일
+                </SortTh>
+                <SortTh sortKey="name" sort={sort} onToggle={toggle}>
+                  이름
+                </SortTh>
+                <SortTh sortKey="phone" sort={sort} onToggle={toggle}>
+                  연락처
+                </SortTh>
+                <SortTh sortKey="gender" sort={sort} onToggle={toggle}>
+                  성별
+                </SortTh>
+                <SortTh sortKey="age" sort={sort} onToggle={toggle}>
+                  나이
+                </SortTh>
+                <SortTh sortKey="residence" sort={sort} onToggle={toggle}>
+                  거주지
+                </SortTh>
+                <SortTh sortKey="expires" sort={sort} onToggle={toggle}>
+                  폐기 예정
+                </SortTh>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {sorted!.map((r) => (
                 <tr key={r.id}>
                   <td className="muted">{formatDateTime(r.created_at)}</td>
                   <td>{r.name}</td>
