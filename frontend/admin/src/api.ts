@@ -941,6 +941,41 @@ export function getUserCoupons(id: string): Promise<UserCoupons> {
   return request(`/admin/users/${id}/coupons`)
 }
 
+// --- 러닝 기록 ---------------------------------------------------------------
+
+export interface AdminRun {
+  id: string
+  user_id: string
+  /** 탈퇴/미설정이면 null. */
+  nickname: string | null
+  email: string | null
+  /** 코스 없이 뛴 러닝(자유 러닝)이면 null. */
+  course_id: string | null
+  course_name: string | null
+  distance_km: number
+  duration_sec: number
+  started_at: string
+  ended_at: string
+}
+
+/** 모든 회원의 러닝 기록. from/to는 KST 날짜(YYYY-MM-DD) 양끝 포함, 시작 시각 기준. */
+export function listAdminRuns(
+  from: string,
+  to: string,
+  order: 'asc' | 'desc',
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: AdminRun[] }> {
+  const params = new URLSearchParams({
+    from,
+    to,
+    order,
+    limit: String(limit),
+    offset: String(offset),
+  })
+  return request(`/admin/runs?${params}`)
+}
+
 // --- 원본 로그 ---------------------------------------------------------
 
 export interface UserLogRow {

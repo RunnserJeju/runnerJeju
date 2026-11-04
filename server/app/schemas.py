@@ -843,6 +843,31 @@ class UserListOut(BaseModel):
     items: list[UserSummaryOut]
 
 
+# --- 러닝 기록 (운영자 조회) ---------------------------------------------
+
+
+class AdminRunOut(BaseModel):
+    """러닝 기록 한 행 — 누가 어느 코스를 얼마나 뛰었나. 경로(path)는 무거워 싣지 않는다."""
+
+    id: uuid.UUID
+    user_id: str
+    nickname: str | None  # 탈퇴/미설정이면 None
+    email: str | None
+    course_id: uuid.UUID | None  # 코스 없이 뛴 러닝(자유 러닝)이면 None
+    course_name: str | None
+    distance_km: float
+    duration_sec: int
+    started_at: datetime
+    ended_at: datetime
+
+
+class AdminRunListOut(BaseModel):
+    """total은 기간 필터 전체 건수(페이지 UI용)."""
+
+    total: int
+    items: list[AdminRunOut]
+
+
 # --- 이용 통계 (운영자) ---------------------------------------------------
 # 완주·찜·이용자·회원·조회수를 집계한다. registered/active는 탈퇴자 제외(현재),
 # 누적 활동·코스 지표는 탈퇴자 포함(역사적 누적).

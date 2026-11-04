@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { ApiError, getMetricsBatch, type MetricPoint } from '../api'
+import RunHistory from '../components/RunHistory'
 import { downloadCsv } from '../utils/csv'
 import { kstToday } from '../utils/dates'
 
@@ -30,7 +31,11 @@ function mergeByCourse(batch: Record<string, MetricPoint[]>): CourseRow[] {
   for (const [metric, points] of Object.entries(batch)) {
     for (const p of points) {
       if (!p.key) continue
-      const row = rows.get(p.key) ?? { id: p.key, name: p.name ?? '(삭제된 코스)', counts: {} }
+      const row = rows.get(p.key) ?? {
+        id: p.key,
+        name: p.name ?? '(삭제된 코스)',
+        counts: {},
+      }
       row.counts[metric] = p.count
       rows.set(p.key, row)
     }
@@ -42,6 +47,7 @@ function mergeByCourse(batch: Record<string, MetricPoint[]>): CourseRow[] {
 export default function CourseStatsPage({ onUnauthorized }: Props) {
   const [courses, setCourses] = useState<CourseRow[] | null>(null)
   const [sort, setSort] = useState(COLUMNS[0].key)
+  const [tab, setTab] = useState<'stats' | 'runs'>('stats')
   const [error, setError] = useState<string | null>(null)
 
   const handleError = useCallback(
@@ -86,47 +92,63 @@ export default function CourseStatsPage({ onUnauthorized }: Props) {
     <>
       <div className="page-head">
         <h2>코스</h2>
-        <button className="secondary small" onClick={download} disabled={!sorted?.length}>
-          CSV 다운로드
+        {tab === 'stats' && (
+          <button className="secondary small" onClick={download} disabled={!sorted?.length}>
+            CSV 다운로드
+          </button>
+        )}
+      </div>
+      <div className="tabs" style={{ marginTop: 0, marginBottom: 16 }}>
+        <button className={tab === 'stats' ? 'active' : undefined} onClick={() => setTab('stats')}>
+          코스별 지표
+        </button>
+        <button className={tab === 'runs' ? 'active' : undefined} onClick={() => setTab('runs')}>
+          러닝 기록
         </button>
       </div>
-      <p className="muted page-desc">
-        누적 기준이에요. 열 제목을 누르면 그 기준으로 정렬돼요. 미완주 = 코스 러닝 중 검증 미통과.
-      </p>
-      {error && <div className="error">{error}</div>}
-      {sorted == null && !error && <p className="muted">불러오는 중…</p>}
-      {sorted && sorted.length === 0 && <p className="muted">아직 코스 활동이 없어요.</p>}
-      {sorted && sorted.length > 0 && (
-        <table className="stats-table">
-          <thead>
-            <tr>
-              <th>코스</th>
-              {COLUMNS.map((col) => (
-                <th
-                  key={col.key}
-                  className={`sortable${col.key === sort ? ' active' : ''}`}
-                  onClick={() => setSort(col.key)}
-                >
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((c) => (
-              <tr key={c.id}>
-                <td>
-                  <strong>{c.name}</strong>
-                </td>
-                {COLUMNS.map((col) => (
-                  <td key={col.key} className={col.key === sort ? 'active' : undefined}>
-                    {c.counts[col.key] ?? 0}
-                  </td>
+      {tab === 'runs' && <RunHistory onUnauthorized={onUnauthorized} />}
+      {tab === 'stats' && (
+        <>
+          <p className="muted page-desc">
+            누적 기준이에요. 열 제목을 누르면 그 기준으로 정렬돼요. 미완주 = 코스 러닝 중 검증
+            미통과.
+          </p>
+          {error && <div className="error">{error}</div>}
+          {sorted == null && !error && <p className="muted">불러오는 중…</p>}
+          {sorted && sorted.length === 0 && <p className="muted">아직 코스 활동이 없어요.</p>}
+          {sorted && sorted.length > 0 && (
+            <table className="stats-table">
+              <thead>
+                <tr>
+                  <th>코스</th>
+                  {COLUMNS.map((col) => (
+                    <th
+                      key={col.key}
+                      className={`sortable${col.key === sort ? ' active' : ''}`}
+                      onClick={() => setSort(col.key)}
+                    >
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <strong>{c.name}</strong>
+                    </td>
+                    {COLUMNS.map((col) => (
+                      <td key={col.key} className={col.key === sort ? 'active' : undefined}>
+                        {c.counts[col.key] ?? 0}
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </tbody>
+            </table>
+          )}
+        </>
       )}
     </>
   )
