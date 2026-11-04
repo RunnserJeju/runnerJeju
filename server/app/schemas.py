@@ -964,6 +964,44 @@ class CouponDrawListOut(BaseModel):
 
 class MyCouponOut(BaseModel):
     """앱: 내 쿠폰 한 장. 혜택·유효기간은 템플릿을 라이브 참조."""
+class UserCouponRowOut(BaseModel):
+    """회원 상세 쿠폰 섹션의 한 장. 템플릿 이름·혜택은 라이브 참조."""
+
+    id: uuid.UUID  # user_coupon id
+    code: str
+    coupon_id: uuid.UUID
+    coupon_name: str
+    benefit: str
+    redeem_type: CouponRedeemType
+    # 자동 발급 출처("course:…", "bingo:…", "bingo_lines:…"). 운영자 수동 지급은 None.
+    grant_key: str | None
+    issued_at: datetime
+    used_at: datetime | None
+    valid_until: datetime | None
+    used_partner_name: str | None
+    status: CouponStatus
+
+
+class UserCouponDrawOut(BaseModel):
+    """회원 상세 추첨 이력 한 행."""
+
+    id: uuid.UUID
+    coupon_id: uuid.UUID
+    coupon_name: str
+    grant_key: str
+    result: CouponDrawResult
+    code: str | None
+    drawn_at: datetime
+
+
+class UserCouponsOut(BaseModel):
+    """회원 상세 쿠폰 섹션 — 보유(사용가능·만료) / 사용 이력 / 추첨 이력."""
+
+    held: list[UserCouponRowOut]
+    used: list[UserCouponRowOut]
+    draws: list[UserCouponDrawOut]
+
+
 
     id: uuid.UUID  # user_coupon id
     # 운영자에게 알려 주는 식별 코드. kakao_channel 수령 화면에 보인다.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { ApiError, listPartners, type Partner } from '../api'
 import PartnerModal from '../modals/PartnerModal'
+import SortTh, { useSort } from '../components/SortTh'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -13,6 +14,15 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
   const [error, setError] = useState<string | null>(null)
   /** 모달 대상. null=새 업체 등록, undefined=닫힘. */
   const [editing, setEditing] = useState<Partner | null | undefined>(undefined)
+  const { sort, toggle, sorted } = useSort(partners, {
+    name: (p) => p.name,
+    address: (p) => p.address,
+    benefit: (p) => p.benefit,
+    pin: (p) => p.coupon_pin,
+    instagram: (p) => instagramHandle(p.instagram),
+    courses: (p) => p.course_count,
+    used: (p) => p.coupon_used_count,
+  })
 
   const reload = useCallback(() => {
     listPartners()
@@ -50,17 +60,31 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
           <thead>
             <tr>
               <th></th>
-              <th>이름</th>
-              <th>주소</th>
-              <th>혜택</th>
-              <th className="nowrap">쿠폰 번호</th>
-              <th>인스타그램</th>
-              <th className="nowrap">연결 코스</th>
-              <th className="nowrap">쿠폰 사용</th>
+              <SortTh sortKey="name" sort={sort} onToggle={toggle}>
+                이름
+              </SortTh>
+              <SortTh sortKey="address" sort={sort} onToggle={toggle}>
+                주소
+              </SortTh>
+              <SortTh sortKey="benefit" sort={sort} onToggle={toggle}>
+                혜택
+              </SortTh>
+              <SortTh sortKey="pin" sort={sort} onToggle={toggle} className="nowrap">
+                쿠폰 번호
+              </SortTh>
+              <SortTh sortKey="instagram" sort={sort} onToggle={toggle}>
+                인스타그램
+              </SortTh>
+              <SortTh sortKey="courses" sort={sort} onToggle={toggle} className="nowrap">
+                연결 코스
+              </SortTh>
+              <SortTh sortKey="used" sort={sort} onToggle={toggle} className="nowrap">
+                쿠폰 사용
+              </SortTh>
             </tr>
           </thead>
           <tbody>
-            {partners.map((partner) => (
+            {sorted!.map((partner) => (
               <tr key={partner.id} onClick={() => setEditing(partner)}>
                 <td style={{ width: 56 }}>
                   {partner.thumbnail_url ? (

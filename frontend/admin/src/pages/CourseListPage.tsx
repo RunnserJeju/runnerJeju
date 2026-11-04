@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ApiError, COURSE_CATEGORY_LABEL, listCourses, type Course } from '../api'
 import CourseCreateModal from '../modals/CourseCreateModal'
 import CourseEditModal from '../modals/CourseEditModal'
+import SortTh, { useSort } from '../components/SortTh'
 
 const DIFFICULTY_LABEL: Record<number, string> = { 1: '★', 2: '★★', 3: '★★★' }
 const VISIBILITY_LABEL = { public: '전체', admin: '운영자' } as const
@@ -18,6 +19,15 @@ export default function CourseListPage({ onUnauthorized }: Props) {
   const [creating, setCreating] = useState(false)
   /** 수정 모달 대상. notice는 등록 직후 이어서 열 때 전달된다. */
   const [editing, setEditing] = useState<{ id: string; notice?: string } | null>(null)
+  const { sort, toggle, sorted } = useSort(courses, {
+    name: (c) => c.name,
+    distance: (c) => c.distance_km,
+    category: (c) => COURSE_CATEGORY_LABEL[c.category],
+    difficulty: (c) => c.difficulty,
+    visibility: (c) => (c.visibility ? VISIBILITY_LABEL[c.visibility] : null),
+    tags: (c) => c.tags,
+    completed: (c) => c.completed_count,
+  })
 
   const reload = useCallback(() => {
     listCourses()
@@ -52,17 +62,31 @@ export default function CourseListPage({ onUnauthorized }: Props) {
           <thead>
             <tr>
               <th></th>
-              <th>이름</th>
-              <th>거리</th>
-              <th className="nowrap">카테고리</th>
-              <th>난이도</th>
-              <th>공개</th>
-              <th>태그</th>
-              <th>완주</th>
+              <SortTh sortKey="name" sort={sort} onToggle={toggle}>
+                이름
+              </SortTh>
+              <SortTh sortKey="distance" sort={sort} onToggle={toggle}>
+                거리
+              </SortTh>
+              <SortTh sortKey="category" sort={sort} onToggle={toggle} className="nowrap">
+                카테고리
+              </SortTh>
+              <SortTh sortKey="difficulty" sort={sort} onToggle={toggle}>
+                난이도
+              </SortTh>
+              <SortTh sortKey="visibility" sort={sort} onToggle={toggle}>
+                공개
+              </SortTh>
+              <SortTh sortKey="tags" sort={sort} onToggle={toggle}>
+                태그
+              </SortTh>
+              <SortTh sortKey="completed" sort={sort} onToggle={toggle}>
+                완주
+              </SortTh>
             </tr>
           </thead>
           <tbody>
-            {courses.map((course) => (
+            {sorted!.map((course) => (
               <tr key={course.id} onClick={() => setEditing({ id: course.id })}>
                 <td style={{ width: 56 }}>
                   {course.thumbnail_url ? (

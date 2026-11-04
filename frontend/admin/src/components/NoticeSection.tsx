@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ApiError, listNotices, type Notice } from '../api'
 import NoticeCreateModal from '../modals/NoticeCreateModal'
 import NoticeEditModal from '../modals/NoticeEditModal'
+import SortTh, { useSort } from '../components/SortTh'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -62,6 +63,12 @@ export default function NoticeSection({ onUnauthorized }: Props) {
   }, [reload])
 
   const now = new Date()
+  const { sort, toggle, sorted } = useSort(notices, {
+    title: (n) => n.title,
+    status: (n) => VISIBILITY_LABEL[visibilityOf(n, now)],
+    period: (n) => n.starts_at ?? n.ends_at,
+    created: (n) => n.created_at,
+  })
 
   return (
     <div className="card">
@@ -78,14 +85,22 @@ export default function NoticeSection({ onUnauthorized }: Props) {
           <thead>
             <tr>
               <th></th>
-              <th>제목</th>
-              <th>상태</th>
-              <th>노출 기간</th>
-              <th>등록일</th>
+              <SortTh sortKey="title" sort={sort} onToggle={toggle}>
+                제목
+              </SortTh>
+              <SortTh sortKey="status" sort={sort} onToggle={toggle}>
+                상태
+              </SortTh>
+              <SortTh sortKey="period" sort={sort} onToggle={toggle}>
+                노출 기간
+              </SortTh>
+              <SortTh sortKey="created" sort={sort} onToggle={toggle}>
+                등록일
+              </SortTh>
             </tr>
           </thead>
           <tbody>
-            {notices.map((notice) => {
+            {sorted!.map((notice) => {
               const visibility = visibilityOf(notice, now)
               return (
                 <tr key={notice.id} onClick={() => setEditing({ id: notice.id })}>

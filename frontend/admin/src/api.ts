@@ -871,18 +871,26 @@ export interface UserDetail extends UserSummary {
   completed_courses: { course_id: string; name: string; acquired_at: string }[]
 }
 
-/** 회원 목록(탈퇴 제외, 가입일 최신순). keyword는 닉네임·이메일 부분일치. */
+export type UserSortKey = 'nickname' | 'email' | 'created_at' | 'last_login_at' | 'completed_count'
+
+/** 회원 목록(탈퇴 제외). keyword는 닉네임·이메일 부분일치, 정렬 기본은 가입일 최신순. */
 export function listUsers(
   keyword: string,
   limit: number,
   offset: number,
 ): Promise<{ total: number; items: UserSummary[] }> {
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    sort: sort.key,
+    order: sort.dir,
+  })
   if (keyword.trim()) params.set('keyword', keyword.trim())
   return request(`/admin/users?${params}`)
 }
 
 export function getUser(id: string): Promise<UserDetail> {
+  sort: { key: UserSortKey; dir: 'asc' | 'desc' } = { key: 'created_at', dir: 'desc' },
   return request(`/admin/users/${id}`)
 }
 
@@ -893,6 +901,43 @@ export interface UserLogRow {
   log_name: string
   user_id: string | null
   nickname: string | null
+export interface UserCouponRow {
+  id: string
+  code: string
+  coupon_id: string
+  coupon_name: string
+  benefit: string
+  redeem_type: CouponRedeemType
+  /** 자동 발급 출처(course:… / bingo:… / bingo_lines:…). 운영자 수동 지급은 null. */
+  grant_key: string | null
+  issued_at: string
+  used_at: string | null
+  valid_until: string | null
+  used_partner_name: string | null
+  status: CouponStatus
+}
+
+export interface UserCouponDraw {
+  id: string
+  coupon_id: string
+  coupon_name: string
+  grant_key: string
+  result: CouponDrawResult
+  code: string | null
+  drawn_at: string
+}
+
+export interface UserCoupons {
+  /** 보유 중 — 사용 가능 + 만료. */
+  held: UserCouponRow[]
+  used: UserCouponRow[]
+  draws: UserCouponDraw[]
+}
+
+export function getUserCoupons(id: string): Promise<UserCoupons> {
+  return request(`/admin/users/${id}/coupons`)
+}
+
   session_id: string | null
   detail: Record<string, unknown>
   platform: string | null
