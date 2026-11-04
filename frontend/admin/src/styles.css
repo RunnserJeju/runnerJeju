@@ -963,3 +963,62 @@ tbody tr.selected {
 .folder-panel tbody tr:hover {
   background: none;
 }
+
+/* 목록 페이지 헤더 우측: 이름 검색 + 추가 버튼. */
+.page-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.name-search {
+  width: 220px;
+}
+
+/* 편집 창 하단 고정 영역: 변경 요약/오류 + 전체 저장 버튼(우측). */
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+}
+
+.modal-foot .foot-msg {
+  font-size: 13px;
+  min-width: 0;
+}
+
+.modal-foot .foot-msg.error {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--danger);
+}
+
+.modal-foot button {
+  flex: none;
+  margin-left: auto;
+}
+
+/* 저장 전 대기 중인 이미지 변경 표시. */
+.pending-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eaf1fb;
+  color: #2a5db0;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.image-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

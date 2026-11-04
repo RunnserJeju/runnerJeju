@@ -11,13 +11,24 @@ import {
   updatePartner,
   type Partner,
 } from '../api'
-import { ImagesSection, ThumbnailSection } from '../components/ImageSections'
+import {
+  ImageSection,
+  ImagesSection,
+  imageChanged,
+  imagesChanged,
+  imagesFrom,
+  NO_IMAGE_CHANGE,
+  type ImageChange,
+  type ImagesChange,
+} from '../components/ImageSections'
 import Modal from '../components/Modal'
 import PartnerForm, {
   emptyPartnerValues,
   validatePartner,
   valuesFromPartner,
 } from '../components/PartnerForm'
+import SaveFooter from '../components/SaveFooter'
+import { runSteps, snapshot, type SaveStep } from '../utils/saveSteps'
 
 interface Props {
   /** 없으면 새 업체 등록, 있으면 그 업체 수정. */
@@ -27,42 +38,111 @@ interface Props {
   onChanged: () => void
 }
 
-/** 협력업체 등록·수정 모달. 폼 하나로 등록·수정을 다 하고(공지처럼 모달을 나누지 않는다),
- * 썸네일·추가 이미지는 등록된 업체에만 붙는다(코스 수정 모달과 같은 카드). */
+/** 협력업체 등록·수정 모달. 폼 하나로 등록·수정을 다 하고, 썸네일·추가 이미지는 등록된 업체에만
+ * 붙는다. 저장은 우측 아래 버튼 하나가 맡고, 바뀐 것만 서버에 보낸다. */
 export default function PartnerModal({ partner: initial, onClose, onChanged }: Props) {
-  // 이미지 저장 응답으로 갈아끼운다. 폼 입력(values)은 건드리지 않는다.
   const [partner, setPartner] = useState(initial)
   const [values, setValues] = useState(() =>
     initial ? valuesFromPartner(initial) : emptyPartnerValues(),
   )
+  const [savedKey, setSavedKey] = useState(() =>
+    snapshot(initial ? valuesFromPartner(initial) : emptyPartnerValues()),
+  )
+  const [thumb, setThumb] = useState<ImageChange>(NO_IMAGE_CHANGE)
+  const [images, setImages] = useState<ImagesChange>(() => imagesFrom(initial?.image_urls ?? []))
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  const applyMedia = (saved: Partner, message: string) => {
-    setPartner(saved)
-    setNotice(message)
-    onChanged()
-  }
+  const metaDirty = snapshot(values) !== savedKey
+  const thumbDirty = imageChanged(thumb)
+  const imagesDirty = partner != null && imagesChanged(partner.image_urls, images)
+  const dirty = [
+    metaDirty && '업체 정보',
+    thumbDirty && '썸네일',
+    imagesDirty && '추가 이미지',
+  ].filter((label): label is string => Boolean(label))
 
   const save = async () => {
     setError(null)
-    const validated = validatePartner(values)
-    if (!validated.ok) {
-      setError(validated.message)
+    setNotice(null)
+    let payload: ReturnType<typeof validatePartner> | null = null
+    if (metaDirty || !partner) {
+      payload = validatePartner(values)
+      if (!payload.ok) {
+        setError(payload.message)
+        return
+      }
+    }
+
+    const steps: SaveStep[] = []
+    if (payload?.ok) {
+      const body = payload.data
+      steps.push({
+        label: partner ? '업체 정보' : '등록',
+        run: async () => {
+          if (partner) {
+            const saved = await updatePartner(partner.id, body)
+            setPartner(saved)
+            const next = valuesFromPartner(saved)
+            setValues(next)
+            setSavedKey(snapshot(next))
+          } else {
+            await createPartner(body)
+          }
+        },
+      })
+    }
+    if (partner && thumbDirty) {
+      const { file } = thumb
+      steps.push({
+        label: '썸네일',
+        run: async () => {
+          setPartner(
+            file ? await setPartnerThumbnail(partner.id, file) : await deletePartnerThumbnail(partner.id),
+          )
+          setThumb(NO_IMAGE_CHANGE)
+        },
+      })
+    }
+    if (partner && imagesDirty) {
+      const keep = images.urls
+      if (imagesChanged(partner.image_urls, { urls: keep, added: [] })) {
+        steps.push({
+          label: '추가 이미지 순서·삭제',
+          run: async () => {
+            const saved = await setPartnerImages(partner.id, keep)
+            setPartner(saved)
+            setImages((prev) => ({ ...prev, urls: saved.image_urls }))
+          },
+        })
+      }
+      for (const file of images.added) {
+        steps.push({
+          label: `추가 이미지(${file.name})`,
+          run: async () => {
+            const saved = await addPartnerImage(partner.id, file)
+            setPartner(saved)
+            setImages((prev) => ({
+              urls: saved.image_urls,
+              added: prev.added.filter((f) => f !== file),
+            }))
+          },
+        })
+      }
+    }
+
+    setSaving(true)
+    const failure = await runSteps(steps)
+    setSaving(false)
+    onChanged()
+    if (failure) {
+      setError(failure)
       return
     }
-    setSaving(true)
-    try {
-      if (partner) await updatePartner(partner.id, validated.data)
-      else await createPartner(validated.data)
-      onChanged()
-      onClose()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '저장에 실패했어요.')
-      setSaving(false)
-    }
+    // 예전 '저장'처럼 다 되면 창을 닫는다.
+    onClose()
   }
 
   const remove = async () => {
@@ -84,6 +164,16 @@ export default function PartnerModal({ partner: initial, onClose, onChanged }: P
       title={partner ? `협력업체 수정 — ${partner.name}` : '새 협력업체 등록'}
       onClose={onClose}
       closable={!saving}
+      footer={
+        <SaveFooter
+          dirty={dirty}
+          saving={saving}
+          error={error}
+          onSave={save}
+          label={partner ? '전체 저장' : '등록'}
+          alwaysEnabled={!partner}
+        />
+      }
     >
       {notice && <div className="notice" style={{ marginTop: 0 }}>{notice}</div>}
       <div className="card">
@@ -93,29 +183,21 @@ export default function PartnerModal({ partner: initial, onClose, onChanged }: P
           </p>
         )}
         <PartnerForm values={values} onChange={setValues} />
-        {error && <div className="error">{error}</div>}
-        <div className="submit-row">
-          <button onClick={save} disabled={saving}>
-            {saving ? '저장 중…' : partner ? '저장' : '등록'}
-          </button>
-        </div>
       </div>
 
       {partner && (
         <>
-          <ThumbnailSection
-            thumbnailUrl={partner.thumbnail_url}
-            hint="앱 협력업체 목록 카드에 정사각형으로 보여요. 없으면 업종 아이콘이 나와요."
-            upload={(file) => setPartnerThumbnail(partner.id, file)}
-            remove={() => deletePartnerThumbnail(partner.id)}
-            onSaved={applyMedia}
+          <ImageSection
+            title="썸네일"
+            description="앱 협력업체 목록 카드에 정사각형으로 보여요. 없으면 업종 아이콘이 나와요."
+            currentUrl={partner.thumbnail_url}
+            value={thumb}
+            onChange={setThumb}
           />
           <ImagesSection
-            urls={partner.image_urls}
             description="앱 업체 상세의 길찾기 버튼 아래에 옆으로 미는 사진 띠예요. 사진은 원본 비율 그대로 잘리지 않고 나와요."
-            add={(file) => addPartnerImage(partner.id, file)}
-            set={(urls) => setPartnerImages(partner.id, urls)}
-            onSaved={applyMedia}
+            value={images}
+            onChange={setImages}
           />
         </>
       )}

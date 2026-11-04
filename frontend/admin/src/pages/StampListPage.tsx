@@ -15,8 +15,11 @@ import {
   type StampDefinitionPayload,
 } from '../api'
 import { STAMP_SPEC, validateStampImage } from '../components/imageSpec'
+import { ImageSection, imageChanged, NO_IMAGE_CHANGE, type ImageChange } from '../components/ImageSections'
 import Modal from '../components/Modal'
+import SaveFooter from '../components/SaveFooter'
 import SortTh, { useSort } from '../components/SortTh'
+import { runSteps, snapshot, type SaveStep } from '../utils/saveSteps'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -207,6 +210,9 @@ function StampModal({
   onSaved: (stamp: StampDefinition) => void
 }) {
   const [values, setValues] = useState<StampDefinitionPayload>(() => payloadFrom(stamp))
+  /** 서버에 저장된 내용의 스냅샷. values와 다르면 '내용 변경'이다. */
+  const [savedKey, setSavedKey] = useState(() => snapshot(payloadFrom(stamp)))
+  const [image, setImage] = useState<ImageChange>(NO_IMAGE_CHANGE)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -216,30 +222,66 @@ function StampModal({
     setMessage(null)
   }
 
+  const contentDirty = snapshot(values) !== savedKey
+  const imageDirty = imageChanged(image)
+  const dirty = [contentDirty && '내용', imageDirty && '도안'].filter(
+    (label): label is string => Boolean(label),
+  )
+
   const save = async () => {
+    if (dirty.length === 0) return
     setError(null)
-    if (!values.name.trim()) {
+    setMessage(null)
+    if (contentDirty && !values.name.trim()) {
       setError('이름을 입력해 주세요.')
       return
     }
-    setSaving(true)
-    try {
-      const saved = await updateStamp(stamp.id, {
-        ...values,
-        name: values.name.trim(),
-        description: values.description?.trim() || null,
+
+    let latest: StampDefinition | null = null
+    const steps: SaveStep[] = []
+    if (contentDirty) {
+      const snap = snapshot(values)
+      steps.push({
+        label: '내용',
+        run: async () => {
+          latest = await updateStamp(stamp.id, {
+            ...values,
+            name: values.name.trim(),
+            description: values.description?.trim() || null,
+          })
+          setSavedKey(snap)
+        },
       })
-      setMessage('저장했어요.')
-      onSaved(saved)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '저장에 실패했어요.')
-    } finally {
-      setSaving(false)
     }
+    if (imageDirty) {
+      const { file } = image
+      steps.push({
+        label: '도안',
+        run: async () => {
+          latest = file ? await setStampImage(stamp.id, file) : await deleteStampImage(stamp.id)
+          setImage(NO_IMAGE_CHANGE)
+        },
+      })
+    }
+
+    setSaving(true)
+    const failure = await runSteps(steps)
+    setSaving(false)
+    if (latest) onSaved(latest)
+    if (failure) {
+      setError(failure)
+      return
+    }
+    setMessage('저장했어요.')
   }
 
   return (
-    <Modal title={`스탬프 수정 — ${stamp.name}`} onClose={onClose}>
+    <Modal
+      title={`스탬프 수정 — ${stamp.name}`}
+      onClose={onClose}
+      closable={!saving}
+      footer={<SaveFooter dirty={dirty} saving={saving} error={error} onSave={save} />}
+    >
       {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
       <div className="card">
         <div className="field">
@@ -288,94 +330,17 @@ function StampModal({
             앱에 노출
           </label>
         </div>
-        {error && <div className="error">{error}</div>}
-        <div className="submit-row">
-          <button onClick={save} disabled={saving}>
-            {saving ? '저장 중…' : '저장'}
-          </button>
-        </div>
       </div>
-      <StampImageSection stamp={stamp} onSaved={onSaved} />
+      <ImageSection
+        title="도안"
+        description={`앱이 원 안에 꽉 채워 그려요. 바꾸면 이미 받은 사람에게도 반영돼요. ${STAMP_SPEC.hint}.`}
+        imageClass="thumb large round"
+        currentUrl={stamp.display_image_url}
+        removable={Boolean(stamp.image_url)}
+        value={image}
+        onChange={setImage}
+        validate={validateStampImage}
+      />
     </Modal>
-  )
-}
-
-function StampImageSection({
-  stamp,
-  onSaved,
-}: {
-  stamp: StampDefinition
-  onSaved: (stamp: StampDefinition) => void
-}) {
-  const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  // 고르는 순간 규격을 검사해 틀린 파일은 선택 자체를 무효로 한다.
-  const pick = async (picked: File | null) => {
-    setError(null)
-    if (!picked) {
-      setFile(null)
-      return
-    }
-    const problem = await validateStampImage(picked)
-    if (problem) {
-      setError(problem)
-      setFile(null)
-      return
-    }
-    setFile(picked)
-  }
-
-  const run = async (action: () => Promise<StampDefinition>, failure: string) => {
-    setError(null)
-    setSaving(true)
-    try {
-      onSaved(await action())
-      setFile(null)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : failure)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>도안</h3>
-      <p className="muted">
-        앱이 원 안에 꽉 채워 그려요. 바꾸면 이미 받은 사람에게도 반영돼요. {STAMP_SPEC.hint}.
-      </p>
-      {stamp.display_image_url ? (
-        <img className="thumb large round" src={stamp.display_image_url} alt="현재 도안" />
-      ) : (
-        <p className="muted">등록된 도안이 없어요.</p>
-      )}
-      <div className="field" style={{ marginTop: 12 }}>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => pick(event.target.files?.[0] ?? null)}
-        />
-      </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button
-          onClick={() => file && run(() => setStampImage(stamp.id, file), '도안 업로드에 실패했어요.')}
-          disabled={saving || !file}
-        >
-          {saving ? '처리 중…' : stamp.image_url ? '도안 교체' : '도안 등록'}
-        </button>
-        {stamp.image_url && (
-          <button
-            className="danger"
-            onClick={() => run(() => deleteStampImage(stamp.id), '도안 삭제에 실패했어요.')}
-            disabled={saving}
-          >
-            도안 삭제
-          </button>
-        )}
-      </div>
-    </div>
   )
 }

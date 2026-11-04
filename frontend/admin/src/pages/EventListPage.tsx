@@ -12,8 +12,11 @@ import {
   type CourseVisibility,
   type CommunityEventPayload,
 } from '../api'
+import { ImageSection, imageChanged, NO_IMAGE_CHANGE, type ImageChange } from '../components/ImageSections'
 import Modal from '../components/Modal'
+import SaveFooter from '../components/SaveFooter'
 import SortTh, { useSort } from '../components/SortTh'
+import { runSteps, snapshot, type SaveStep } from '../utils/saveSteps'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -174,6 +177,28 @@ export default function EventListPage({ onUnauthorized }: Props) {
   )
 }
 
+interface EventValues {
+  title: string
+  body: string
+  startsAt: string
+  endsAt: string
+  isActive: boolean
+  visibility: CourseVisibility
+  sortOrder: number
+}
+
+function valuesFromEvent(event: CommunityEvent | null): EventValues {
+  return {
+    title: event?.title ?? '',
+    body: event?.body ?? '',
+    startsAt: toLocalInput(event?.starts_at ?? null),
+    endsAt: toLocalInput(event?.ends_at ?? null),
+    isActive: event?.is_active ?? true,
+    visibility: event?.visibility ?? 'admin',
+    sortOrder: event?.sort_order ?? 0,
+  }
+}
+
 function EventModal({
   event,
   onClose,
@@ -186,228 +211,197 @@ function EventModal({
   onSaved: (event: CommunityEvent) => void
   onDeleted: () => void
 }) {
+  const [values, setValues] = useState(() => valuesFromEvent(event))
+  /** 서버에 저장된 내용의 스냅샷. values와 다르면 '내용 변경'이다. */
+  const [savedKey, setSavedKey] = useState(() => snapshot(valuesFromEvent(event)))
+  const [image, setImage] = useState<ImageChange>(NO_IMAGE_CHANGE)
   const [message, setMessage] = useState<string | null>(null)
-  const saved = (next: CommunityEvent, text: string) => {
-    setMessage(text)
-    onSaved(next)
-  }
-
-  return (
-    <Modal title={event ? `이벤트 수정 — ${event.title}` : '새 이벤트'} onClose={onClose}>
-      {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
-      <ContentSection event={event} onSaved={saved} />
-      {event && <ImageSection event={event} onSaved={saved} />}
-      {event && <DeleteSection event={event} onDeleted={onDeleted} />}
-    </Modal>
-  )
-}
-
-function ContentSection({
-  event,
-  onSaved,
-}: {
-  event: CommunityEvent | null
-  onSaved: (event: CommunityEvent, message: string) => void
-}) {
-  const [title, setTitle] = useState(event?.title ?? '')
-  const [body, setBody] = useState(event?.body ?? '')
-  const [startsAt, setStartsAt] = useState(toLocalInput(event?.starts_at ?? null))
-  const [endsAt, setEndsAt] = useState(toLocalInput(event?.ends_at ?? null))
-  const [isActive, setIsActive] = useState(event?.is_active ?? true)
-  const [visibility, setVisibility] = useState<CourseVisibility>(event?.visibility ?? 'admin')
-  const [sortOrder, setSortOrder] = useState(event?.sort_order ?? 0)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+
+  const set = (patch: Partial<EventValues>) => {
+    setValues((prev) => ({ ...prev, ...patch }))
+    setMessage(null)
+  }
+
+  const contentDirty = snapshot(values) !== savedKey
+  const imageDirty = imageChanged(image)
+  const dirty = [contentDirty && '내용', imageDirty && '이미지'].filter(
+    (label): label is string => Boolean(label),
+  )
 
   const save = async () => {
     setError(null)
-    if (!title.trim()) {
-      setError('제목을 입력해 주세요.')
-      return
+    setMessage(null)
+    let payload: CommunityEventPayload | null = null
+    if (contentDirty || !event) {
+      if (!values.title.trim()) return setError('제목을 입력해 주세요.')
+      if (!values.body.trim()) return setError('내용을 입력해 주세요.')
+      const start = values.startsAt ? new Date(values.startsAt) : null
+      const end = values.endsAt ? new Date(values.endsAt) : null
+      if (start && end && end < start) return setError('노출 종료가 시작보다 빠를 수 없어요.')
+      payload = {
+        title: values.title.trim(),
+        body: values.body.trim(),
+        starts_at: start ? start.toISOString() : null,
+        ends_at: end ? end.toISOString() : null,
+        is_active: values.isActive,
+        visibility: values.visibility,
+        sort_order: values.sortOrder,
+      }
     }
-    if (!body.trim()) {
-      setError('내용을 입력해 주세요.')
-      return
+
+    let latest: CommunityEvent | null = null
+    const steps: SaveStep[] = []
+    if (payload) {
+      const body = payload
+      const snap = snapshot(values)
+      steps.push({
+        label: event ? '내용' : '등록',
+        run: async () => {
+          latest = event ? await updateEvent(event.id, body) : await createEvent(body)
+          setSavedKey(snap)
+        },
+      })
     }
-    const start = startsAt ? new Date(startsAt) : null
-    const end = endsAt ? new Date(endsAt) : null
-    if (start && end && end < start) {
-      setError('노출 종료가 시작보다 빠를 수 없어요.')
-      return
+    if (event && imageDirty) {
+      const { file } = image
+      steps.push({
+        label: '이미지',
+        run: async () => {
+          latest = file ? await setEventImage(event.id, file) : await deleteEventImage(event.id)
+          setImage(NO_IMAGE_CHANGE)
+        },
+      })
     }
-    const payload: CommunityEventPayload = {
-      title: title.trim(),
-      body: body.trim(),
-      starts_at: start ? start.toISOString() : null,
-      ends_at: end ? end.toISOString() : null,
-      is_active: isActive,
-      visibility,
-      sort_order: sortOrder,
-    }
+
     setSaving(true)
-    try {
-      const next = event ? await updateEvent(event.id, payload) : await createEvent(payload)
-      onSaved(next, event ? '저장했어요.' : '등록했어요. 이어서 이미지를 올릴 수 있어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '저장에 실패했어요.')
-    } finally {
-      setSaving(false)
+    const failure = await runSteps(steps)
+    setSaving(false)
+    if (latest) onSaved(latest)
+    if (failure) {
+      setError(failure)
+      return
     }
+    setMessage(event ? '저장했어요.' : '등록했어요. 이어서 이미지를 올릴 수 있어요.')
   }
 
   return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>내용</h3>
-      <div className="field">
-        <label htmlFor="event-title">제목</label>
-        <input id="event-title" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
-      </div>
-      <div className="field">
-        <label htmlFor="event-body">
-          내용{' '}
-          <span className="hint">
-            링크는 주소를 그대로 붙여 넣으면 돼요(https://…). 글자에 링크를 걸려면
-            [신청하기](https://…)
-          </span>
-        </label>
-        <textarea
-          id="event-body"
-          rows={10}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
+    <Modal
+      title={event ? `이벤트 수정 — ${event.title}` : '새 이벤트'}
+      onClose={onClose}
+      closable={!saving}
+      footer={
+        <SaveFooter
+          dirty={dirty}
+          saving={saving}
+          error={error}
+          onSave={save}
+          label={event ? '전체 저장' : '등록'}
+          alwaysEnabled={!event}
         />
-      </div>
-      <div className="row">
+      }
+    >
+      {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>내용</h3>
         <div className="field">
-          <label htmlFor="event-starts">
-            노출 시작 <span className="hint">비우면 즉시</span>
-          </label>
+          <label htmlFor="event-title">제목</label>
           <input
-            id="event-starts"
-            type="datetime-local"
-            value={startsAt}
-            onChange={(e) => setStartsAt(e.target.value)}
+            id="event-title"
+            maxLength={200}
+            value={values.title}
+            onChange={(e) => set({ title: e.target.value })}
           />
         </div>
         <div className="field">
-          <label htmlFor="event-ends">
-            노출 종료 <span className="hint">비우면 무기한</span>
+          <label htmlFor="event-body">
+            내용{' '}
+            <span className="hint">
+              링크는 주소를 그대로 붙여 넣으면 돼요(https://…). 글자에 링크를 걸려면
+              [신청하기](https://…)
+            </span>
           </label>
-          <input
-            id="event-ends"
-            type="datetime-local"
-            value={endsAt}
-            onChange={(e) => setEndsAt(e.target.value)}
+          <textarea
+            id="event-body"
+            rows={10}
+            value={values.body}
+            onChange={(e) => set({ body: e.target.value })}
           />
         </div>
-      </div>
-      <div className="row">
-        <div className="field">
-          <label htmlFor="event-order">
-            정렬 <span className="hint">작을수록 위, 같으면 최신순</span>
-          </label>
-          <input
-            id="event-order"
-            type="number"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(Number(e.target.value) || 0)}
-          />
-        </div>
-        <div className="field">
-          <label>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="event-starts">
+              노출 시작 <span className="hint">비우면 즉시</span>
+            </label>
             <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-            />{' '}
-            앱에 노출
-          </label>
+              id="event-starts"
+              type="datetime-local"
+              value={values.startsAt}
+              onChange={(e) => set({ startsAt: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="event-ends">
+              노출 종료 <span className="hint">비우면 무기한</span>
+            </label>
+            <input
+              id="event-ends"
+              type="datetime-local"
+              value={values.endsAt}
+              onChange={(e) => set({ endsAt: e.target.value })}
+            />
+          </div>
         </div>
-        <div className="field">
-          <label htmlFor="ev-visibility">
-            공개 범위 <span className="hint">운영자: role=admin 계정에만 보여요</span>
-          </label>
-          <select
-            id="ev-visibility"
-            value={visibility}
-            onChange={(e) => setVisibility(e.target.value as CourseVisibility)}
-          >
-            <option value="admin">운영자</option>
-            <option value="public">전체 공개</option>
-          </select>
+        <div className="row">
+          <div className="field">
+            <label htmlFor="event-order">
+              정렬 <span className="hint">작을수록 위, 같으면 최신순</span>
+            </label>
+            <input
+              id="event-order"
+              type="number"
+              value={values.sortOrder}
+              onChange={(e) => set({ sortOrder: Number(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="field">
+            <label>
+              <input
+                type="checkbox"
+                checked={values.isActive}
+                onChange={(e) => set({ isActive: e.target.checked })}
+              />{' '}
+              앱에 노출
+            </label>
+          </div>
+          <div className="field">
+            <label htmlFor="ev-visibility">
+              공개 범위 <span className="hint">운영자: role=admin 계정에만 보여요</span>
+            </label>
+            <select
+              id="ev-visibility"
+              value={values.visibility}
+              onChange={(e) => set({ visibility: e.target.value as CourseVisibility })}
+            >
+              <option value="admin">운영자</option>
+              <option value="public">전체 공개</option>
+            </select>
+          </div>
         </div>
       </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button onClick={save} disabled={saving}>
-          {saving ? '저장 중…' : event ? '저장' : '등록'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function ImageSection({
-  event,
-  onSaved,
-}: {
-  event: CommunityEvent
-  onSaved: (event: CommunityEvent, message: string) => void
-}) {
-  const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const run = async (action: () => Promise<CommunityEvent>, done: string, failure: string) => {
-    setError(null)
-    setSaving(true)
-    try {
-      onSaved(await action(), done)
-      setFile(null)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : failure)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>이미지</h3>
-      <p className="muted">목록 카드와 상세 화면 위쪽에 보여요. 선택이에요.</p>
-      {event.image_url ? (
-        <img className="thumb banner" src={event.image_url} alt="현재 이미지" />
-      ) : (
-        <p className="muted">등록된 이미지가 없어요.</p>
-      )}
-      <div className="field" style={{ marginTop: 12 }}>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      {event && (
+        <ImageSection
+          title="이미지"
+          description="목록 카드와 상세 화면 위쪽에 보여요. 선택이에요."
+          imageClass="thumb banner"
+          currentUrl={event.image_url}
+          value={image}
+          onChange={setImage}
         />
-      </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button
-          onClick={() =>
-            file && run(() => setEventImage(event.id, file), '이미지를 저장했어요.', '업로드에 실패했어요.')
-          }
-          disabled={saving || !file}
-        >
-          {saving ? '처리 중…' : event.image_url ? '이미지 교체' : '이미지 등록'}
-        </button>
-        {event.image_url && (
-          <button
-            className="danger"
-            onClick={() => run(() => deleteEventImage(event.id), '이미지를 지웠어요.', '삭제에 실패했어요.')}
-            disabled={saving}
-          >
-            이미지 삭제
-          </button>
-        )}
-      </div>
-    </div>
+      )}
+      {event && <DeleteSection event={event} onDeleted={onDeleted} />}
+    </Modal>
   )
 }
 

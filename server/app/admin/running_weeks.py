@@ -7,12 +7,12 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import Session
 
 from app import running_week, stamp_rules, storage
 from app.db import get_db
-from app.models import RunningWeek, RunningWeekParticipation
+from app.models import RunningWeek, RunningWeekParticipation, User
 from app.schemas import (
     AdminParticipationOut,
     AdminRunningWeekOut,
@@ -142,15 +142,26 @@ def set_bingo(week_id: uuid.UUID, payload: BingoUpdate, db: Session = Depends(ge
     response_model=list[AdminParticipationOut],
 )
 def list_participations(week_id: uuid.UUID, db: Session = Depends(get_db)):
-    """참가자 목록(신청순)."""
+    """참가자 목록(신청순). 앱 계정의 닉네임·이메일을 같이 준다.
+
+    participations.user_id는 users.id의 FK가 아니라 토큰 sub 문자열이라 캐스트해서 outer join한다
+    (탈퇴해 행이 없으면 닉네임·이메일은 None).
+    """
     _load_or_404(db, week_id)
-    return list(
-        db.execute(
-            select(RunningWeekParticipation)
-            .where(RunningWeekParticipation.running_week_id == week_id)
-            .order_by(RunningWeekParticipation.created_at)
-        ).scalars()
-    )
+    rows = db.execute(
+        select(RunningWeekParticipation, User.nickname, User.email)
+        .outerjoin(User, cast(User.id, String) == RunningWeekParticipation.user_id)
+        .where(RunningWeekParticipation.running_week_id == week_id)
+        .order_by(RunningWeekParticipation.created_at)
+    ).all()
+    return [
+        {
+            **{c.name: getattr(p, c.name) for c in RunningWeekParticipation.__table__.columns},
+            "nickname": nickname,
+            "email": email,
+        }
+        for p, nickname, email in rows
+    ]
 
 
 @router.put("/running-weeks/{week_id}/image", response_model=AdminRunningWeekOut)

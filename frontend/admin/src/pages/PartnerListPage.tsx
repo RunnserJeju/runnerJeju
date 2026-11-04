@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { ApiError, listPartners, PARTNER_VISIBILITY_LABEL, type Partner } from '../api'
 import PartnerModal from '../modals/PartnerModal'
+import NameSearch, { matchesName } from '../components/NameSearch'
 import SortTh, { useSort } from '../components/SortTh'
 
 interface Props {
@@ -11,10 +12,11 @@ interface Props {
 
 export default function PartnerListPage({ onUnauthorized }: Props) {
   const [partners, setPartners] = useState<Partner[] | null>(null)
+  const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   /** 모달 대상. null=새 업체 등록, undefined=닫힘. */
   const [editing, setEditing] = useState<Partner | null | undefined>(undefined)
-  const { sort, toggle, sorted } = useSort(partners, {
+  const { sort, toggle, sorted } = useSort(partners?.filter((x) => matchesName(x.name, query)) ?? null, {
     name: (p) => p.name,
     address: (p) => p.address,
     benefit: (p) => p.benefit,
@@ -48,7 +50,10 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
     <>
       <div className="page-head">
         <h2>협력업체</h2>
-        <button onClick={() => setEditing(null)}>+ 협력업체 추가</button>
+        <div className="page-head-actions">
+          <NameSearch value={query} onChange={setQuery} />
+          <button onClick={() => setEditing(null)}>+ 협력업체 추가</button>
+        </div>
       </div>
       <p className="muted page-desc">
         여기서 등록한 업체를 코스 수정 화면에서 골라 연결하면 앱 지도에 마커로 표시돼요.
@@ -56,7 +61,10 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
       {error && <div className="error">{error}</div>}
       {partners == null && !error && <p className="muted">불러오는 중…</p>}
       {partners && partners.length === 0 && <p className="muted">등록된 협력업체가 없어요.</p>}
-      {partners && partners.length > 0 && (
+      {partners && partners.length > 0 && sorted!.length === 0 && (
+        <p className="muted">'{query.trim()}'에 맞는 협력업체가 없어요.</p>
+      )}
+      {sorted && sorted.length > 0 && (
         <table>
           <thead>
             <tr>

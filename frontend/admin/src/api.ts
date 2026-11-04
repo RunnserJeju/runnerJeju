@@ -410,6 +410,9 @@ export interface RunningWeekPayload {
 export interface Participation {
   id: string
   user_id: string
+  /** 앱 계정 닉네임·이메일. 탈퇴했거나 미설정이면 null. */
+  nickname: string | null
+  email: string | null
   name: string
   phone: string
   gender: 'male' | 'female'
