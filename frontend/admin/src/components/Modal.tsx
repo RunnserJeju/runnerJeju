@@ -7,10 +7,12 @@ interface Props {
   closable?: boolean
   /** 저장 후 스크롤 올리기 등 본문 스크롤 컨테이너가 필요할 때. */
   bodyRef?: RefObject<HTMLDivElement | null>
+  /** 본문 스크롤과 상관없이 아래에 고정되는 영역(전체 저장 버튼 등). */
+  footer?: ReactNode
   children: ReactNode
 }
 
-export default function Modal({ title, onClose, closable = true, bodyRef, children }: Props) {
+export default function Modal({ title, onClose, closable = true, bodyRef, footer, children }: Props) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && closable) onClose()
@@ -45,6 +47,7 @@ export default function Modal({ title, onClose, closable = true, bodyRef, childr
         <div className="modal-body" ref={bodyRef}>
           {children}
         </div>
+        {footer}
       </div>
     </div>
   )

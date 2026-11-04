@@ -9,6 +9,7 @@ import {
   updateNotice,
   type Notice,
 } from '../api'
+import { ImageSection, imageChanged, NO_IMAGE_CHANGE, type ImageChange } from '../components/ImageSections'
 import { BANNER_SPEC, validateBannerImage } from '../components/imageSpec'
 import Modal from '../components/Modal'
 import NoticeForm, {
@@ -16,6 +17,8 @@ import NoticeForm, {
   valuesFromNotice,
   type NoticeFormValues,
 } from '../components/NoticeForm'
+import SaveFooter from '../components/SaveFooter'
+import { runSteps, snapshot, type SaveStep } from '../utils/saveSteps'
 
 interface Props {
   noticeId: string
@@ -29,8 +32,13 @@ interface Props {
 export default function NoticeEditModal({ noticeId, initialMessage, onClose, onChanged }: Props) {
   const [notice, setNotice] = useState<Notice | null>(null)
   const [values, setValues] = useState<NoticeFormValues | null>(null)
+  /** 서버에 저장된 내용의 스냅샷. values와 다르면 '공지 내용 변경'이다. */
+  const [savedKey, setSavedKey] = useState('')
+  const [banner, setBanner] = useState<ImageChange>(NO_IMAGE_CHANGE)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(initialMessage ?? null)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
   // 단건 조회 엔드포인트가 없어 목록에서 고른다(공지는 소량).
@@ -42,33 +50,84 @@ export default function NoticeEditModal({ noticeId, initialMessage, onClose, onC
           setLoadError('공지를 찾을 수 없어요.')
           return
         }
+        const loaded = valuesFromNotice(found)
         setNotice(found)
-        setValues(valuesFromNotice(found))
+        setValues(loaded)
+        setSavedKey(snapshot(loaded))
       })
       .catch((err: unknown) =>
         setLoadError(err instanceof ApiError ? err.message : '공지를 불러오지 못했어요.'),
       )
   }, [noticeId])
 
-  // 이미지 저장. 아직 저장 안 한 내용 입력은 건드리지 않는다.
-  const applyMedia = (saved: Notice, text: string) => {
-    setNotice(saved)
-    setMessage(text)
-    onChanged()
-    bodyRef.current?.scrollTo({ top: 0 })
-  }
+  const contentDirty = values != null && snapshot(values) !== savedKey
+  const bannerDirty = imageChanged(banner)
+  const dirty = [contentDirty && '공지 내용', bannerDirty && '배너 이미지'].filter(
+    (label): label is string => Boolean(label),
+  )
 
-  // 내용 저장 성공 시 서버 응답으로 입력값도 갈아끼운다 — 다음 저장의 기준값이 된다.
-  const applySaved = (saved: Notice, text: string) => {
-    applyMedia(saved, text)
-    setValues(valuesFromNotice(saved))
+  const save = async () => {
+    if (!values || dirty.length === 0) return
+    setError(null)
+    setMessage(null)
+
+    let body: ReturnType<typeof validateNotice> | null = null
+    if (contentDirty) {
+      body = validateNotice(values)
+      if (!body.ok) {
+        setError(body.message)
+        return
+      }
+    }
+
+    const steps: SaveStep[] = []
+    if (body?.ok) {
+      const data = body.data
+      steps.push({
+        label: '공지 내용',
+        run: async () => {
+          const saved = await updateNotice(noticeId, data)
+          const next = valuesFromNotice(saved)
+          setNotice(saved)
+          setValues(next)
+          setSavedKey(snapshot(next))
+        },
+      })
+    }
+    if (bannerDirty) {
+      const { file } = banner
+      steps.push({
+        label: '배너 이미지',
+        run: async () => {
+          setNotice(file ? await setNoticeImage(noticeId, file) : await deleteNoticeImage(noticeId))
+          setBanner(NO_IMAGE_CHANGE)
+        },
+      })
+    }
+
+    setSaving(true)
+    const failure = await runSteps(steps)
+    setSaving(false)
+    onChanged()
+    if (failure) {
+      setError(failure)
+      return
+    }
+    setMessage('저장했어요.')
+    bodyRef.current?.scrollTo({ top: 0 })
   }
 
   return (
     <Modal
       title={notice ? `공지 수정 — ${notice.title}` : '공지 수정'}
       onClose={onClose}
+      closable={!saving}
       bodyRef={bodyRef}
+      footer={
+        notice && values ? (
+          <SaveFooter dirty={dirty} saving={saving} error={error} onSave={save} />
+        ) : undefined
+      }
     >
       {loadError && <div className="error">{loadError}</div>}
       {!loadError && (!notice || !values) && <p className="muted">불러오는 중…</p>}
@@ -76,16 +135,25 @@ export default function NoticeEditModal({ noticeId, initialMessage, onClose, onC
         <>
           {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
 
-          <ContentSection
-            noticeId={noticeId}
-            values={values}
-            onChange={(next) => {
-              setValues(next)
-              setMessage(null)
-            }}
-            onSaved={applySaved}
+          <div className="card">
+            <h3 style={{ marginTop: 0 }}>내용</h3>
+            <NoticeForm
+              values={values}
+              onChange={(next) => {
+                setValues(next)
+                setMessage(null)
+              }}
+            />
+          </div>
+          <ImageSection
+            title="배너 이미지"
+            description={`올리면 앱 홈 상단 배너에 실리고, 누르면 이 공지가 열려요. ${BANNER_SPEC.hint}.`}
+            imageClass="thumb banner"
+            currentUrl={notice.image_url}
+            value={banner}
+            onChange={setBanner}
+            validate={validateBannerImage}
           />
-          <ImageSection notice={notice} onSaved={applyMedia} />
           <DeleteSection
             notice={notice}
             onDeleted={() => {
@@ -96,132 +164,6 @@ export default function NoticeEditModal({ noticeId, initialMessage, onClose, onC
         </>
       )}
     </Modal>
-  )
-}
-
-function ContentSection({
-  noticeId,
-  values,
-  onChange,
-  onSaved,
-}: {
-  noticeId: string
-  values: NoticeFormValues
-  onChange: (values: NoticeFormValues) => void
-  onSaved: (notice: Notice, message: string) => void
-}) {
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const save = async () => {
-    setError(null)
-    const validated = validateNotice(values)
-    if (!validated.ok) {
-      setError(validated.message)
-      return
-    }
-    setSaving(true)
-    try {
-      const saved = await updateNotice(noticeId, validated.data)
-      onSaved(saved, '공지를 저장했어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '저장에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>내용</h3>
-      <NoticeForm values={values} onChange={onChange} />
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button onClick={save} disabled={saving}>
-          {saving ? '저장 중…' : '저장'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function ImageSection({
-  notice,
-  onSaved,
-}: {
-  notice: Notice
-  onSaved: (notice: Notice, message: string) => void
-}) {
-  const [file, setFile] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  const upload = async () => {
-    if (!file) {
-      setError('이미지 파일을 선택해 주세요.')
-      return
-    }
-    setError(null)
-    const problem = await validateBannerImage(file)
-    if (problem) {
-      setError(problem)
-      return
-    }
-    setSaving(true)
-    try {
-      const saved = await setNoticeImage(notice.id, file)
-      setFile(null)
-      onSaved(saved, '배너 이미지를 저장했어요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '이미지 업로드에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const remove = async () => {
-    setError(null)
-    setSaving(true)
-    try {
-      const saved = await deleteNoticeImage(notice.id)
-      onSaved(saved, '배너 이미지를 지웠어요. 이제 텍스트 공지로만 보여요.')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '이미지 삭제에 실패했어요.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>배너 이미지</h3>
-      <p className="muted">
-        올리면 앱 홈 상단 배너에 실리고, 누르면 이 공지가 열려요. {BANNER_SPEC.hint}.
-      </p>
-      {notice.image_url ? (
-        <img className="thumb banner" src={notice.image_url} alt="현재 배너" />
-      ) : (
-        <p className="muted">등록된 배너 이미지가 없어요.</p>
-      )}
-      <div className="field" style={{ marginTop: 12 }}>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-        />
-      </div>
-      {error && <div className="error">{error}</div>}
-      <div className="submit-row">
-        <button onClick={upload} disabled={saving || !file}>
-          {saving ? '처리 중…' : notice.image_url ? '이미지 교체' : '이미지 등록'}
-        </button>
-        {notice.image_url && (
-          <button className="danger" onClick={remove} disabled={saving}>
-            이미지 삭제
-          </button>
-        )}
-      </div>
-    </div>
   )
 }
 

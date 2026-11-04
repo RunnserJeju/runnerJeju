@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ApiError, COURSE_CATEGORY_LABEL, listCourses, type Course } from '../api'
 import CourseCreateModal from '../modals/CourseCreateModal'
 import CourseEditModal from '../modals/CourseEditModal'
+import NameSearch, { matchesName } from '../components/NameSearch'
 import SortTh, { useSort } from '../components/SortTh'
 
 const DIFFICULTY_LABEL: Record<number, string> = { 1: '★', 2: '★★', 3: '★★★' }
@@ -17,9 +18,10 @@ export default function CourseListPage({ onUnauthorized }: Props) {
   const [courses, setCourses] = useState<Course[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [query, setQuery] = useState('')
   /** 수정 모달 대상. notice는 등록 직후 이어서 열 때 전달된다. */
   const [editing, setEditing] = useState<{ id: string; notice?: string } | null>(null)
-  const { sort, toggle, sorted } = useSort(courses, {
+  const { sort, toggle, sorted } = useSort(courses?.filter((x) => matchesName(x.name, query)) ?? null, {
     name: (c) => c.name,
     distance: (c) => c.distance_km,
     category: (c) => COURSE_CATEGORY_LABEL[c.category],
@@ -52,12 +54,18 @@ export default function CourseListPage({ onUnauthorized }: Props) {
     <>
       <div className="page-head">
         <h2>코스 목록</h2>
-        <button onClick={() => setCreating(true)}>+ 코스 추가</button>
+        <div className="page-head-actions">
+          <NameSearch value={query} onChange={setQuery} />
+          <button onClick={() => setCreating(true)}>+ 코스 추가</button>
+        </div>
       </div>
       {error && <div className="error">{error}</div>}
       {courses == null && !error && <p className="muted">불러오는 중…</p>}
       {courses && courses.length === 0 && <p className="muted">등록된 코스가 없어요.</p>}
-      {courses && courses.length > 0 && (
+      {courses && courses.length > 0 && sorted!.length === 0 && (
+        <p className="muted">'{query.trim()}'에 맞는 코스가 없어요.</p>
+      )}
+      {sorted && sorted.length > 0 && (
         <table>
           <thead>
             <tr>

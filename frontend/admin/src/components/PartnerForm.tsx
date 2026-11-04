@@ -180,7 +180,7 @@ export default function PartnerForm({ values, onChange }: Props) {
         </div>
         <div className="field">
           <label htmlFor="partner-category">
-            업종 <span className="hint">앱 마커 색·아이콘</span>
+            업종
           </label>
           <select
             id="partner-category"
@@ -198,7 +198,6 @@ export default function PartnerForm({ values, onChange }: Props) {
         <div className="field">
           <label htmlFor="partner-visibility">
             공개 범위{' '}
-            <span className="hint">운영자만: 관리자 앱 계정에만 · 숨김: 앱 어디에도 안 보여요</span>
           </label>
           <select
             id="partner-visibility"
