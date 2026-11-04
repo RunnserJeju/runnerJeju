@@ -660,14 +660,26 @@ tbody tr:hover {
   cursor: default;
 }
 
-.stats-table th.sortable {
+/* 정렬 가능한 열 제목(components/SortTh). 지표 표도 같은 모양을 쓴다. */
+th.sortable {
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 }
 
-.stats-table th.sortable:hover,
-.stats-table th.sortable.active {
+th.sortable:hover,
+th.sortable.active {
   color: var(--ink);
+}
+
+th .sort-mark {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.35;
+}
+
+th.sortable.active .sort-mark {
+  opacity: 1;
 }
 
 .stats-table td.active {
@@ -879,4 +891,75 @@ td.nowrap {
   font-weight: 800;
   letter-spacing: 6px;
   margin-bottom: 4px;
+}
+
+/* 러닝위크: 아래 참가자 표가 보여 주는 회차 */
+tbody tr.selected {
+  background: #eef3ff;
+}
+
+/* 회원 상세 쿠폰 섹션: 폴더 탭. 고른 탭이 아래 패널과 한 장으로 이어진다. */
+.folder-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 20px;
+  padding: 0 8px;
+}
+
+.folder-tabs button {
+  background: #e9ebef;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  padding: 8px 16px;
+  font-size: 13px;
+  margin-bottom: -1px;
+  position: relative;
+}
+
+.folder-tabs button:hover {
+  background: #eef0f3;
+}
+
+.folder-tabs button.active {
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+  z-index: 1;
+}
+
+.folder-tabs .count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.folder-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  min-height: 80px;
+}
+
+.folder-panel table {
+  margin: 0;
+}
+
+.folder-panel td {
+  font-size: 13px;
+}
+
+.folder-panel .nowrap {
+  white-space: nowrap;
+}
+
+.folder-panel tbody tr {
+  cursor: default;
+}
+
+.folder-panel tbody tr:hover {
+  background: none;
 }

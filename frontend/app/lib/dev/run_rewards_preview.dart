@@ -53,10 +53,18 @@ class _PreviewState extends State<_Preview> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _show());
   }
 
-  Future<void> _show() async {
+  Future<void> _show({bool won = true}) async {
     await showStampCelebration(context, _courseStamp);
     if (!mounted) return;
-    await showCouponCelebration(context, _coupon);
+    if (won) {
+      await showCouponCelebration(context, _coupon);
+    } else {
+      await showCouponMiss(
+        context,
+        name: _coupon.name,
+        benefit: _coupon.benefit,
+      );
+    }
     if (!mounted) return;
     await showStampCelebration(context, _weekStamp);
   }
@@ -77,7 +85,23 @@ class _PreviewState extends State<_Preview> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
-          child: FilledButton(onPressed: _show, child: const Text('다시 보기')),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: _show,
+                  child: const Text('쿠폰 당첨'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _show(won: false),
+                  child: const Text('쿠폰 낙첨'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

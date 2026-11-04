@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { ApiError, getUser, listUsers, type UserDetail, type UserSummary } from '../api'
+import { ApiError, getUser, listUsers, type UserDetail, type UserSortKey, type UserSummary } from '../api'
 import Modal from '../components/Modal'
+import SortTh, { type SortState } from '../components/SortTh'
+import UserCouponSection from '../components/UserCouponSection'
 
 const PAGE_SIZE = 50
 
@@ -31,6 +33,16 @@ export default function UsersPage({ onUnauthorized }: Props) {
   const [draft, setDraft] = useState('')
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(0)
+  // 서버 페이지네이션이라 정렬도 서버가 한다. null이면 기본(가입일 최신순).
+  const [sort, setSort] = useState<SortState | null>(null)
+  const toggleSort = (key: string) => {
+    setPage(0)
+    setSort((prev) => {
+      if (prev?.key !== key) return { key, dir: 'asc' }
+      if (prev.dir === 'asc') return { key, dir: 'desc' }
+      return null
+    })
+  }
   const [total, setTotal] = useState(0)
   const [users, setUsers] = useState<UserSummary[] | null>(null)
   const [detail, setDetail] = useState<UserDetail | null>(null)
@@ -51,7 +63,7 @@ export default function UsersPage({ onUnauthorized }: Props) {
     // 검색·페이지를 연달아 바꾸면 늦게 온 옛 응답이 새 목록을 덮을 수 있어 버린다.
     let stale = false
     setUsers(null)
-    listUsers(keyword, PAGE_SIZE, page * PAGE_SIZE)
+    listUsers(keyword, PAGE_SIZE, page * PAGE_SIZE, sort ? { key: sort.key as UserSortKey, dir: sort.dir } : undefined)
       .then((result) => {
         if (stale) return
         setUsers(result.items)
@@ -64,7 +76,7 @@ export default function UsersPage({ onUnauthorized }: Props) {
     return () => {
       stale = true
     }
-  }, [keyword, page, handleError])
+  }, [keyword, page, sort, handleError])
 
   const openDetail = (id: string) => {
     getUser(id).then(setDetail).catch(handleError)
@@ -115,13 +127,23 @@ export default function UsersPage({ onUnauthorized }: Props) {
         <table className="users-table">
           <thead>
             <tr>
-              <th>닉네임</th>
-              <th>이메일</th>
+              <SortTh sortKey="nickname" sort={sort} onToggle={toggleSort}>
+                닉네임
+              </SortTh>
+              <SortTh sortKey="email" sort={sort} onToggle={toggleSort}>
+                이메일
+              </SortTh>
               <th>가입 경로</th>
               <th>기기</th>
-              <th>가입일</th>
-              <th>최근 로그인</th>
-              <th>완주</th>
+              <SortTh sortKey="created_at" sort={sort} onToggle={toggleSort}>
+                가입일
+              </SortTh>
+              <SortTh sortKey="last_login_at" sort={sort} onToggle={toggleSort}>
+                최근 로그인
+              </SortTh>
+              <SortTh sortKey="completed_count" sort={sort} onToggle={toggleSort}>
+                완주
+              </SortTh>
             </tr>
           </thead>
           <tbody>
@@ -205,6 +227,7 @@ export default function UsersPage({ onUnauthorized }: Props) {
               </tbody>
             </table>
           )}
+          <UserCouponSection userId={detail.id} onUnauthorized={onUnauthorized} />
         </Modal>
       )}
     </>

@@ -77,7 +77,7 @@ class CouponCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const _Perforation(),
+                  const CouponPerforation(),
                   Container(
                     width: 84,
                     color: tint.withValues(alpha: active ? 0.18 : 0.6),
@@ -135,9 +135,9 @@ class CouponCard extends StatelessWidget {
   }
 }
 
-/// 티켓 절취선. 위아래 반원 홈과 점선.
-class _Perforation extends StatelessWidget {
-  const _Perforation();
+/// 티켓 절취선. 위아래 반원 홈과 점선. 획득 팝업의 낙첨 티켓도 쓴다.
+class CouponPerforation extends StatelessWidget {
+  const CouponPerforation({super.key});
 
   @override
   Widget build(BuildContext context) {

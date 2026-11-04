@@ -16,6 +16,7 @@ import {
   type UserSummary,
 } from '../api'
 import Modal from '../components/Modal'
+import SortTh, { useSort } from '../components/SortTh'
 import PartnerPicker from '../components/PartnerPicker'
 
 interface Props {
@@ -59,6 +60,16 @@ export default function CouponListPage({ onUnauthorized }: Props) {
   const [partners, setPartners] = useState<Partner[]>([])
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Coupon | null>(null)
+  const { sort, toggle, sorted } = useSort(coupons, {
+    name: (c) => c.name,
+    trigger: (c) => triggerLabel(c),
+    rate: (c) => (c.trigger_type === 'manual' ? null : c.win_rate_percent),
+    stock: (c) => c.stock ?? Number.POSITIVE_INFINITY,
+    active: (c) => c.is_active,
+    redeem: (c) => c.redeem_type,
+    valid: (c) => c.valid_until,
+    issued: (c) => c.issued_count,
+  })
 
   const reload = useCallback(() => {
     Promise.all([listCoupons(), listPartners()])
@@ -103,18 +114,34 @@ export default function CouponListPage({ onUnauthorized }: Props) {
         <table>
           <thead>
             <tr>
-              <th>이름</th>
-              <th>지급 조건</th>
-              <th>확률</th>
-              <th>수량</th>
-              <th>상태</th>
-              <th>사용 방식</th>
-              <th>유효기간</th>
-              <th>발급 / 사용</th>
+              <SortTh sortKey="name" sort={sort} onToggle={toggle}>
+                이름
+              </SortTh>
+              <SortTh sortKey="trigger" sort={sort} onToggle={toggle}>
+                지급 조건
+              </SortTh>
+              <SortTh sortKey="rate" sort={sort} onToggle={toggle}>
+                확률
+              </SortTh>
+              <SortTh sortKey="stock" sort={sort} onToggle={toggle}>
+                수량
+              </SortTh>
+              <SortTh sortKey="active" sort={sort} onToggle={toggle}>
+                상태
+              </SortTh>
+              <SortTh sortKey="redeem" sort={sort} onToggle={toggle}>
+                사용 방식
+              </SortTh>
+              <SortTh sortKey="valid" sort={sort} onToggle={toggle}>
+                유효기간
+              </SortTh>
+              <SortTh sortKey="issued" sort={sort} onToggle={toggle}>
+                발급 / 사용
+              </SortTh>
             </tr>
           </thead>
           <tbody>
-            {coupons.map((coupon) => (
+            {sorted!.map((coupon) => (
               <tr key={coupon.id} onClick={() => setEditing(coupon)}>
                 <td>
                   <strong>{coupon.name}</strong>

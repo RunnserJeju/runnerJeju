@@ -14,13 +14,16 @@ sub(=UUID 문자열)의 복사본(String)이다. 그래서 유저↔완주 매�
 
 import uuid
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.admin.coupons import _effective_status
 from app.db import get_db
-from app.models import Course, Run, User, UserLog, Verification
-from app.schemas import UserDetailOut, UserListOut
+from app.models import Coupon, CouponDraw, Course, Partner, Run, User, UserCoupon, UserLog, Verification
+from app.schemas import UserCouponsOut, UserDetailOut, UserListOut
 
 router = APIRouter(tags=["users"])
 
@@ -128,17 +131,38 @@ def _to_summary(
     }
 
 
+# 목록 정렬 가능 열. completed_count는 유저별 완주 코스 수 서브쿼리.
+_completed_count_sq = (
+    select(func.count(func.distinct(Verification.course_id)))
+    .select_from(Run)
+    .join(Verification, Verification.run_id == Run.id)
+    .where(Run.user_id == cast(User.id, String), Verification.status == "matched")
+    .correlate(User)
+    .scalar_subquery()
+)
+_SORT_COLUMNS = {
+    "nickname": User.nickname,
+    "email": User.email,
+    "created_at": User.created_at,
+    "last_login_at": User.last_login_at,
+    "completed_count": _completed_count_sq,
+}
+
+
 @router.get("/users", response_model=UserListOut)
 def list_users(
     keyword: str | None = Query(default=None),
+    sort: str = Query(default="created_at", pattern="^(nickname|email|created_at|last_login_at|completed_count)$"),
+    order: str = Query(default="desc", pattern="^(asc|desc)$"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
     """회원 목록. (관리자 전용 — 라우터 레벨에서 강제)
 
-    검색은 닉네임·이메일 부분일치, 정렬은 가입일 최신순(같은 시각이면 id로 tie-break
-    해서 페이지 경계가 흔들리지 않게 한다), 페이지네이션은 offset/limit.
+    검색은 닉네임·이메일 부분일치, 정렬은 sort/order(기본 가입일 최신순). 빈 값은 방향과
+    무관하게 뒤로 보내고, 같은 값이면 id로 tie-break 해서 페이지 경계가 흔들리지 않게 한다.
+    페이지네이션은 offset/limit.
 
     완주 수는 이 페이지 유저들만 한 번에 배치 집계한다(N+1 없음). total은 같은 필터의
     전체 개수로, 페이지 UI가 쓴다.
@@ -157,11 +181,9 @@ def list_users(
     stmt = select(User)
     if filters:
         stmt = stmt.where(*filters)
-    stmt = (
-        stmt.order_by(User.created_at.desc(), User.id.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    col = _SORT_COLUMNS[sort]
+    primary = col.asc().nulls_last() if order == "asc" else col.desc().nulls_last()
+    stmt = stmt.order_by(primary, User.id.desc()).limit(limit).offset(offset)
     users = list(db.execute(stmt).scalars())
 
     ids = [str(u.id) for u in users]
@@ -189,9 +211,7 @@ def get_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
 
     완주 수는 완주 목록의 길이라 따로 집계하지 않는다.
     """
-    user = db.get(User, user_id)
-    if user is None or user.deleted_at is not None:
-        raise HTTPException(status_code=404, detail="회원을 찾을 수 없어요.")
+    user = _load_user_or_404(db, user_id)
 
     courses = _completed_courses(db, user)
 
@@ -207,4 +227,77 @@ def get_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
         "last_login_at": user.last_login_at,
         "completed_count": len(courses),
         "completed_courses": courses,
+    }
+
+
+def _load_user_or_404(db: Session, user_id: uuid.UUID) -> User:
+    user = db.get(User, user_id)
+    if user is None or user.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="회원을 찾을 수 없어요.")
+    return user
+
+
+@router.get("/users/{user_id}/coupons", response_model=UserCouponsOut)
+def get_user_coupons(user_id: uuid.UUID, db: Session = Depends(get_db)):
+    """회원 상세 쿠폰 섹션 — 보유 중(사용가능·만료) / 사용 이력 / 추첨 이력. (관리자 전용)
+
+    한 회원이 가진 쿠폰은 많지 않아 페이지 없이 전부 준다. user_coupons.user_id는
+    str(users.id)라 문자열로 비교한다.
+    """
+    user = _load_user_or_404(db, user_id)
+    uid = str(user.id)
+    now = datetime.now(timezone.utc)
+
+    rows = db.execute(
+        select(UserCoupon, Coupon, Partner.name)
+        .join(Coupon, Coupon.id == UserCoupon.coupon_id)
+        .outerjoin(Partner, Partner.id == UserCoupon.used_partner_id)
+        .where(UserCoupon.user_id == uid)
+        .order_by(UserCoupon.issued_at.desc(), UserCoupon.id.desc())
+    ).all()
+
+    held, used = [], []
+    for uc, coupon, partner_name in rows:
+        status = _effective_status(uc.used_at, coupon.valid_until, now, uc.expired_at)
+        row = {
+            "id": uc.id,
+            "code": uc.code,
+            "coupon_id": coupon.id,
+            "coupon_name": coupon.name,
+            "benefit": coupon.benefit,
+            "redeem_type": coupon.redeem_type,
+            "grant_key": uc.grant_key,
+            "issued_at": uc.issued_at,
+            "used_at": uc.used_at,
+            "valid_until": coupon.valid_until,
+            "used_partner_name": partner_name,
+            "status": status,
+        }
+        (used if status == "used" else held).append(row)
+    # 사용 이력은 사용 시각 최신순.
+    used.sort(key=lambda r: r["used_at"], reverse=True)
+
+    draws = db.execute(
+        select(CouponDraw, Coupon.name, UserCoupon.code)
+        .join(Coupon, Coupon.id == CouponDraw.coupon_id)
+        .outerjoin(UserCoupon, UserCoupon.id == CouponDraw.user_coupon_id)
+        .where(CouponDraw.user_id == uid)
+        .order_by(CouponDraw.drawn_at.desc(), CouponDraw.id.desc())
+    ).all()
+
+    return {
+        "held": held,
+        "used": used,
+        "draws": [
+            {
+                "id": d.id,
+                "coupon_id": d.coupon_id,
+                "coupon_name": name,
+                "grant_key": d.grant_key,
+                "result": d.result,
+                "code": code,
+                "drawn_at": d.drawn_at,
+            }
+            for d, name, code in draws
+        ],
     }

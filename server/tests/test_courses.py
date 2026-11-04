@@ -45,6 +45,7 @@ def _partner(**overrides) -> Partner:
         comment=None,
         instagram="@songak_cafe",
         benefit="러너 10% 할인",
+        visibility="public",
         detail={},
     )
     fields.update(overrides)

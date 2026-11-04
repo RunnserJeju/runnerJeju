@@ -33,6 +33,8 @@ export interface Partner extends PartnerSummary {
   coupon_used_count: number
   /** 쿠폰 사용 번호(숫자 4자리). 없으면 이 업체에서 쿠폰을 못 쓴다. */
   coupon_pin: string | null
+  /** 공개 범위. admin이면 관리자 앱 계정에만 보인다(코스와 같은 규칙). */
+  visibility: PartnerVisibility
   created_at: string
   updated_at: string
 }
@@ -47,11 +49,19 @@ export interface PartnerPayload {
   instagram: string | null
   benefit: string | null
   coupon_pin: string | null
+  visibility: PartnerVisibility
   detail: Record<string, unknown>
 }
 
 /** 공개 범위. null은 미설정(시드 스크립트로 올린 코스) — 앱에는 안 보인다. */
 export type CourseVisibility = 'public' | 'admin'
+// 협력업체만 none(숨김) 포함. 서버 schemas.PartnerVisibility와 같아야 한다.
+export type PartnerVisibility = CourseVisibility | 'none'
+export const PARTNER_VISIBILITY_LABEL: Record<PartnerVisibility, string> = {
+  public: '전체 공개',
+  admin: '운영자만',
+  none: '숨김',
+}
 
 /** 코스 카테고리. 서버 schemas.CourseCategory와 같아야 한다. */
 export type CourseCategory = 'art' | 'road' | 'trail' | 'challenge'
@@ -868,19 +878,64 @@ export interface UserDetail extends UserSummary {
   completed_courses: { course_id: string; name: string; acquired_at: string }[]
 }
 
-/** 회원 목록(탈퇴 제외, 가입일 최신순). keyword는 닉네임·이메일 부분일치. */
+export type UserSortKey = 'nickname' | 'email' | 'created_at' | 'last_login_at' | 'completed_count'
+
+/** 회원 목록(탈퇴 제외). keyword는 닉네임·이메일 부분일치, 정렬 기본은 가입일 최신순. */
 export function listUsers(
   keyword: string,
   limit: number,
   offset: number,
+  sort: { key: UserSortKey; dir: 'asc' | 'desc' } = { key: 'created_at', dir: 'desc' },
 ): Promise<{ total: number; items: UserSummary[] }> {
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    sort: sort.key,
+    order: sort.dir,
+  })
   if (keyword.trim()) params.set('keyword', keyword.trim())
   return request(`/admin/users?${params}`)
 }
 
 export function getUser(id: string): Promise<UserDetail> {
   return request(`/admin/users/${id}`)
+}
+
+export interface UserCouponRow {
+  id: string
+  code: string
+  coupon_id: string
+  coupon_name: string
+  benefit: string
+  redeem_type: CouponRedeemType
+  /** 자동 발급 출처(course:… / bingo:… / bingo_lines:…). 운영자 수동 지급은 null. */
+  grant_key: string | null
+  issued_at: string
+  used_at: string | null
+  valid_until: string | null
+  used_partner_name: string | null
+  status: CouponStatus
+}
+
+export interface UserCouponDraw {
+  id: string
+  coupon_id: string
+  coupon_name: string
+  grant_key: string
+  result: CouponDrawResult
+  code: string | null
+  drawn_at: string
+}
+
+export interface UserCoupons {
+  /** 보유 중 — 사용 가능 + 만료. */
+  held: UserCouponRow[]
+  used: UserCouponRow[]
+  draws: UserCouponDraw[]
+}
+
+export function getUserCoupons(id: string): Promise<UserCoupons> {
+  return request(`/admin/users/${id}/coupons`)
 }
 
 // --- 원본 로그 ---------------------------------------------------------

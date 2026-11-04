@@ -11,17 +11,27 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import current_user_id
-from app.models import CourseCuration, PartnerCuration
+from app.deps import current_user_id, current_user_is_admin
+from app.models import CourseCuration, Partner, PartnerCuration
+from app.routers.partners import visible_partners
 from app.schemas import HomeCurationItem, HomeCurationOut
 
 router = APIRouter(tags=["home"])
 
 
-def load_curation(db: Session) -> HomeCurationOut:
-    """두 섹션의 구성(고른 순서대로). 운영 웹 조회(app.admin.home)도 같이 쓴다."""
+def load_curation(
+    db: Session, *, is_admin: bool = False, all_partners: bool = False
+) -> HomeCurationOut:
+    """두 섹션의 구성(고른 순서대로). 운영 웹 조회(app.admin.home)는 all_partners=True.
+
+    업체는 visible_partners 규칙으로 거른다 — 앱은 GET /partners에 없는 id를 못 그린다.
+    코스 큐레이션은 지금처럼 전부 싣는다(앱이 코스 목록과 맞춰 거른다).
+    """
     courses = db.execute(select(CourseCuration).order_by(CourseCuration.sort_order)).scalars()
-    partners = db.execute(select(PartnerCuration).order_by(PartnerCuration.sort_order)).scalars()
+    partner_stmt = select(PartnerCuration).join(Partner, Partner.id == PartnerCuration.partner_id)
+    if not all_partners:
+        partner_stmt = visible_partners(partner_stmt, is_admin)
+    partners = db.execute(partner_stmt.order_by(PartnerCuration.sort_order)).scalars()
     return HomeCurationOut(
         courses=[
             HomeCurationItem(id=row.course_id, describe=row.describe, detail=row.detail or {})
@@ -38,6 +48,7 @@ def load_curation(db: Session) -> HomeCurationOut:
 def get_home_curation(
     db: Session = Depends(get_db),
     _user_id: str = Depends(current_user_id),
+    is_admin: bool = Depends(current_user_is_admin),
 ):
     """홈 '러닝 코스 큐레이션'과 '추천 협력 업체'에 띄울 것(순서대로)."""
-    return load_curation(db)
+    return load_curation(db, is_admin=is_admin)
