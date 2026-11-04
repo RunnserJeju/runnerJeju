@@ -144,7 +144,7 @@ class TestListUsers:
         monkeypatch.setattr(users_router, "_latest_platforms", lambda db, ids: {str(u.id): "ios"})
         db = ListFakeSession([u], total=1)
 
-        result = users_router.list_users(keyword=None, limit=20, offset=0, db=db)
+        result = users_router.list_users(keyword=None, sort="created_at", order="desc", limit=20, offset=0, db=db)
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
@@ -162,7 +162,7 @@ class TestListUsers:
         monkeypatch.setattr(users_router, "_completed_counts", lambda db, ids: {})
         db = ListFakeSession([u], total=1)
 
-        result = users_router.list_users(keyword=None, limit=20, offset=0, db=db)
+        result = users_router.list_users(keyword=None, sort="created_at", order="desc", limit=20, offset=0, db=db)
 
         assert result["items"][0]["completed_count"] == 0
 
@@ -170,7 +170,7 @@ class TestListUsers:
         monkeypatch.setattr(users_router, "_completed_counts", lambda db, ids: {})
         db = ListFakeSession([], total=0)
 
-        result = users_router.list_users(keyword=None, limit=20, offset=0, db=db)
+        result = users_router.list_users(keyword=None, sort="created_at", order="desc", limit=20, offset=0, db=db)
 
         assert result == {"total": 0, "items": []}
 
@@ -180,7 +180,7 @@ class TestListUsers:
         monkeypatch.setattr(users_router, "_completed_counts", lambda db, ids: {})
         db = ListFakeSession([u], total=1)
 
-        result = users_router.list_users(keyword="러너", limit=20, offset=0, db=db)
+        result = users_router.list_users(keyword="러너", sort="created_at", order="desc", limit=20, offset=0, db=db)
 
         assert result["total"] == 1
 
