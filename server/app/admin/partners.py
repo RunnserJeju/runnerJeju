@@ -174,7 +174,7 @@ def _out_for(db: Session, partner: Partner) -> PartnerOut:
 def _upload(file: UploadFile) -> str:
     content, extension = read_image_or_raise(file)
     try:
-        storage.ensure_public_bucket(storage.SUPABASE_PARTNER_BUCKET)
+        storage.try_create_public_bucket(storage.SUPABASE_PARTNER_BUCKET)
         return storage.upload_image(
             content,
             content_type=file.content_type,
