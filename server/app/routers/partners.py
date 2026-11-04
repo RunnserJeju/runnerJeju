@@ -21,9 +21,10 @@ router = APIRouter(tags=["partners"])
 
 
 def visible_partners(stmt, is_admin: bool):
-    """일반 사용자에게는 visibility='public'인 업체만. 코스(visible_courses)와 같은 규칙."""
+    """앱 사용자 기준. 일반은 public만, 관리자 계정은 none만 빼고. 운영 웹은 안 거친다.
+    파이썬 쪽 같은 규칙은 courses.partner_visible."""
     if is_admin:
-        return stmt
+        return stmt.where(Partner.visibility != "none")
     return stmt.where(Partner.visibility == "public")
 
 
@@ -35,7 +36,7 @@ def list_partners(
 ):
     """협력업체 전체(이름순)와 각 업체에 연결된 코스.
 
-    업체는 visibility='public'만(관리자 앱 계정은 전부). 연결 코스는 코스 목록과 같은
+    업체는 visible_partners 규칙으로 거른다. 연결 코스는 코스 목록과 같은
     공개 규칙(visible_courses)을 따른다 — 일반 사용자에게 admin 전용 코스로 넘어가는
     버튼이 생기지 않게. 업체 자체는 공개 코스에 안 걸려 있어도 보여준다(지도에서
     협력업체만 둘러볼 수도 있다).

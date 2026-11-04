@@ -27,6 +27,11 @@ router = APIRouter(tags=["courses"])
 KST = timezone(timedelta(hours=9))
 
 
+def partner_visible(partner, is_admin: bool) -> bool:
+    """partners.visible_partners와 같은 규칙(앱 사용자 기준). none은 관리자 계정에도 숨김."""
+    return partner.visibility == "public" or (is_admin and partner.visibility == "admin")
+
+
 def _to_summary(
     course: Course,
     completed_count: int,
@@ -34,8 +39,9 @@ def _to_summary(
     stamp_image_url: str | None = None,
     *,
     is_admin: bool = False,
+    all_partners: bool = False,
 ) -> dict:
-    """is_admin이 아니면 연결 업체 중 visibility='public'만 싣는다. 운영 웹은 True로 부른다."""
+    """연결 업체는 partner_visible로 거른다. 운영 웹은 all_partners=True로 전부 싣는다."""
     path = course.path or []
 
     return {
@@ -52,7 +58,7 @@ def _to_summary(
         "partners": [
             PartnerSummary.model_validate(link.partner)
             for link in course.partner_links
-            if is_admin or link.partner.visibility == "public"
+            if all_partners or partner_visible(link.partner, is_admin)
         ],
         "description": course.description,
         "estimated_time_min": course.estimated_time_min,

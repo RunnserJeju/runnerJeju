@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { ApiError, listPartners, type Partner } from '../api'
+import { ApiError, listPartners, PARTNER_VISIBILITY_LABEL, type Partner } from '../api'
 import PartnerModal from '../modals/PartnerModal'
 import SortTh, { useSort } from '../components/SortTh'
 
@@ -22,6 +22,7 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
     instagram: (p) => instagramHandle(p.instagram),
     courses: (p) => p.course_count,
     used: (p) => p.coupon_used_count,
+    visibility: (p) => p.visibility,
   })
 
   const reload = useCallback(() => {
@@ -81,6 +82,9 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
               <SortTh sortKey="used" sort={sort} onToggle={toggle} className="nowrap">
                 쿠폰 사용
               </SortTh>
+              <SortTh sortKey="visibility" sort={sort} onToggle={toggle}>
+                공개
+              </SortTh>
             </tr>
           </thead>
           <tbody>
@@ -106,6 +110,9 @@ export default function PartnerListPage({ onUnauthorized }: Props) {
                 <td className="nowrap muted">{instagramHandle(partner.instagram) ?? '—'}</td>
                 <td className="nowrap">{partner.course_count}</td>
                 <td className="nowrap">{partner.coupon_used_count}</td>
+                <td className={partner.visibility === 'public' ? 'nowrap' : 'nowrap muted'}>
+                  {PARTNER_VISIBILITY_LABEL[partner.visibility]}
+                </td>
               </tr>
             ))}
           </tbody>

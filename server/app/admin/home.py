@@ -49,7 +49,7 @@ def _replace(
 @router.get("", response_model=HomeCurationOut)
 def get_home(db: Session = Depends(get_db)):
     """현재 홈 구성. 공개 범위와 무관하게 고른 것 전부. (관리자 전용 — 라우터 레벨에서 강제)"""
-    return load_curation(db)
+    return load_curation(db, all_partners=True)
 
 
 @router.put("/courses", status_code=204)
