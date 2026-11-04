@@ -30,7 +30,7 @@ SUPABASE_STAMP_BUCKET = os.environ.get("SUPABASE_STAMP_BUCKET", "course-stamps")
 SUPABASE_PARTNER_BUCKET = os.environ.get("SUPABASE_PARTNER_BUCKET", "partner-images")
 SUPABASE_PROFILE_BUCKET = os.environ.get("SUPABASE_PROFILE_BUCKET", "profile-images")
 
-# ensure_public_bucket이 이미 확인한 버킷. 프로세스마다 한 번만 물어본다.
+# try_create_public_bucket이 이미 확인한 버킷. 프로세스마다 한 번만 물어본다.
 _known_buckets: set[str] = set()
 
 
@@ -76,27 +76,35 @@ def upload_image(
     return f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}"
 
 
-def ensure_public_bucket(bucket: str) -> None:
-    """버킷이 없으면 public으로 만든다. 새 용도의 버킷(협력업체 이미지)을 환경마다
-    손으로 만들지 않으려고 첫 업로드 때 부른다. 이미 있으면(409) 그냥 넘어간다."""
+def try_create_public_bucket(bucket: str) -> bool:
+    """버킷이 없으면 public으로 만들어 본다. 결과와 무관하게 업로드는 진행한다.
+
+    새 환경에서 버킷을 손으로 안 만들어도 되게 첫 업로드 전에 부른다. 이미 있으면
+    (Supabase는 HTTP 400 + code=BucketAlreadyExists, 예전엔 409) 정상이다. 그 밖의
+    실패도 여기서 막지 않는다 — 버킷이 정말 없으면 뒤따르는 업로드가 실패하고 그
+    메시지가 더 정확하다. 성공·이미있음이면 True, 모르면 False.
+    """
     if bucket in _known_buckets:
-        return
+        return True
     if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
-        raise StorageUploadError(
-            "이미지 업로드가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_API_SECRET_KEY)."
+        return False
+    try:
+        response = httpx.post(
+            f"{SUPABASE_URL}/storage/v1/bucket",
+            headers={
+                "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
+                "apikey": SUPABASE_API_SECRET_KEY,
+            },
+            json={"id": bucket, "name": bucket, "public": True},
+            timeout=30,
         )
-    response = httpx.post(
-        f"{SUPABASE_URL}/storage/v1/bucket",
-        headers={
-            "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
-            "apikey": SUPABASE_API_SECRET_KEY,
-        },
-        json={"id": bucket, "name": bucket, "public": True},
-        timeout=30,
-    )
-    if response.status_code >= 400 and response.status_code != 409:
-        raise StorageUploadError(f"버킷을 만들지 못했어요: {response.text[:200]}")
-    _known_buckets.add(bucket)
+    except httpx.HTTPError:
+        return False
+    exists = response.status_code == 409 or "BucketAlreadyExists" in response.text
+    if response.status_code < 400 or exists:
+        _known_buckets.add(bucket)
+        return True
+    return False
 
 
 def upload_fixed(content: bytes, *, path: str, content_type: str, bucket: str) -> str:

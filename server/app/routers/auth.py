@@ -239,7 +239,7 @@ def upload_profile_image(
     user = _active_user(db, user_id)
     content, extension = read_image_or_raise(file)
     try:
-        storage.ensure_public_bucket(storage.SUPABASE_PROFILE_BUCKET)
+        storage.try_create_public_bucket(storage.SUPABASE_PROFILE_BUCKET)
         new_url = storage.upload_image(
             content,
             content_type=file.content_type,
