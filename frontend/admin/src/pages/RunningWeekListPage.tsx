@@ -468,6 +468,8 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
   const [error, setError] = useState<string | null>(null)
   const { sort, toggle, sorted } = useSort(rows, {
     created: (r) => r.created_at,
+    nickname: (r) => r.nickname,
+    email: (r) => r.email,
     name: (r) => r.name,
     phone: (r) => r.phone,
     gender: (r) => GENDER_LABEL[r.gender],
@@ -486,10 +488,12 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
 
   const download = () => {
     if (!rows) return
-    const header = ['신청일', '이름', '연락처', '성별', '나이', '거주지', '폼 버전', '폐기 예정']
+    const header = ['신청일', '닉네임', '이메일', '이름', '연락처', '성별', '나이', '거주지', '폼 버전', '폐기 예정']
     const lines = rows.map((r) =>
       [
         formatDateTime(r.created_at),
+        r.nickname ?? '',
+        r.email ?? '',
         r.name,
         r.phone,
         GENDER_LABEL[r.gender],
@@ -533,6 +537,12 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
                 <SortTh sortKey="created" sort={sort} onToggle={toggle}>
                   신청일
                 </SortTh>
+                <SortTh sortKey="nickname" sort={sort} onToggle={toggle}>
+                  닉네임
+                </SortTh>
+                <SortTh sortKey="email" sort={sort} onToggle={toggle}>
+                  이메일
+                </SortTh>
                 <SortTh sortKey="name" sort={sort} onToggle={toggle}>
                   이름
                 </SortTh>
@@ -557,6 +567,8 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
               {sorted!.map((r) => (
                 <tr key={r.id}>
                   <td className="muted">{formatDateTime(r.created_at)}</td>
+                  <td>{r.nickname ?? <span className="muted">(탈퇴/미설정)</span>}</td>
+                  <td className="muted">{r.email ?? '—'}</td>
                   <td>{r.name}</td>
                   <td>{r.phone}</td>
                   <td>{GENDER_LABEL[r.gender]}</td>

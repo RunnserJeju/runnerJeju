@@ -670,6 +670,9 @@ class AdminParticipationOut(BaseModel):
 
     id: uuid.UUID
     user_id: str
+    # 앱 계정의 닉네임·이메일. 탈퇴했거나 미설정이면 None.
+    nickname: str | None = None
+    email: str | None = None
     name: str
     phone: str
     gender: str
