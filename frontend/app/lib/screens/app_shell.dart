@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/course_partner.dart';
+import '../models/run_record.dart';
 import '../models/running_course.dart';
 import '../models/user_log.dart';
 import '../services/run_journal.dart';
 import '../services/run_live_widget.dart';
+import '../services/run_tracker.dart';
 import '../services/service_locator.dart';
 import '../services/user_log_service.dart';
 import '../theme/app_theme.dart';
@@ -53,10 +55,14 @@ class _AppShellState extends State<AppShell> {
     final journal = Services.instance.runJournal;
     final snapshot = await journal.read();
     if (snapshot == null || !mounted) return;
+    // 읽는 사이 새 러닝이 시작됐으면 일지는 이미 그 러닝 것이다. 건드리지 않는다.
+    if (Services.instance.runTracker.status != RunStatus.idle) return;
 
     if (snapshot.finished) {
+      // 종료 뒤 업로드 전에 죽은 기록. 응답만 못 받고 서버엔 들어갔을 수 있어
+      // 같은 시작 시각의 기록이 있으면 다시 올리지 않는다.
       final record = snapshot.record;
-      if (record != null) {
+      if (record != null && !await _alreadyUploaded(record)) {
         unawaited(Services.instance.runSubmission.submit(record));
       } else {
         unawaited(journal.discard());
@@ -80,7 +86,7 @@ class _AppShellState extends State<AppShell> {
     }
 
     final resume = await _askResume(snapshot);
-    if (!mounted) return;
+    if (!mounted || Services.instance.runTracker.status != RunStatus.idle) return;
     if (resume != true) {
       writeLog(
         LogName.runAbandon,
@@ -129,6 +135,24 @@ class _AppShellState extends State<AppShell> {
       course: course,
       origin: snapshot.points.last,
     );
+  }
+
+  Future<bool> _alreadyUploaded(RunRecord record) async {
+    try {
+      final records = await Services.instance.run.loadMyRecords(
+        limit: 5,
+        since: record.startedAt.subtract(const Duration(minutes: 1)),
+        until: record.startedAt.add(const Duration(minutes: 1)),
+        withPath: false,
+      );
+      return records.any(
+        (r) =>
+            r.startedAt.difference(record.startedAt).abs() <
+            const Duration(seconds: 2),
+      );
+    } catch (_) {
+      return false; // 확인을 못 하면 올린다. 중복이 유실보다 낫다.
+    }
   }
 
   Future<bool?> _askResume(RunJournalSnapshot snapshot) {

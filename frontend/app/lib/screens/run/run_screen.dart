@@ -192,7 +192,12 @@ class _RunScreenState extends State<RunScreen> {
   /// 되묻지 않는다. 종료 버튼은 일시정지 상태에서만 나오므로 여기까지 오려면
   /// 이미 한 번 멈추기로 마음먹고 버튼을 두 번 누른 뒤다. 거기서 한 번 더
   /// 물으면 확인 절차가 아니라 달리고 온 사람 앞을 막는 문이 된다.
+  /// 종료 버튼이 한 프레임에 두 번 눌리면 같은 기록이 두 번 올라간다. 한 번만.
+  bool _finishing = false;
+
   Future<void> _finish() async {
+    if (_finishing) return;
+    _finishing = true;
     _tracker.finish();
     // 러닝이 끝났으니 잠금화면 위젯을 걷는다.
     unawaited(_liveWidget.stop());
@@ -210,6 +215,9 @@ class _RunScreenState extends State<RunScreen> {
     if (record == null) return;
     // 화면이 뜨기 전에 업로드를 시작한다. 결과 화면은 진행 상황을 구독만 한다.
     unawaited(Services.instance.runSubmission.submit(record));
+    // 결과 화면으로 넘어가며 지도가 내려가는 순간이 가장 위험하다(#102). 그 전에
+    // 종료 줄이 디스크에 있어야 죽어도 '종료된 러닝'으로 복구된다.
+    await Services.instance.runJournal.flush();
     if (!mounted) return;
 
     await Navigator.of(context).pushReplacement(
