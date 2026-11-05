@@ -1043,6 +1043,12 @@ tbody tr.selected {
   font-size: 13px;
 }
 
+.run-search {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
 .run-summary {
   margin: 14px 0 12px;
   font-size: 13px;

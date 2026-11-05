@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 import { ApiError, listAdminRuns, type AdminRun } from '../api'
 import { kstDaysAgo, kstToday } from '../utils/dates'
@@ -26,6 +26,19 @@ function formatDuration(sec: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 
+const COMPLETION: Record<AdminRun['completion'], ReactNode> = {
+  completed: <strong>완주</strong>,
+  incomplete: <span className="muted">미완주</span>,
+  pending: <span className="muted">검증 중</span>,
+  none: <span className="muted">-</span>,
+}
+
+/** 일치율(0~1)을 소수점 버린 백분율로. 부동소수 오차(0.29*100=28.999…)로 한 칸 내려가지 않게 보정한다. */
+function formatMatch(rate: number | null): ReactNode {
+  if (rate == null) return <span className="muted">-</span>
+  return `경로 ${Math.floor(rate * 100 + 1e-6)}% 일치`
+}
+
 interface Props {
   onUnauthorized: () => void
 }
@@ -35,6 +48,8 @@ export default function RunHistory({ onUnauthorized }: Props) {
   // 기본은 오늘 하루. draft는 입력 중인 값, applied는 실제로 조회한 값이다.
   const [draft, setDraft] = useState({ from: kstToday(), to: kstToday() })
   const [applied, setApplied] = useState(draft)
+  const [searchDraft, setSearchDraft] = useState('')
+  const [search, setSearch] = useState('')
   const [order, setOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
@@ -56,7 +71,7 @@ export default function RunHistory({ onUnauthorized }: Props) {
     // 기간·페이지를 연달아 바꾸면 늦게 온 옛 응답이 새 목록을 덮을 수 있어 버린다.
     let stale = false
     setRuns(null)
-    listAdminRuns(applied.from, applied.to, order, PAGE_SIZE, page * PAGE_SIZE)
+    listAdminRuns(applied.from, applied.to, order, PAGE_SIZE, page * PAGE_SIZE, search)
       .then((result) => {
         if (stale) return
         setRuns(result.items)
@@ -69,7 +84,7 @@ export default function RunHistory({ onUnauthorized }: Props) {
     return () => {
       stale = true
     }
-  }, [applied, order, page, handleError])
+  }, [applied, order, page, search, handleError])
 
   const apply = (range: { from: string; to: string }) => {
     setDraft(range)
@@ -122,6 +137,32 @@ export default function RunHistory({ onUnauthorized }: Props) {
         >
           최근 7일
         </button>
+        <span className="run-search">
+          <input
+            type="search"
+            className="name-search"
+            placeholder="닉네임/이메일 검색"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                setSearch(searchDraft)
+                setPage(0)
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="small"
+            onClick={() => {
+              setSearch(searchDraft)
+              setPage(0)
+            }}
+          >
+            검색
+          </button>
+        </span>
       </form>
       {draft.from > draft.to && draft.to && (
         <div className="error">시작일이 종료일보다 늦을 수 없어요.</div>
@@ -129,11 +170,12 @@ export default function RunHistory({ onUnauthorized }: Props) {
 
       <p className="muted run-summary">
         {applied.from === applied.to ? applied.from : `${applied.from} ~ ${applied.to}`} (한국 시간) ·{' '}
+        {search.trim() && <>“{search.trim()}” 검색 · </>}
         {runs ? `${total.toLocaleString()}건` : '불러오는 중…'}
       </p>
 
       {error && <div className="error">{error}</div>}
-      {runs && runs.length === 0 && <p className="muted">이 기간에 러닝 기록이 없어요.</p>}
+      {runs && runs.length === 0 && <p className="muted">조건에 맞는 러닝 기록이 없어요.</p>}
       {runs && runs.length > 0 && (
         <table className="users-table">
           <thead>
@@ -152,6 +194,8 @@ export default function RunHistory({ onUnauthorized }: Props) {
               <th>코스</th>
               <th>거리</th>
               <th>시간</th>
+              <th>완주</th>
+              <th>경로 일치</th>
             </tr>
           </thead>
           <tbody>
@@ -165,6 +209,8 @@ export default function RunHistory({ onUnauthorized }: Props) {
                 <td>{r.course_name ?? <span className="muted">코스 없이 달림</span>}</td>
                 <td className="nowrap">{r.distance_km.toFixed(2)}km</td>
                 <td className="nowrap muted">{formatDuration(r.duration_sec)}</td>
+                <td className="nowrap">{COMPLETION[r.completion]}</td>
+                <td className="nowrap">{formatMatch(r.match_rate)}</td>
               </tr>
             ))}
           </tbody>

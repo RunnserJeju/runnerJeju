@@ -22,8 +22,22 @@ from sqlalchemy.orm import Session
 
 from app.admin.coupons import _effective_status
 from app.db import get_db
-from app.models import Coupon, CouponDraw, Course, Partner, Run, User, UserCoupon, UserLog, Verification
-from app.schemas import UserCouponsOut, UserDetailOut, UserListOut
+from app.models import (
+    Coupon,
+    CouponDraw,
+    Course,
+    Partner,
+    Run,
+    Stamp,
+    StampDefinition,
+    User,
+    UserCoupon,
+    UserLog,
+    Verification,
+)
+from app.routers.stamps import course_id_of
+from app.schemas import UserCouponsOut, UserDetailOut, UserListOut, UserStampOut
+from app.stamp_images import course_categories, resolve_image_url
 
 router = APIRouter(tags=["users"])
 
@@ -235,6 +249,32 @@ def _load_user_or_404(db: Session, user_id: uuid.UUID) -> User:
     if user is None or user.deleted_at is not None:
         raise HTTPException(status_code=404, detail="회원을 찾을 수 없어요.")
     return user
+
+
+@router.get("/users/{user_id}/stamps", response_model=list[UserStampOut])
+def get_user_stamps(user_id: uuid.UUID, db: Session = Depends(get_db)):
+    """회원 상세의 보유 스탬프 — 받은 순서 최신 먼저. 조회 전용(지급은 스탬프 페이지). (관리자 전용)"""
+    user = _load_user_or_404(db, user_id)
+    rows = db.execute(
+        select(Stamp, StampDefinition)
+        .join(StampDefinition, StampDefinition.id == Stamp.stamp_definition_id)
+        .where(Stamp.user_id == str(user.id))
+        .order_by(Stamp.acquired_at.desc(), Stamp.id.desc())
+    ).all()
+    categories = course_categories(
+        db, {cid for _, d in rows if (cid := course_id_of(d)) is not None}
+    )
+    return [
+        {
+            "id": stamp.id,
+            "stamp_definition_id": d.id,
+            "name": d.name,
+            "display_image_url": resolve_image_url(d, categories.get(course_id_of(d))),
+            "acquired_at": stamp.acquired_at,
+            "from_run": stamp.run_id is not None,
+        }
+        for stamp, d in rows
+    ]
 
 
 @router.get("/users/{user_id}/coupons", response_model=UserCouponsOut)

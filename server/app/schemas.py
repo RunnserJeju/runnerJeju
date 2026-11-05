@@ -859,6 +859,9 @@ class AdminRunOut(BaseModel):
     duration_sec: int
     started_at: datetime
     ended_at: datetime
+    # completed 완주 / pending 검증 중 / incomplete 미완주 / none 코스 없이 뛴 러닝
+    completion: str
+    match_rate: float | None  # 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 None
 
 
 class AdminRunListOut(BaseModel):
@@ -931,6 +934,25 @@ class IssueRequest(BaseModel):
 
 class IssueResult(BaseModel):
     issued: int
+
+
+class StampIssueResult(BaseModel):
+    """스탬프 수동 지급 결과. skipped는 이미 갖고 있어 건너뛴 회원 수."""
+
+    issued: int
+    skipped: int
+
+
+class UserStampOut(BaseModel):
+    """회원이 보유한 스탬프 한 개."""
+
+    id: uuid.UUID
+    stamp_definition_id: uuid.UUID
+    name: str
+    display_image_url: str | None
+    acquired_at: datetime
+    # 달린 기록으로 받았으면 True, 운영자 지급 등 러닝 없이 받았으면 False
+    from_run: bool
 
 
 class IssuedCouponOut(BaseModel):

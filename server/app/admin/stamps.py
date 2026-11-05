@@ -16,9 +16,14 @@ from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
-from app.models import Stamp, StampDefinition
+from app.models import Stamp, StampDefinition, User
 from app.routers.stamps import course_id_of
-from app.schemas import AdminStampDefinitionOut, StampDefinitionUpdate
+from app.schemas import (
+    AdminStampDefinitionOut,
+    IssueRequest,
+    StampDefinitionUpdate,
+    StampIssueResult,
+)
 from app.stamp_images import course_categories, resolve_image_url
 
 router = APIRouter(tags=["stamps"])
@@ -174,3 +179,34 @@ def delete_stamp_image(stamp_id: uuid.UUID, db: Session = Depends(get_db)):
         db.refresh(definition)
         storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
     return _single_out(db, definition)
+
+
+@router.post("/stamps/{stamp_id}/issue", response_model=StampIssueResult, status_code=201)
+def issue_stamp(stamp_id: uuid.UUID, payload: IssueRequest, db: Session = Depends(get_db)):
+    """지정한 회원들에게 스탬프를 수동 지급한다 — 획득 조건·노출 여부·러닝위크 기간을 따지지 않는다.
+
+    스탬프 한 개만 준다. 쿠폰 추첨·빙고 줄 보상 같은 연쇄 보상은 일으키지 않는다(앱 오류로
+    판정에 실패한 사람을 운영자가 직접 구제하는 용도). 이미 가진 회원은 건너뛰고(스탬프는
+    사람당 한 번), 존재하는 비탈퇴 회원에게만 준다. run_id는 None — 러닝 없이 받았다는 표시.
+    """
+    definition = _load_or_404(db, stamp_id)
+
+    user_ids = set(payload.user_ids)
+    valid = {
+        str(uid)
+        for uid in db.execute(
+            select(User.id).where(User.id.in_(user_ids), User.deleted_at.is_(None))
+        ).scalars()
+    }
+    already = set(
+        db.execute(
+            select(Stamp.user_id).where(
+                Stamp.stamp_definition_id == definition.id, Stamp.user_id.in_(valid)
+            )
+        ).scalars()
+    )
+    targets = valid - already
+    for uid in targets:
+        db.add(Stamp(user_id=uid, stamp_definition_id=definition.id, run_id=None))
+    db.commit()
+    return {"issued": len(targets), "skipped": len(user_ids) - len(targets)}

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   ApiError,
   deleteStampImage,
+  issueStamp,
   listCourses,
   listRunningWeeks,
   listStamps,
@@ -15,9 +16,15 @@ import {
   type StampDefinitionPayload,
 } from '../api'
 import { STAMP_SPEC, validateStampImage } from '../components/imageSpec'
-import { ImageSection, imageChanged, NO_IMAGE_CHANGE, type ImageChange } from '../components/ImageSections'
+import {
+  ImageSection,
+  imageChanged,
+  NO_IMAGE_CHANGE,
+  type ImageChange,
+} from '../components/ImageSections'
 import Modal from '../components/Modal'
 import SaveFooter from '../components/SaveFooter'
+import UserIssuePicker from '../components/UserIssuePicker'
 import SortTh, { useSort } from '../components/SortTh'
 import { runSteps, snapshot, type SaveStep } from '../utils/saveSteps'
 
@@ -106,8 +113,8 @@ export default function StampListPage({ onUnauthorized }: Props) {
         <h2>스탬프</h2>
       </div>
       <p className="muted page-desc">
-        코스를 등록하면 그 코스의 완주 스탬프가 자동으로 하나 생겨요. 여기서는 이름·안내·도안·정렬·노출만
-        고쳐요.
+        코스를 등록하면 그 코스의 완주 스탬프가 자동으로 하나 생겨요. 여기서는
+        이름·안내·도안·정렬·노출만 고쳐요.
       </p>
       {error && <div className="error">{error}</div>}
       {stamps == null && !error && <p className="muted">불러오는 중…</p>}
@@ -216,6 +223,7 @@ function StampModal({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tab, setTab] = useState<'edit' | 'issue'>('edit')
 
   const set = (patch: Partial<StampDefinitionPayload>) => {
     setValues((prev) => ({ ...prev, ...patch }))
@@ -224,8 +232,8 @@ function StampModal({
 
   const contentDirty = snapshot(values) !== savedKey
   const imageDirty = imageChanged(image)
-  const dirty = [contentDirty && '내용', imageDirty && '도안'].filter(
-    (label): label is string => Boolean(label),
+  const dirty = [contentDirty && '내용', imageDirty && '도안'].filter((label): label is string =>
+    Boolean(label),
   )
 
   const save = async () => {
@@ -277,70 +285,108 @@ function StampModal({
 
   return (
     <Modal
-      title={`스탬프 수정 — ${stamp.name}`}
+      title={`스탬프 — ${stamp.name}`}
       onClose={onClose}
       closable={!saving}
-      footer={<SaveFooter dirty={dirty} saving={saving} error={error} onSave={save} />}
+      footer={
+        tab === 'edit' ? (
+          <SaveFooter dirty={dirty} saving={saving} error={error} onSave={save} />
+        ) : undefined
+      }
     >
-      {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
-      <div className="card">
-        <div className="field">
-          <label>
-            획득 조건 <span className="hint">여기서는 바꿀 수 없어요</span>
-          </label>
-          <div>{condition}</div>
-        </div>
-        <div className="field">
-          <label htmlFor="stamp-name">이름</label>
-          <input
-            id="stamp-name"
-            value={values.name}
-            maxLength={100}
-            onChange={(e) => set({ name: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="stamp-description">
-            획득 조건 안내 <span className="hint">앱 스탬프 상세·빙고 칸에 그대로 보여요</span>
-          </label>
-          <textarea
-            id="stamp-description"
-            value={values.description ?? ''}
-            onChange={(e) => set({ description: e.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="stamp-order">
-            정렬 <span className="hint">작을수록 앞. 앱 스탬프 탭 순서</span>
-          </label>
-          <input
-            id="stamp-order"
-            type="number"
-            value={values.sort_order}
-            onChange={(e) => set({ sort_order: Number(e.target.value) || 0 })}
-          />
-        </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={values.is_active}
-              onChange={(e) => set({ is_active: e.target.checked })}
-            />{' '}
-            앱에 노출
-          </label>
-        </div>
+      <div className="tabs" style={{ marginTop: 0, marginBottom: 12 }}>
+        <button className={tab === 'edit' ? 'active' : undefined} onClick={() => setTab('edit')}>
+          수정
+        </button>
+        <button className={tab === 'issue' ? 'active' : undefined} onClick={() => setTab('issue')}>
+          지급
+        </button>
       </div>
-      <ImageSection
-        title="도안"
-        description={`앱이 원 안에 꽉 채워 그려요. 바꾸면 이미 받은 사람에게도 반영돼요. ${STAMP_SPEC.hint}.`}
-        imageClass="thumb large round"
-        currentUrl={stamp.display_image_url}
-        removable={Boolean(stamp.image_url)}
-        value={image}
-        onChange={setImage}
-        validate={validateStampImage}
-      />
+      {tab === 'issue' && (
+        <>
+          <p className="muted" style={{ marginTop: 0 }}>
+            획득 조건과 노출 여부, 러닝위크 기간을 따지지 않고 스탬프만 줘요. 쿠폰 추첨이나 빙고 줄
+            보상은 따라 나가지 않아요. 이미 가진 회원은 건너뛰어요.
+          </p>
+          <UserIssuePicker
+            confirmText={(count) => `${count}명에게 "${stamp.name}" 스탬프를 지급할까요?`}
+            onIssue={async (userIds) => {
+              const result = await issueStamp(stamp.id, userIds)
+              onSaved({ ...stamp, issued_count: stamp.issued_count + result.issued })
+              return result.skipped > 0
+                ? `${result.issued}명에게 지급했어요. (${result.skipped}명은 이미 갖고 있어 건너뜀)`
+                : `${result.issued}명에게 지급했어요.`
+            }}
+          />
+        </>
+      )}
+      {tab === 'edit' && (
+        <>
+          {message && (
+            <div className="notice" style={{ marginTop: 0 }}>
+              {message}
+            </div>
+          )}
+          <div className="card">
+            <div className="field">
+              <label>
+                획득 조건 <span className="hint">여기서는 바꿀 수 없어요</span>
+              </label>
+              <div>{condition}</div>
+            </div>
+            <div className="field">
+              <label htmlFor="stamp-name">이름</label>
+              <input
+                id="stamp-name"
+                value={values.name}
+                maxLength={100}
+                onChange={(e) => set({ name: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="stamp-description">
+                획득 조건 안내 <span className="hint">앱 스탬프 상세·빙고 칸에 그대로 보여요</span>
+              </label>
+              <textarea
+                id="stamp-description"
+                value={values.description ?? ''}
+                onChange={(e) => set({ description: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="stamp-order">
+                정렬 <span className="hint">작을수록 앞. 앱 스탬프 탭 순서</span>
+              </label>
+              <input
+                id="stamp-order"
+                type="number"
+                value={values.sort_order}
+                onChange={(e) => set({ sort_order: Number(e.target.value) || 0 })}
+              />
+            </div>
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={values.is_active}
+                  onChange={(e) => set({ is_active: e.target.checked })}
+                />{' '}
+                앱에 노출
+              </label>
+            </div>
+          </div>
+          <ImageSection
+            title="도안"
+            description={`앱이 원 안에 꽉 채워 그려요. 바꾸면 이미 받은 사람에게도 반영돼요. ${STAMP_SPEC.hint}.`}
+            imageClass="thumb large round"
+            currentUrl={stamp.display_image_url}
+            removable={Boolean(stamp.image_url)}
+            value={image}
+            onChange={setImage}
+            validate={validateStampImage}
+          />
+        </>
+      )}
     </Modal>
   )
 }

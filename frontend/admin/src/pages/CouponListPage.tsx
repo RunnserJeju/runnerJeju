@@ -6,16 +6,15 @@ import {
   listCoupons,
   listIssuedCoupons,
   listPartners,
-  listUsers,
   updateCoupon,
   type Coupon,
   type CouponPayload,
   type CouponTriggerType,
   type IssuedCoupon,
   type Partner,
-  type UserSummary,
 } from '../api'
 import Modal from '../components/Modal'
+import UserIssuePicker from '../components/UserIssuePicker'
 import SortTh, { useSort } from '../components/SortTh'
 import PartnerPicker from '../components/PartnerPicker'
 
@@ -104,9 +103,7 @@ export default function CouponListPage({ onUnauthorized }: Props) {
       <div className="page-head">
         <h2>쿠폰</h2>
       </div>
-      <p className="muted page-desc">
-        등록된 쿠폰의 혜택 내용, 상태, 유효기간 등을 편집합니다. 
-      </p>
+      <p className="muted page-desc">등록된 쿠폰의 혜택 내용, 상태, 유효기간 등을 편집합니다.</p>
       {error && <div className="error">{error}</div>}
       {coupons == null && !error && <p className="muted">불러오는 중…</p>}
       {coupons && coupons.length === 0 && <p className="muted">심어진 쿠폰이 없어요.</p>}
@@ -162,7 +159,9 @@ export default function CouponListPage({ onUnauthorized }: Props) {
                   </span>
                 </td>
                 <td className="muted">
-                  {coupon.redeem_type === 'kakao_channel' ? '카카오톡 채널 문의' : partnerLabel(coupon)}
+                  {coupon.redeem_type === 'kakao_channel'
+                    ? '카카오톡 채널 문의'
+                    : partnerLabel(coupon)}
                 </td>
                 <td className="muted">
                   {coupon.valid_until ? new Date(coupon.valid_until).toLocaleString() : '무기한'}
@@ -209,10 +208,7 @@ function CouponModal({
         <button className={tab === 'edit' ? 'active' : undefined} onClick={() => setTab('edit')}>
           수정
         </button>
-        <button
-          className={tab === 'issue' ? 'active' : undefined}
-          onClick={() => setTab('issue')}
-        >
+        <button className={tab === 'issue' ? 'active' : undefined} onClick={() => setTab('issue')}>
           지급
         </button>
         <button
@@ -319,7 +315,11 @@ function CouponEditForm({
 
   return (
     <>
-      {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
+      {message && (
+        <div className="notice" style={{ marginTop: 0 }}>
+          {message}
+        </div>
+      )}
       <div className="card">
         <div className="field">
           <label>지급 조건</label>
@@ -334,7 +334,8 @@ function CouponEditForm({
             <strong>{REDEEM_LABEL[coupon.redeem_type]}</strong>
             {coupon.redeem_type === 'kakao_channel' && (
               <div className="hint">
-                앱 쿠폰함에서는 사용 처리가 안 되고, "경품 지급" 메뉴에서 운영자가 지급완료를 눌러야 사용완료가 돼요.
+                앱 쿠폰함에서는 사용 처리가 안 되고, "경품 지급" 메뉴에서 운영자가 지급완료를 눌러야
+                사용완료가 돼요.
               </div>
             )}
           </div>
@@ -373,7 +374,9 @@ function CouponEditForm({
           <div className="field">
             <label htmlFor="coupon-win-rate">
               지급 확률(%){' '}
-              <span className="hint">조건을 채운 사람 중 이 비율만 받아요. 100이면 전원. 낙첨은 다시 뽑지 않아요</span>
+              <span className="hint">
+                조건을 채운 사람 중 이 비율만 받아요. 100이면 전원. 낙첨은 다시 뽑지 않아요
+              </span>
             </label>
             <input
               id="coupon-win-rate"
@@ -391,7 +394,8 @@ function CouponEditForm({
           <label htmlFor="coupon-stock">
             수량{' '}
             <span className="hint">
-              총 발급 상한. 비우면 무제한. 자동 지급·운영자 지급 모두 포함해 세고, 소진되면 확률과 무관하게 안 나가요
+              총 발급 상한. 비우면 무제한. 자동 지급·운영자 지급 모두 포함해 세고, 소진되면 확률과
+              무관하게 안 나가요
               {coupon.stock != null && ` (지금까지 ${coupon.issued_count}장 발급)`}
             </span>
           </label>
@@ -435,7 +439,8 @@ function CouponEditForm({
             />{' '}
             활성화
             <span className="hint">
-              러닝위크 기간에만 켜 주세요. 켜져 있을 때만 자동 지급돼요. 이미 받은 쿠폰은 꺼도 그대로 쓸 수 있어요
+              러닝위크 기간에만 켜 주세요. 켜져 있을 때만 자동 지급돼요. 이미 받은 쿠폰은 꺼도
+              그대로 쓸 수 있어요
             </span>
           </label>
         </div>
@@ -450,8 +455,6 @@ function CouponEditForm({
   )
 }
 
-const USER_PAGE = 20
-
 /** 운영자 지급: 회원을 검색해 체크하고 한 번에 준다. 같은 사람에게 여러 번 줄 수도 있다. */
 function CouponIssueSection({
   coupon,
@@ -460,108 +463,15 @@ function CouponIssueSection({
   coupon: Coupon
   onIssued: (coupon: Coupon) => void
 }) {
-  const [draft, setDraft] = useState('')
-  const [keyword, setKeyword] = useState('')
-  const [users, setUsers] = useState<UserSummary[] | null>(null)
-  const [selected, setSelected] = useState<Map<string, UserSummary>>(new Map())
-  const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [issuing, setIssuing] = useState(false)
-
-  useEffect(() => {
-    listUsers(keyword, USER_PAGE, 0)
-      .then((page) => setUsers(page.items))
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : '회원을 불러오지 못했어요.'),
-      )
-  }, [keyword])
-
-  const toggle = (user: UserSummary) => {
-    setSelected((prev) => {
-      const next = new Map(prev)
-      if (next.has(user.id)) next.delete(user.id)
-      else next.set(user.id, user)
-      return next
-    })
-    setMessage(null)
-  }
-
-  const issue = async () => {
-    if (selected.size === 0) return
-    if (!window.confirm(`${selected.size}명에게 "${coupon.name}"을 지급할까요?`)) return
-    setError(null)
-    setIssuing(true)
-    try {
-      const result = await issueCoupon(coupon.id, [...selected.keys()])
-      setMessage(`${result.issued}명에게 지급했어요.`)
-      setSelected(new Map())
-      onIssued({ ...coupon, issued_count: coupon.issued_count + result.issued })
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '지급에 실패했어요.')
-    } finally {
-      setIssuing(false)
-    }
-  }
-
-  const label = (user: UserSummary) => user.nickname ?? user.email ?? user.id.slice(0, 8)
-
   return (
-    <div className="card">
-      {message && <div className="notice" style={{ marginTop: 0 }}>{message}</div>}
-      <form
-        className="search-row"
-        onSubmit={(event) => {
-          event.preventDefault()
-          setKeyword(draft)
-        }}
-      >
-        <input
-          placeholder="닉네임 또는 이메일"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <button type="submit" className="secondary">
-          검색
-        </button>
-      </form>
-      {error && <div className="error">{error}</div>}
-      {users == null && !error && <p className="muted">불러오는 중…</p>}
-      {users && users.length === 0 && <p className="muted">조건에 맞는 회원이 없어요.</p>}
-      {users && users.length > 0 && (
-        <table className="users-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>닉네임</th>
-              <th>이메일</th>
-              <th>완주</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} onClick={() => toggle(user)}>
-                <td style={{ width: 32 }}>
-                  <input type="checkbox" checked={selected.has(user.id)} readOnly />
-                </td>
-                <td>{user.nickname ?? <span className="muted">(미설정)</span>}</td>
-                <td className="muted">{user.email ?? '—'}</td>
-                <td className="muted">{user.completed_count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {selected.size > 0 && (
-        <p className="muted" style={{ marginTop: 12 }}>
-          고른 회원: {[...selected.values()].map(label).join(', ')}
-        </p>
-      )}
-      <div className="submit-row">
-        <button onClick={issue} disabled={issuing || selected.size === 0}>
-          {issuing ? '지급 중…' : `${selected.size}명에게 지급`}
-        </button>
-      </div>
-    </div>
+    <UserIssuePicker
+      confirmText={(count) => `${count}명에게 "${coupon.name}"을 지급할까요?`}
+      onIssue={async (userIds) => {
+        const result = await issueCoupon(coupon.id, userIds)
+        onIssued({ ...coupon, issued_count: coupon.issued_count + result.issued })
+        return `${result.issued}명에게 지급했어요.`
+      }}
+    />
   )
 }
 
@@ -644,7 +554,11 @@ function IssuedSection({ coupon }: { coupon: Coupon }) {
       )}
       {pageCount > 1 && (
         <div className="pager">
-          <button className="secondary small" disabled={page === 0} onClick={() => setPage(page - 1)}>
+          <button
+            className="secondary small"
+            disabled={page === 0}
+            onClick={() => setPage(page - 1)}
+          >
             이전
           </button>
           <span className="muted">
