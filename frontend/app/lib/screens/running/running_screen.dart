@@ -827,19 +827,6 @@ class RunningScreenState extends State<RunningScreen> {
       }
     }
 
-    await _openRunScreen(course: course, origin: origin);
-  }
-
-  /// 앱이 죽기 전 달리던 러닝을 이어 달린다. tracker는 이미 복구돼 멈춤 상태다.
-  Future<void> resumeRecoveredRun({
-    RunningCourse? course,
-    GeoPoint? origin,
-  }) => _openRunScreen(course: course, origin: origin);
-
-  Future<void> _openRunScreen({
-    RunningCourse? course,
-    GeoPoint? origin,
-  }) async {
     setState(() => _isRunningScreenOpen = true);
 
     await Navigator.of(context).push(

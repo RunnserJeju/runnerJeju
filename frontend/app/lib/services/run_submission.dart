@@ -14,7 +14,7 @@ import 'stamp_service.dart';
 import 'user_log_service.dart';
 import 'verification_service.dart';
 
-/// 결과 화면이 띄워야 할 연출 하나. 화면이 꺼내 보여주고 비운다.
+/// 결과 화면이 띄울 연출 하나. 화면이 안 떠 있으면 띄우지 않고 지나간다.
 sealed class Celebration {
   const Celebration();
 }
@@ -40,6 +40,8 @@ class CouponMissCelebration extends Celebration {
 /// 화면(RunResultScreen)은 이걸 구독해 그리기만 한다. 화면이 닫혀도 여기서 도는
 /// 업로드·검증은 멈추지 않는다 — 결과 화면이 저장 중에 닫히면 검증이 생략되던
 /// 문제(#104)를 막는다. 러닝 한 번에 하나만 돌고, 다음 submit이 상태를 덮어쓴다.
+/// 보상 연출은 [onCelebration]이 걸려 있을 때만 띄운다. 화면이 닫힌 동안 받은
+/// 보상은 연출 없이 지나가고 스탬프 탭·마이페이지에서 본다.
 class RunSubmission extends ChangeNotifier {
   RunSubmission(
     this._run,
@@ -70,8 +72,8 @@ class RunSubmission extends ChangeNotifier {
   Coupon? earnedCoupon;
   final List<Coupon> runningWeekCoupons = [];
 
-  /// 아직 화면에서 띄우지 않은 연출. 순서대로 띄운다.
-  final List<Celebration> pendingCelebrations = [];
+  /// 결과 화면이 걸어 두는 연출. 하나가 끝나야 다음 조회로 넘어가므로 순서가 지켜진다.
+  Future<void> Function(Celebration)? onCelebration;
 
   // 재시도로 같은 검증을 다시 받아도 연출은 한 번만.
   bool _courseDrawCelebrated = false;
@@ -95,7 +97,6 @@ class RunSubmission extends ChangeNotifier {
     earnedStamp = null;
     earnedCoupon = null;
     runningWeekCoupons.clear();
-    pendingCelebrations.clear();
     _courseDrawCelebrated = false;
     _runningWeekCelebrated = false;
     return _upload();
@@ -200,9 +201,14 @@ class RunSubmission extends ChangeNotifier {
       final stamp = await _stamp.loadStamp(stampId);
       if (gen != _generation || earnedStamp != null) return;
       earnedStamp = stamp;
-      pendingCelebrations.add(StampCelebration(stamp));
       notifyListeners();
+      await _celebrate(StampCelebration(stamp));
     } catch (_) {}
+  }
+
+  Future<void> _celebrate(Celebration celebration) async {
+    final show = onCelebration;
+    if (show != null) await show(celebration);
   }
 
   /// 조회 실패는 무시한다. 마이페이지에서 다시 볼 수 있다.
@@ -216,8 +222,8 @@ class RunSubmission extends ChangeNotifier {
       } else {
         earnedCoupon = coupon;
       }
-      pendingCelebrations.add(CouponCelebration(coupon));
       notifyListeners();
+      await _celebrate(CouponCelebration(coupon));
     } catch (_) {}
   }
 
@@ -225,10 +231,9 @@ class RunSubmission extends ChangeNotifier {
     if (draw.won) {
       await _loadCoupon(draw.userCouponId!, runningWeek: runningWeek);
     } else {
-      pendingCelebrations.add(
+      await _celebrate(
         CouponMissCelebration(name: draw.name, benefit: draw.benefit),
       );
-      notifyListeners();
     }
   }
 
@@ -261,8 +266,8 @@ class RunSubmission extends ChangeNotifier {
       try {
         final stamp = await _stamp.loadStamp(stampId);
         if (gen != _generation) return;
-        pendingCelebrations.add(StampCelebration(stamp));
         notifyListeners();
+        await _celebrate(StampCelebration(stamp));
       } catch (_) {}
     }
     final draws = v.runningWeekDraws;

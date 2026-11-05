@@ -5,15 +5,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/course_partner.dart';
 import '../models/run_record.dart';
-import '../models/running_course.dart';
 import '../models/user_log.dart';
-import '../services/run_journal.dart';
-import '../services/run_live_widget.dart';
 import '../services/run_tracker.dart';
 import '../services/service_locator.dart';
 import '../services/user_log_service.dart';
 import '../theme/app_theme.dart';
-import '../utils/formatters.dart';
 import 'community/community_screen.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
@@ -51,45 +47,24 @@ class _AppShellState extends State<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverPendingRun());
   }
 
-  /// 지난 실행이 러닝 중에 죽었으면 일지가 남아 있다.
-  /// - 종료 뒤 업로드 전에 죽은 기록: 묻지 않고 올리고 결과 화면으로
-  /// - 달리던 중이었으면: 팝업. '종료'는 여기까지 저장하고 결과 화면, '이어서 달리기'는 러닝 화면
+  /// 지난 실행이 러닝 중이거나 업로드 전에 죽었으면 일지가 남아 있다. 묻지 않고
+  /// 죽기 전 마지막 점까지를 기록으로 올리고 결과 화면으로 간다.
   Future<void> _recoverPendingRun() async {
     final recovery = Services.instance.runRecovery;
     final journal = Services.instance.runJournal;
-    final snapshot = await journal.read();
-    if (snapshot == null ||
-        !mounted ||
-        // 읽는 사이 새 러닝이 시작됐으면 일지는 이미 그 러닝 것이다. 건드리지 않는다.
-        Services.instance.runTracker.status != RunStatus.idle) {
+    final record = await journal.read();
+    if (record == null || !_canRecover) {
       recovery.settle(false);
       return;
     }
 
-    if (snapshot.finished) {
-      // 응답만 못 받고 서버엔 들어갔을 수 있어 같은 시작 시각 기록이 있으면 다시 올리지 않는다.
-      final record = snapshot.record;
-      if (record == null || await _alreadyUploaded(record)) {
-        unawaited(journal.discard());
-        recovery.settle(false);
-        return;
-      }
-      if (!mounted) {
-        recovery.settle(false);
-        return;
-      }
-      recovery.settle(true);
-      _submitAndShowResult(record);
-      return;
-    }
-
     final detail = {
-      LogKeys.courseId: ?snapshot.courseId,
-      LogKeys.distanceM: snapshot.distanceMeters.round(),
-      LogKeys.elapsedSec: snapshot.elapsed.inSeconds,
+      LogKeys.courseId: ?record.courseId,
+      LogKeys.distanceM: record.distanceMeters.round(),
+      LogKeys.elapsedSec: record.duration.inSeconds,
     };
-    if (!snapshot.isResumable) {
-      // 첫 위치도 못 잡고 죽었다. 복구할 것이 없다.
+    // 러닝 화면의 종료와 같은 기준: 너무 짧으면 기록이 아니다.
+    if (record.isTooShort) {
       writeLog(
         LogName.runAbandon,
         detail: {LogKeys.reason: 'app_killed', ...detail},
@@ -98,93 +73,25 @@ class _AppShellState extends State<AppShell> {
       recovery.settle(false);
       return;
     }
+    // 응답만 못 받고 서버엔 들어갔을 수 있어 같은 시작 시각 기록이 있으면 다시 올리지 않는다.
+    final uploaded = await _alreadyUploaded(record);
+    if (uploaded) unawaited(journal.discard());
+    if (uploaded || !mounted || !_canRecover) {
+      recovery.settle(false);
+      return;
+    }
 
+    writeLog(LogName.runRecover, detail: detail);
     recovery.settle(true);
-    final resume = await _askResume(snapshot);
-    if (!mounted || Services.instance.runTracker.status != RunStatus.idle) return;
-
-    if (resume != true) {
-      await _finishRecovered(snapshot, detail);
-      return;
-    }
-
-    RunningCourse? course;
-    final courseId = snapshot.courseId;
-    if (courseId != null) {
-      try {
-        course = await Services.instance.course.loadCourse(courseId);
-      } catch (_) {
-        // 코스를 못 받으면 경로만 이어 달린다. 완주 판정은 서버가 코스 id로 한다.
-      }
-    }
-    final availability = await Services.instance.runTracker.restore(
-      snapshot,
-      course: course,
-    );
-    if (!mounted) return;
-    if (!availability.isReady) {
-      // 일지는 남겨 둔다. 권한을 켜고 다시 열면 다시 묻는다.
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(availability.message)));
-      return;
-    }
-
-    writeLog(LogName.runRecover, detail: {...detail, 'action': 'resume'});
-    Services.instance.userLog.markRunStarted();
-    unawaited(
-      Services.instance.runLiveWidget.start(
-        RunWidgetData(
-          distanceMeters: snapshot.distanceMeters,
-          elapsed: snapshot.elapsed,
-          paceSecondsPerKm: null,
-          paused: true,
-        ),
-      ),
-    );
-    setState(() => _index = _runningTab);
-    await _runningKey.currentState?.resumeRecoveredRun(
-      course: course,
-      origin: snapshot.points.last,
-    );
-  }
-
-  /// 팝업의 '종료'. 죽기 전 마지막 점까지를 기록으로 확정해 평소 종료와 같은 길을 탄다.
-  Future<void> _finishRecovered(
-    RunJournalSnapshot snapshot,
-    Map<String, Object?> detail,
-  ) async {
-    final journal = Services.instance.runJournal;
-    final record = snapshot.recordUntilNow;
-    // 러닝 화면의 종료와 같은 기준: 너무 짧으면 기록이 아니다.
-    if (record == null || record.isTooShort) {
-      writeLog(
-        LogName.runAbandon,
-        detail: {LogKeys.reason: 'app_killed', ...detail},
-      );
-      await journal.discard();
-      return;
-    }
-    writeLog(LogName.runRecover, detail: {...detail, 'action': 'finish'});
-    // 업로드 전에 또 죽어도 다음엔 묻지 않고 올리도록 종료 줄을 남긴다.
-    journal.reopen();
-    journal.finish(
-      startedAt: record.startedAt,
-      endedAt: record.endedAt,
-      distanceMeters: record.distanceMeters,
-      duration: record.duration,
-    );
-    await journal.flush();
-    if (!mounted) return;
-    _submitAndShowResult(record);
-  }
-
-  void _submitAndShowResult(RunRecord record) {
     unawaited(Services.instance.runSubmission.submit(record));
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => RunResultScreen(record: record)),
     );
   }
+
+  /// 읽는 사이 새 러닝이 시작됐으면 일지는 이미 그 러닝 것이다. 건드리지 않는다.
+  bool get _canRecover =>
+      mounted && Services.instance.runTracker.status == RunStatus.idle;
 
   Future<bool> _alreadyUploaded(RunRecord record) async {
     try {
@@ -202,87 +109,6 @@ class _AppShellState extends State<AppShell> {
     } catch (_) {
       return false; // 확인을 못 하면 올린다. 중복이 유실보다 낫다.
     }
-  }
-
-  Future<bool?> _askResume(RunJournalSnapshot snapshot) {
-    final courseName = snapshot.courseName;
-    final summary =
-        '${Formatters.distanceKm(snapshot.distanceMeters)} · '
-        '${Formatters.duration(snapshot.elapsed)} 기록이 남아 있어요';
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.white,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 36),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '진행 중이던 러닝이 있어요',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                courseName == null ? summary : '$courseName\n$summary',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.5,
-                  color: AppColors.textSubtle,
-                ),
-              ),
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(false),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.surfaceMuted,
-                        foregroundColor: AppColors.textSubtle,
-                        minimumSize: const Size(0, 52),
-                        padding: EdgeInsets.zero,
-                        textStyle: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      child: const Text('종료', maxLines: 1),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(true),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.ink,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(0, 52),
-                        padding: EdgeInsets.zero,
-                        textStyle: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      child: const Text('이어서 달리기', maxLines: 1),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   void _openCourse(String courseId, LogSource source) {

@@ -415,46 +415,6 @@ class RunTracker extends ChangeNotifier {
     );
   }
 
-  /// 앱이 죽기 전 일지에 남은 러닝을 이어 달릴 수 있게 되살린다.
-  ///
-  /// 멈춤 상태로 돌아온다 — 죽어 있던 시간은 멈춤으로 치고, 사용자가 이어서를
-  /// 누르면 [resume]이 위치 구독을 다시 연다. 복구 뒤 첫 점은 새 구간으로
-  /// 시작돼 죽어 있던 동안의 이동이 거리에 들어가지 않는다.
-  Future<LocationAvailability> restore(
-    RunJournalSnapshot snapshot, {
-    RunningCourse? course,
-  }) async {
-    final availability = await _locationService.ensurePermission();
-    if (!availability.isReady) return availability;
-
-    _reset();
-    _targetCourse = course;
-    _courseLengthMeters = course == null ? 0 : GeoUtils.pathLength(course.path);
-    _coverage = course == null || course.path.isEmpty
-        ? null
-        : CourseCoverageTracker(course.path);
-    _path.addAll(snapshot.points);
-    for (final point in snapshot.points) {
-      _coverage?.add(point);
-    }
-    _distanceMeters = snapshot.distanceMeters;
-    _startedAt = snapshot.startedAt;
-    _pausedTotal = snapshot.pausedTotal;
-    _pausedAt = snapshot.pausedAt ?? snapshot.lastAt ?? DateTime.now();
-    _lastPosition = snapshot.points.lastOrNull;
-    _paceSamples.add((meters: _distanceMeters, elapsed: elapsed));
-
-    _status = RunStatus.paused;
-    _activeLocation = _locationService;
-    _isRealGps = true;
-    _motionService.start();
-    _currentLocation.yieldToRun();
-    _journal.reopen();
-    notifyListeners();
-
-    return availability;
-  }
-
   /// 결과 화면을 벗어날 때 호출해 다음 러닝을 받을 수 있는 상태로 되돌린다.
   void reset() {
     _reset();

@@ -14,7 +14,8 @@ import '../../widgets/stamp_badge.dart';
 import '../../widgets/stamp_celebration.dart';
 import 'run_share_screen.dart';
 
-/// 러닝 결과. 저장·검증은 [RunSubmission]이 돌리고 여기서는 진행 상황과 보상을 보여준다.
+/// 러닝 결과. 저장·검증은 [RunSubmission]이 돌리고 여기서는 진행 상황과 보상을
+/// 보여준다. 여는 쪽이 먼저 submit한다.
 class RunResultScreen extends StatefulWidget {
   const RunResultScreen({super.key, required this.record});
 
@@ -27,50 +28,35 @@ class RunResultScreen extends StatefulWidget {
 class _RunResultScreenState extends State<RunResultScreen> {
   RunSubmission get _submission => Services.instance.runSubmission;
 
-  /// 연출 팝업은 한 번에 하나씩. 띄우는 동안 들어온 건 끝나고 이어서 띄운다.
-  bool _celebrating = false;
-
   @override
   void initState() {
     super.initState();
-    // 보통 run_screen이 완료 시점에 이미 제출했다. 다른 경로로 열렸을 때만 여기서.
-    if (_submission.record != widget.record) {
-      _submission.submit(widget.record);
-    }
     _submission.addListener(_onSubmissionChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _drainCelebrations());
+    _submission.onCelebration = _showCelebration;
   }
 
   @override
   void dispose() {
     _submission.removeListener(_onSubmissionChanged);
+    if (_submission.onCelebration == _showCelebration) {
+      _submission.onCelebration = null;
+    }
     super.dispose();
   }
 
   void _onSubmissionChanged() {
-    if (!mounted) return;
-    setState(() {});
-    _drainCelebrations();
+    if (mounted) setState(() {});
   }
 
-  Future<void> _drainCelebrations() async {
-    if (_celebrating) return;
-    _celebrating = true;
-    try {
-      while (_submission.pendingCelebrations.isNotEmpty) {
-        if (!mounted) return;
-        final next = _submission.pendingCelebrations.removeAt(0);
-        switch (next) {
-          case StampCelebration(:final stamp):
-            await showStampCelebration(context, stamp);
-          case CouponCelebration(:final coupon):
-            await showCouponCelebration(context, coupon);
-          case CouponMissCelebration(:final name, :final benefit):
-            await showCouponMiss(context, name: name, benefit: benefit);
-        }
-      }
-    } finally {
-      _celebrating = false;
+  Future<void> _showCelebration(Celebration celebration) async {
+    if (!mounted) return;
+    switch (celebration) {
+      case StampCelebration(:final stamp):
+        await showStampCelebration(context, stamp);
+      case CouponCelebration(:final coupon):
+        await showCouponCelebration(context, coupon);
+      case CouponMissCelebration(:final name, :final benefit):
+        await showCouponMiss(context, name: name, benefit: benefit);
     }
   }
 
