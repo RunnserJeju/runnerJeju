@@ -195,9 +195,6 @@ class _RunScreenState extends State<RunScreen> {
   /// 종료 버튼이 한 프레임에 두 번 눌리면 같은 기록이 두 번 올라간다. 한 번만.
   bool _finishing = false;
 
-  /// 이 거리 이하로 끝낸 러닝은 저장하지 않는다(m). 실수로 눌렀다 끈 것이다.
-  static const double _minRecordMeters = 10;
-
   Future<void> _finish() async {
     if (_finishing) return;
     _finishing = true;
@@ -215,10 +212,13 @@ class _RunScreenState extends State<RunScreen> {
     );
     Services.instance.userLog.markRunEnded();
     final record = _tracker.buildRecord();
-    if (record == null) return;
+    if (record == null) {
+      _finishing = false;
+      return;
+    }
 
     // 시작하자마자 끝낸 러닝은 기록이 아니다. 저장도 검증도 없이 그냥 닫는다.
-    if (record.distanceMeters <= _minRecordMeters) {
+    if (record.isTooShort) {
       unawaited(Services.instance.runJournal.discard());
       _tracker.reset();
       if (!mounted) return;

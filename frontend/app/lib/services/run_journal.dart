@@ -115,15 +115,30 @@ class RunJournal {
   }
 
   /// 업로드가 끝난 일지를 지운다. 다음 러닝이 이미 시작됐으면 그 일지라 건드리지 않는다.
+  ///
+  /// 지금 열린 싱크만 닫고, 기다리는 동안 새 러닝이 열었을 수 있는 싱크와 파일은
+  /// 손대지 않는다 — 지난 러닝의 늦은 업로드 응답이 새 러닝의 일지를 지우지 않게.
   Future<void> discardIfIdle() async {
     if (_active) return;
-    await discard();
+    final sink = _sink;
+    _sink = null;
+    await _ready;
+    try {
+      await sink?.flush();
+      await sink?.close();
+    } catch (_) {}
+    if (_active) return;
+    await _delete();
   }
 
-  /// 일지를 지운다. 사용자가 복구를 거절했을 때.
+  /// 일지를 지운다. 복구할 것이 없거나 기록이 너무 짧을 때.
   Future<void> discard() async {
     _active = false;
     await _close();
+    await _delete();
+  }
+
+  Future<void> _delete() async {
     try {
       final file = await _file();
       if (await file.exists()) await file.delete();
@@ -140,7 +155,13 @@ class RunJournal {
       return null;
     }
 
-    final lines = await file.readAsLines();
+    final List<String> lines;
+    try {
+      lines = await file.readAsLines();
+    } catch (_) {
+      await _delete(); // 못 읽는 파일은 남겨 둬도 영원히 못 읽는다.
+      return null;
+    }
     String? courseId;
     String? courseName;
     DateTime? startedAt;

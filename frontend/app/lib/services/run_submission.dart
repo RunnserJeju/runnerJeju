@@ -77,11 +77,16 @@ class RunSubmission extends ChangeNotifier {
   bool _courseDrawCelebrated = false;
   bool _runningWeekCelebrated = false;
 
+  /// submit마다 올라간다. 지난 러닝의 늦은 응답(업로드·검증·스탬프·쿠폰 조회)이
+  /// 새 러닝 상태에 섞이지 않게, await 뒤마다 자기 세대인지 확인한다.
+  int _generation = 0;
+
   bool get earnedStampAny =>
       uploadResult?.earnedStamp == true || verification?.earnedStampId != null;
 
   /// 새 러닝 기록 제출. 이전 러닝 상태는 전부 버린다.
   Future<void> submit(RunRecord newRecord) {
+    _generation++;
     record = newRecord;
     uploadResult = null;
     verification = null;
@@ -109,6 +114,7 @@ class RunSubmission extends ChangeNotifier {
   Future<void> _upload() async {
     final current = record;
     if (current == null) return;
+    final gen = _generation;
     uploading = true;
     uploadError = null;
     notifyListeners();
@@ -121,13 +127,13 @@ class RunSubmission extends ChangeNotifier {
         LogName.runUploadFailed,
         detail: {LogKeys.courseId: ?current.courseId, LogKeys.error: '$e'},
       );
-      if (record != current) return; // 그새 다른 러닝이 제출됨
+      if (gen != _generation) return; // 그새 다른 러닝이 제출됨
       uploadError = '$e';
       uploading = false;
       notifyListeners();
       return;
     }
-    if (record != current) return;
+    if (gen != _generation) return;
 
     uploadResult = result;
     uploading = false;
@@ -139,6 +145,7 @@ class RunSubmission extends ChangeNotifier {
     // 쿠폰보다 먼저 띄우려고 검증 응답을 기다리지 않고 바로 받는다.
     final stampId = result.earnedStampId;
     if (stampId != null) await _loadStamp(stampId);
+    if (gen != _generation) return;
 
     final runId = result.record.id;
     final courseId = current.courseId;
@@ -148,6 +155,7 @@ class RunSubmission extends ChangeNotifier {
   }
 
   Future<void> _verify({required String runId, required String courseId}) async {
+    final gen = _generation;
     verifying = true;
     verificationError = null;
     notifyListeners();
@@ -164,13 +172,13 @@ class RunSubmission extends ChangeNotifier {
           LogKeys.error: '$e',
         },
       );
-      if (uploadResult?.record.id != runId) return;
+      if (gen != _generation) return;
       verificationError = '$e';
       verifying = false;
       notifyListeners();
       return;
     }
-    if (uploadResult?.record.id != runId) return;
+    if (gen != _generation) return;
 
     verification = result;
     verifying = false;
@@ -179,15 +187,18 @@ class RunSubmission extends ChangeNotifier {
     // 스탬프는 업로드·검증 양쪽에서 올 수 있다. 이미 받아 둔 것이면 다시 부르지 않는다.
     final stampId = result.earnedStampId;
     if (stampId != null && earnedStamp == null) await _loadStamp(stampId);
+    if (gen != _generation) return;
     await _celebrateCourseDraw(result);
+    if (gen != _generation) return;
     await _celebrateRunningWeek(result);
   }
 
   /// 조회 실패는 무시한다. 획득 사실은 이미 알고 있고 스탬프 탭에서 볼 수 있다.
   Future<void> _loadStamp(String stampId) async {
+    final gen = _generation;
     try {
       final stamp = await _stamp.loadStamp(stampId);
-      if (earnedStamp != null) return;
+      if (gen != _generation || earnedStamp != null) return;
       earnedStamp = stamp;
       pendingCelebrations.add(StampCelebration(stamp));
       notifyListeners();
@@ -196,8 +207,10 @@ class RunSubmission extends ChangeNotifier {
 
   /// 조회 실패는 무시한다. 마이페이지에서 다시 볼 수 있다.
   Future<void> _loadCoupon(String couponId, {bool runningWeek = false}) async {
+    final gen = _generation;
     try {
       final coupon = await _coupon.loadCoupon(couponId);
+      if (gen != _generation) return;
       if (runningWeek) {
         runningWeekCoupons.add(coupon);
       } else {
@@ -222,6 +235,7 @@ class RunSubmission extends ChangeNotifier {
   /// 코스완료 쿠폰 추첨. 구 서버는 추첨 목록이 없어 당첨 id로만 띄운다.
   Future<void> _celebrateCourseDraw(RunVerification v) async {
     if (_courseDrawCelebrated) return;
+    final gen = _generation;
     final draws = v.courseDraws;
     if (draws.isEmpty) {
       final couponId = v.earnedCouponId;
@@ -233,6 +247,7 @@ class RunSubmission extends ChangeNotifier {
     }
     _courseDrawCelebrated = true;
     for (final draw in draws) {
+      if (gen != _generation) return;
       await _celebrateDraw(draw);
     }
   }
@@ -241,9 +256,11 @@ class RunSubmission extends ChangeNotifier {
   Future<void> _celebrateRunningWeek(RunVerification v) async {
     if (_runningWeekCelebrated) return;
     _runningWeekCelebrated = true;
+    final gen = _generation;
     for (final stampId in v.earnedRunningWeekStampIds) {
       try {
         final stamp = await _stamp.loadStamp(stampId);
+        if (gen != _generation) return;
         pendingCelebrations.add(StampCelebration(stamp));
         notifyListeners();
       } catch (_) {}
@@ -251,11 +268,13 @@ class RunSubmission extends ChangeNotifier {
     final draws = v.runningWeekDraws;
     if (draws.isEmpty) {
       for (final couponId in v.runningWeekCouponIds) {
+        if (gen != _generation) return;
         await _loadCoupon(couponId, runningWeek: true);
       }
       return;
     }
     for (final draw in draws) {
+      if (gen != _generation) return;
       await _celebrateDraw(draw, runningWeek: true);
     }
   }

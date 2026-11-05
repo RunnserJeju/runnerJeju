@@ -74,7 +74,10 @@ class _AppShellState extends State<AppShell> {
         recovery.settle(false);
         return;
       }
-      if (!mounted) return;
+      if (!mounted) {
+        recovery.settle(false);
+        return;
+      }
       recovery.settle(true);
       _submitAndShowResult(record);
       return;
@@ -153,8 +156,8 @@ class _AppShellState extends State<AppShell> {
   ) async {
     final journal = Services.instance.runJournal;
     final record = snapshot.recordUntilNow;
-    // 러닝 화면의 종료와 같은 기준: 10m 이하는 기록이 아니다.
-    if (record == null || record.distanceMeters <= 10) {
+    // 러닝 화면의 종료와 같은 기준: 너무 짧으면 기록이 아니다.
+    if (record == null || record.isTooShort) {
       writeLog(
         LogName.runAbandon,
         detail: {LogKeys.reason: 'app_killed', ...detail},

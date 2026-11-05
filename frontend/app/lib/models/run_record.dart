@@ -32,6 +32,10 @@ class RunRecord {
 
   bool get isCourseRun => courseId != null;
 
+  /// 이 거리 이하로 끝낸 러닝은 저장하지 않는다(m). 시작하자마자 끈 것이다.
+  static const double minMeters = 10;
+  bool get isTooShort => distanceMeters <= minMeters;
+
   /// km당 초. 거리가 0이면 null.
   double? get paceSecondsPerKm {
     if (distanceMeters <= 0) return null;
