@@ -49,7 +49,11 @@ class RunJournal {
     await _close();
     try {
       final file = await _file();
-      _sink = file.openWrite(mode: FileMode.write);
+      final sink = file.openWrite(mode: FileMode.write);
+      // 디스크 가득 참 같은 쓰기 오류는 나중에 done으로 온다. 아무도 안 받으면
+      // 미처리 오류로 남으므로 여기서 삼킨다. 일지가 깨져도 러닝은 계속된다.
+      unawaited(sink.done.catchError((_) {}));
+      _sink = sink;
     } catch (_) {
       _sink = null; // 일지를 못 열어도 러닝은 계속된다.
     }
