@@ -266,6 +266,21 @@ class RunJournalSnapshot {
     return ran.isNegative ? Duration.zero : ran;
   }
 
+  /// 달리던 중 죽은 러닝을 "여기까지"로 끝낸 기록. 마지막으로 기록된 시각이 종료 시각이다.
+  RunRecord? get recordUntilNow {
+    final from = startedAt;
+    if (from == null || points.isEmpty) return null;
+    return RunRecord(
+      courseId: courseId,
+      courseName: courseName,
+      startedAt: from,
+      endedAt: pausedAt ?? lastAt ?? from,
+      distanceMeters: distanceMeters,
+      duration: elapsed,
+      path: points,
+    );
+  }
+
   /// 종료까지 됐던 러닝의 기록. [finished]가 아니면 null.
   RunRecord? get record {
     final from = startedAt;

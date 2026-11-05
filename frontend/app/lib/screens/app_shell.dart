@@ -17,6 +17,7 @@ import '../utils/formatters.dart';
 import 'community/community_screen.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
+import 'run/run_result_screen.dart';
 import 'running/running_screen.dart';
 import 'stamp/stamp_screen.dart';
 
@@ -46,27 +47,36 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    Services.instance.runRecovery.begin();
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverPendingRun());
   }
 
-  /// 지난 실행이 러닝 중에 죽었으면 일지가 남아 있다. 종료 뒤 업로드 전에 죽은
-  /// 기록은 묻지 않고 올리고, 달리던 중이었으면 이어 달릴지 묻는다.
+  /// 지난 실행이 러닝 중에 죽었으면 일지가 남아 있다.
+  /// - 종료 뒤 업로드 전에 죽은 기록: 묻지 않고 올리고 결과 화면으로
+  /// - 달리던 중이었으면: 팝업. '종료'는 여기까지 저장하고 결과 화면, '이어서 달리기'는 러닝 화면
   Future<void> _recoverPendingRun() async {
+    final recovery = Services.instance.runRecovery;
     final journal = Services.instance.runJournal;
     final snapshot = await journal.read();
-    if (snapshot == null || !mounted) return;
-    // 읽는 사이 새 러닝이 시작됐으면 일지는 이미 그 러닝 것이다. 건드리지 않는다.
-    if (Services.instance.runTracker.status != RunStatus.idle) return;
+    if (snapshot == null ||
+        !mounted ||
+        // 읽는 사이 새 러닝이 시작됐으면 일지는 이미 그 러닝 것이다. 건드리지 않는다.
+        Services.instance.runTracker.status != RunStatus.idle) {
+      recovery.settle(false);
+      return;
+    }
 
     if (snapshot.finished) {
-      // 종료 뒤 업로드 전에 죽은 기록. 응답만 못 받고 서버엔 들어갔을 수 있어
-      // 같은 시작 시각의 기록이 있으면 다시 올리지 않는다.
+      // 응답만 못 받고 서버엔 들어갔을 수 있어 같은 시작 시각 기록이 있으면 다시 올리지 않는다.
       final record = snapshot.record;
-      if (record != null && !await _alreadyUploaded(record)) {
-        unawaited(Services.instance.runSubmission.submit(record));
-      } else {
+      if (record == null || await _alreadyUploaded(record)) {
         unawaited(journal.discard());
+        recovery.settle(false);
+        return;
       }
+      if (!mounted) return;
+      recovery.settle(true);
+      _submitAndShowResult(record);
       return;
     }
 
@@ -82,17 +92,16 @@ class _AppShellState extends State<AppShell> {
         detail: {LogKeys.reason: 'app_killed', ...detail},
       );
       unawaited(journal.discard());
+      recovery.settle(false);
       return;
     }
 
+    recovery.settle(true);
     final resume = await _askResume(snapshot);
     if (!mounted || Services.instance.runTracker.status != RunStatus.idle) return;
+
     if (resume != true) {
-      writeLog(
-        LogName.runAbandon,
-        detail: {LogKeys.reason: 'app_killed', ...detail},
-      );
-      await journal.discard();
+      await _finishRecovered(snapshot, detail);
       return;
     }
 
@@ -118,7 +127,7 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
-    writeLog(LogName.runRecover, detail: detail);
+    writeLog(LogName.runRecover, detail: {...detail, 'action': 'resume'});
     Services.instance.userLog.markRunStarted();
     unawaited(
       Services.instance.runLiveWidget.start(
@@ -134,6 +143,43 @@ class _AppShellState extends State<AppShell> {
     await _runningKey.currentState?.resumeRecoveredRun(
       course: course,
       origin: snapshot.points.last,
+    );
+  }
+
+  /// 팝업의 '종료'. 죽기 전 마지막 점까지를 기록으로 확정해 평소 종료와 같은 길을 탄다.
+  Future<void> _finishRecovered(
+    RunJournalSnapshot snapshot,
+    Map<String, Object?> detail,
+  ) async {
+    final journal = Services.instance.runJournal;
+    final record = snapshot.recordUntilNow;
+    // 러닝 화면의 종료와 같은 기준: 10m 이하는 기록이 아니다.
+    if (record == null || record.distanceMeters <= 10) {
+      writeLog(
+        LogName.runAbandon,
+        detail: {LogKeys.reason: 'app_killed', ...detail},
+      );
+      await journal.discard();
+      return;
+    }
+    writeLog(LogName.runRecover, detail: {...detail, 'action': 'finish'});
+    // 업로드 전에 또 죽어도 다음엔 묻지 않고 올리도록 종료 줄을 남긴다.
+    journal.reopen();
+    journal.finish(
+      startedAt: record.startedAt,
+      endedAt: record.endedAt,
+      distanceMeters: record.distanceMeters,
+      duration: record.duration,
+    );
+    await journal.flush();
+    if (!mounted) return;
+    _submitAndShowResult(record);
+  }
+
+  void _submitAndShowResult(RunRecord record) {
+    unawaited(Services.instance.runSubmission.submit(record));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => RunResultScreen(record: record)),
     );
   }
 
