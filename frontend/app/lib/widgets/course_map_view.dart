@@ -683,6 +683,7 @@ class _CourseMapViewState extends State<CourseMapView> {
       final created = await controller.labelLayer.addPoi(
         position.toLatLng(),
         style: style,
+        rank: myPositionMarkerRank,
       );
       if (_disposed) {
         await created.remove();

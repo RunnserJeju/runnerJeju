@@ -85,15 +85,27 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showLaunchNotice() {
     if (_launchNoticeShown) return;
     _noticesFuture
-        .then((notices) {
-          if (_launchNoticeShown || !mounted) return;
-          final launch = notices.where((n) => n.showOnLaunch).firstOrNull;
-          if (launch == null) return;
+        .then((notices) async {
+          if (_launchNoticeShown) return;
+          // 지난 러닝 복구 팝업·결과 화면이 뜨는 실행이면 공지는 겹쳐 띄우지 않는다.
+          if (await Services.instance.runRecovery.takesOverLaunch) return;
+          // 켜진 공지 중 가장 최근 것. '다시 보지 않기'를 누른 공지는 건너뛴다.
+          Notice? launch;
+          for (final notice in notices.where((n) => n.showOnLaunch)) {
+            if (!await Services.instance.notice.isLaunchDismissed(notice.id)) {
+              launch = notice;
+              break;
+            }
+          }
+          if (launch == null || _launchNoticeShown || !mounted) return;
           _launchNoticeShown = true;
+          final shown = launch;
           showNoticeDetail(
             context,
-            launch,
+            shown,
             onOpenRunningWeek: widget.onOpenRunningWeek,
+            onDismissForever: () =>
+                Services.instance.notice.dismissLaunch(shown.id),
           );
         })
         .catchError((_) {});
@@ -495,113 +507,145 @@ class _PartnerItem extends StatelessWidget {
   }
 }
 
-/// 공지 상세 팝업. 배너를 누르거나 앱 실행 시 노출 공지로 연다. 우측 상단 X로 닫고,
-/// 링크가 있으면 맨 아래에 버튼.
+/// 공지 상세 팝업. 배너를 누르거나 앱 실행 시 노출 공지로 연다. 링크가 있으면 본문 아래에 버튼.
+/// [onDismissForever]를 주면(실행 시 팝업) 카드 아래에 '다시 보지 않기 | 닫기'를 둔다.
+/// 직접 연 공지는 버튼 줄 없이 바깥을 눌러 닫는다.
 void showNoticeDetail(
   BuildContext context,
   Notice notice, {
   required VoidCallback onOpenRunningWeek,
+  VoidCallback? onDismissForever,
 }) {
   showDialog<void>(
     context: context,
     builder: (context) {
+      // 팝업 카드와 그 아래 버튼 줄을 한 묶음으로 가운데에 띄운다. 버튼은 카드 밖, 어두운 배경 위.
       return Dialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 6, 6, 0),
-                  child: IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: '닫기',
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              ),
               Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (notice.hasImage) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: AspectRatio(
-                            aspectRatio: 3 / 1,
-                            child: CachedNetworkImage(
-                              imageUrl: notice.imageUrl!,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, _, _) => const SizedBox.shrink(),
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (notice.hasImage) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: AspectRatio(
+                              aspectRatio: 3 / 1,
+                              child: CachedNetworkImage(
+                                imageUrl: notice.imageUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, _, _) =>
+                                    const SizedBox.shrink(),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-                      Text(
-                        notice.title,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.4,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        Formatters.date(notice.createdAt),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(notice.body, style: const TextStyle(height: 1.5)),
-                      const SizedBox(height: 12),
-                      if (notice.link case final link?) ...[
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: () async {
-                              // 시트를 닫은 뒤엔 이 context를 못 쓴다 — 미리 잡아 둔다.
-                              final messenger = ScaffoldMessenger.of(context);
-                              Navigator.of(context).pop();
-                              switch (link) {
-                                case RunningWeekLink():
-                                  onOpenRunningWeek();
-                                case ExternalLink(:final uri):
-                                  final opened = await launchUrl(
-                                    uri,
-                                    mode: LaunchMode.externalApplication,
-                                  );
-                                  if (!opened) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Text('링크를 열지 못했어요.'),
-                                      ),
-                                    );
-                                  }
-                              }
-                            },
-                            child: Text(notice.linkLabel ?? link.defaultLabel),
+                          const SizedBox(height: 14),
+                        ],
+                        Text(
+                          notice.title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
                           ),
                         ),
+                        const SizedBox(height: 4),
+                        Text(
+                          Formatters.date(notice.createdAt),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(notice.body, style: const TextStyle(height: 1.5)),
+                        const SizedBox(height: 12),
+                        if (notice.link case final link?) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: () async {
+                                // 시트를 닫은 뒤엔 이 context를 못 쓴다 — 미리 잡아 둔다.
+                                final messenger = ScaffoldMessenger.of(context);
+                                Navigator.of(context).pop();
+                                switch (link) {
+                                  case RunningWeekLink():
+                                    onOpenRunningWeek();
+                                  case ExternalLink(:final uri):
+                                    final opened = await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                    if (!opened) {
+                                      messenger.showSnackBar(
+                                        const SnackBar(
+                                          content: Text('링크를 열지 못했어요.'),
+                                        ),
+                                      );
+                                    }
+                                }
+                              },
+                              child: Text(
+                                notice.linkLabel ?? link.defaultLabel,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
+              // 실행 시 팝업일 때만 버튼 줄을 둔다. 직접 연 공지는 바깥을 눌러 닫는다.
+              if (onDismissForever != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () {
+                          onDismissForever();
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('다시 보지 않기'),
+                      ),
+                    ),
+                    Container(width: 1, height: 14, color: Colors.white54),
+                    Expanded(
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('닫기'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

@@ -578,6 +578,7 @@ class _RunMapViewState extends State<RunMapView>
         position.toLatLng(),
         style: style,
         transform: kakao.TransformMethod.absoluteRoatation,
+        rank: myPositionMarkerRank,
       );
       _renderedPosition = position;
       // 원만 단 채로 만들었다. 방향을 이미 알면 바로 삼각형 판으로 바꾼다.
