@@ -28,7 +28,7 @@ router = APIRouter(tags=["verifications"])
 # 발급 기록의 run_id로 찾는다.
 
 
-def _earned_stamp_id(db: Session, run_id: uuid.UUID, course_id: uuid.UUID) -> uuid.UUID | None:
+def earned_stamp_id(db: Session, run_id: uuid.UUID, course_id: uuid.UUID) -> uuid.UUID | None:
     """이 러닝으로 받은 코스 스탬프. 여러 개면 처음 것."""
     definition_ids = [d.id for d in stamp_rules.course_stamp_definitions(db, course_id)]
     if not definition_ids:
@@ -135,7 +135,7 @@ def _coupon_draws(db: Session, run_id: uuid.UUID) -> list[dict]:
 def _to_out(db: Session, verification: Verification) -> dict:
     matched = verification.status == "matched"
     run_id = verification.run_id
-    stamp_id = _earned_stamp_id(db, run_id, verification.course_id) if matched else None
+    stamp_id = earned_stamp_id(db, run_id, verification.course_id) if matched else None
     coupon_id = _earned_coupon_id(db, run_id, verification.course_id) if matched else None
     week_stamp_ids = _running_week_stamp_ids(db, verification.run_id) if matched else []
     week_coupon_ids = _running_week_coupon_ids(db, verification.run_id) if matched else []
@@ -158,37 +158,19 @@ def _to_out(db: Session, verification: Verification) -> dict:
     }
 
 
-@router.post("/runs/{run_id}/verification", response_model=VerificationOut, status_code=201)
-def request_verification(
-    run_id: uuid.UUID,
-    payload: VerificationCreate,
-    db: Session = Depends(get_db),
-    user_id: str = Depends(current_user_id),
-):
-    """경로 검증 요청.
+def verify_run(db: Session, user_id: str, run: Run, course: Course) -> Verification:
+    """러닝 한 건을 코스와 대조해 verification을 만들고, matched면 스탬프·쿠폰·빙고를 지급한다.
 
-    지금은 FastAPI가 검증까지 동기로 계산해 결과를 바로 돌려준다.
-    검증 서버를 분리하면 여기서 요청만 넘기고 status='pending'으로 응답하게 되며,
-    클라이언트는 GET /verifications/{id}로 폴링한다(앱은 이미 그 흐름을 지원한다).
+    같은 (러닝, 코스)는 한 번만 계산한다 — 이미 있으면 그대로 돌려준다. commit은 호출자가 한다.
+    업로드(POST /runs)와 검증 요청(POST /runs/{id}/verification) 둘 다 여길 탄다.
     """
-    run = db.get(Run, run_id)
-    if run is None or run.user_id != user_id:
-        raise HTTPException(status_code=404, detail="러닝 기록을 찾을 수 없어요.")
-
-    course = db.get(Course, payload.course_id)
-    if course is None:
-        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
-
-    # 같은 (러닝, 코스) 조합은 한 번만 계산한다. 앱이 재시도로 다시 호출해도
-    # CPU를 또 쓰지 않고 기존 결과를 그대로 돌려준다.
     existing = db.execute(
         select(Verification).where(
-            Verification.run_id == run_id, Verification.course_id == course.id
+            Verification.run_id == run.id, Verification.course_id == course.id
         )
     ).scalar_one_or_none()
-
     if existing is not None:
-        return _to_out(db, existing)
+        return existing
 
     # 러닝 경로만 구간으로 나눈다. 일시정지 동안 이동한 구간을 달린 것으로 세지
     # 않으려는 것이고(to_segments), 코스 경로는 끊기는 자리가 없다.
@@ -212,6 +194,30 @@ def request_verification(
         stamp_rules.on_course_completed(db, user_id, run, course.id)
         running_week.on_course_completed(db, user_id, course.id, run.id)
 
+    return record
+
+
+@router.post("/runs/{run_id}/verification", response_model=VerificationOut, status_code=201)
+def request_verification(
+    run_id: uuid.UUID,
+    payload: VerificationCreate,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(current_user_id),
+):
+    """경로 검증 요청.
+
+    업로드 시점에 서버가 이미 검증해 두므로(#104) 보통은 그 결과를 그대로 돌려준다.
+    업로드 때 검증이 빠진 기록(옛 데이터·장애)만 여기서 새로 계산된다.
+    """
+    run = db.get(Run, run_id)
+    if run is None or run.user_id != user_id:
+        raise HTTPException(status_code=404, detail="러닝 기록을 찾을 수 없어요.")
+
+    course = db.get(Course, payload.course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+
+    record = verify_run(db, user_id, run, course)
     db.commit()
     db.refresh(record)
 

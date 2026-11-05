@@ -432,9 +432,7 @@ class RunOut(BaseModel):
 class RunUploadResult(BaseModel):
     record: RunOut
 
-    # 스탬프는 검증(POST /runs/{id}/verification) 결과로만 발급되므로 여기서는 항상 None이다.
-    # 필드를 남겨둔 이유는 클라이언트가 이미 이 키를 읽고 있고, 나중에 검증이
-    # 동기로 끝나는 경로가 생기면 다시 채울 수 있기 때문이다.
+    # 업로드 때 검증까지 끝나므로(#104) 완주면 이 러닝으로 받은 코스 스탬프가 실린다.
     earned_stamp_id: uuid.UUID | None = None
 
 
