@@ -11,6 +11,7 @@ class Notice {
     this.imageUrl,
     this.link,
     this.linkLabel,
+    this.showOnLaunch = false,
     this.startsAt,
     this.endsAt,
   });
@@ -31,6 +32,9 @@ class Notice {
   /// 버튼 문구. null이면 [NoticeLink.defaultLabel].
   final String? linkLabel;
 
+  /// true면 앱을 켜자마자 이 공지를 팝업으로 띄운다(실행당 한 번).
+  final bool showOnLaunch;
+
   /// 노출 기간. null이면 제한 없음(상시).
   final DateTime? startsAt;
   final DateTime? endsAt;
@@ -43,6 +47,7 @@ class Notice {
     imageUrl: json['image_url'] as String?,
     link: NoticeLink.parse(json['link_url'] as String?),
     linkLabel: json['link_label'] as String?,
+    showOnLaunch: json['show_on_launch'] as bool? ?? false,
     startsAt: json['starts_at'] == null
         ? null
         : DateTime.parse(json['starts_at'] as String),

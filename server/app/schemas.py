@@ -700,6 +700,8 @@ class NoticeCreate(BaseModel):
     # 돌려보낸 값. 앱 화면 값을 새로 만들거나 바꾸는 건 라우터가 막는다(admin/notices).
     link_url: str | None = Field(default=None, max_length=500)
     link_label: str | None = Field(default=None, max_length=40)
+    # 앱 실행 시 팝업으로 노출
+    show_on_launch: bool = False
 
     @field_validator("link_url", "link_label", mode="before")
     @classmethod
@@ -737,6 +739,7 @@ class NoticeOut(BaseModel):
     image_url: str | None
     link_url: str | None = None
     link_label: str | None = None
+    show_on_launch: bool = False
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime

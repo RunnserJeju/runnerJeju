@@ -102,6 +102,8 @@ export interface Notice {
   /** 상세 아래 버튼. 외부 주소, 또는 개발자가 넣은 앱 화면(app:…) — 후자는 여기서 못 바꾼다. */
   link_url: string | null
   link_label: string | null
+  /** 앱을 켜자마자 팝업으로 띄운다. */
+  show_on_launch: boolean
   starts_at: string | null
   ends_at: string | null
   created_at: string
@@ -116,6 +118,7 @@ export interface NoticePayload {
   body: string
   link_url: string | null
   link_label: string | null
+  show_on_launch: boolean
   starts_at: string | null
   ends_at: string | null
 }

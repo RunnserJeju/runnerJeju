@@ -51,6 +51,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// 실행 시 노출 팝업을 이 앱 실행에서 이미 띄웠는지. 탭을 오가거나 새로고침해도 다시 안 뜬다.
+  static bool _launchNoticeShown = false;
+
   late Future<List<Notice>> _noticesFuture;
   late Future<List<RunningCourse>> _curatedCoursesFuture;
   late Future<List<CoursePartner>> _featuredPartnersFuture;
@@ -63,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _load() {
     _noticesFuture = Services.instance.notice.loadNotices();
+    _showLaunchNotice();
     final curation = Services.instance.home.loadCuration();
     _curatedCoursesFuture = _pick(
       Services.instance.course.loadCourses(),
@@ -74,6 +78,25 @@ class _HomeScreenState extends State<HomeScreen> {
       curation.then((c) => [for (final item in c.partners) item.id]),
       (partner) => partner.id,
     );
+  }
+
+  /// '앱 실행 시 노출'이 켜진 공지가 있으면 가장 최근 것 하나를 팝업으로 띄운다. 실행당 한 번.
+  /// 공지를 못 불러왔으면 조용히 넘어간다.
+  void _showLaunchNotice() {
+    if (_launchNoticeShown) return;
+    _noticesFuture
+        .then((notices) {
+          if (_launchNoticeShown || !mounted) return;
+          final launch = notices.where((n) => n.showOnLaunch).firstOrNull;
+          if (launch == null) return;
+          _launchNoticeShown = true;
+          showNoticeDetail(
+            context,
+            launch,
+            onOpenRunningWeek: widget.onOpenRunningWeek,
+          );
+        })
+        .catchError((_) {});
   }
 
   /// [items] 중 [ids]에 든 것만 그 순서대로. 목록에 없는 id(비공개로 바뀐 코스 등)는
@@ -472,94 +495,113 @@ class _PartnerItem extends StatelessWidget {
   }
 }
 
-/// 공지 상세 바텀시트. 배너를 누르면 연다. 링크가 있으면 맨 아래에 버튼.
+/// 공지 상세 팝업. 배너를 누르거나 앱 실행 시 노출 공지로 연다. 우측 상단 X로 닫고,
+/// 링크가 있으면 맨 아래에 버튼.
 void showNoticeDetail(
   BuildContext context,
   Notice notice, {
   required VoidCallback onOpenRunningWeek,
 }) {
-  showModalBottomSheet<void>(
+  showDialog<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
     builder: (context) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          20 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SingleChildScrollView(
+      return Dialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (notice.hasImage) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: AspectRatio(
-                    aspectRatio: 3 / 1,
-                    child: CachedNetworkImage(
-                      imageUrl: notice.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, _, _) => const SizedBox.shrink(),
-                    ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 6, 6, 0),
+                  child: IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: '닫기',
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
-                const SizedBox(height: 14),
-              ],
-              Text(
-                notice.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.4,
-                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                Formatters.date(notice.createdAt),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(notice.body, style: const TextStyle(height: 1.5)),
-              const SizedBox(height: 12),
-              if (notice.link case final link?) ...[
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () async {
-                      // 시트를 닫은 뒤엔 이 context를 못 쓴다 — 미리 잡아 둔다.
-                      final messenger = ScaffoldMessenger.of(context);
-                      Navigator.of(context).pop();
-                      switch (link) {
-                        case RunningWeekLink():
-                          onOpenRunningWeek();
-                        case ExternalLink(:final uri):
-                          final opened = await launchUrl(
-                            uri,
-                            mode: LaunchMode.externalApplication,
-                          );
-                          if (!opened) {
-                            messenger.showSnackBar(
-                              const SnackBar(content: Text('링크를 열지 못했어요.')),
-                            );
-                          }
-                      }
-                    },
-                    child: Text(notice.linkLabel ?? link.defaultLabel),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (notice.hasImage) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: AspectRatio(
+                            aspectRatio: 3 / 1,
+                            child: CachedNetworkImage(
+                              imageUrl: notice.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, _, _) => const SizedBox.shrink(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                      Text(
+                        notice.title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        Formatters.date(notice.createdAt),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(notice.body, style: const TextStyle(height: 1.5)),
+                      const SizedBox(height: 12),
+                      if (notice.link case final link?) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: () async {
+                              // 시트를 닫은 뒤엔 이 context를 못 쓴다 — 미리 잡아 둔다.
+                              final messenger = ScaffoldMessenger.of(context);
+                              Navigator.of(context).pop();
+                              switch (link) {
+                                case RunningWeekLink():
+                                  onOpenRunningWeek();
+                                case ExternalLink(:final uri):
+                                  final opened = await launchUrl(
+                                    uri,
+                                    mode: LaunchMode.externalApplication,
+                                  );
+                                  if (!opened) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text('링크를 열지 못했어요.'),
+                                      ),
+                                    );
+                                  }
+                              }
+                            },
+                            child: Text(notice.linkLabel ?? link.defaultLabel),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ],
+              ),
             ],
           ),
         ),
