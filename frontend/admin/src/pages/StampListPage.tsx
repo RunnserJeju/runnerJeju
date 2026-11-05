@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   ApiError,
   deleteStampImage,
+  getStampHolders,
   issueStamp,
   listCourses,
   listRunningWeeks,
@@ -310,6 +311,7 @@ function StampModal({
           </p>
           <UserIssuePicker
             confirmText={(count) => `${count}명에게 "${stamp.name}" 스탬프를 지급할까요?`}
+            loadHolders={(userIds) => getStampHolders(stamp.id, userIds)}
             onIssue={async (userIds) => {
               const result = await issueStamp(stamp.id, userIds)
               onSaved({ ...stamp, issued_count: stamp.issued_count + result.issued })

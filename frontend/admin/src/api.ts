@@ -702,6 +702,13 @@ export function issueStamp(id: string, userIds: string[]): Promise<StampIssueRes
   })
 }
 
+/** 주어진 회원 중 이 스탬프를 이미 가진 회원 id. */
+export function getStampHolders(id: string, userIds: string[]): Promise<string[]> {
+  const params = new URLSearchParams()
+  userIds.forEach((uid) => params.append('user_ids', uid))
+  return request(`/admin/stamps/${id}/holders?${params}`)
+}
+
 export interface UserStamp {
   id: string
   stamp_definition_id: string
