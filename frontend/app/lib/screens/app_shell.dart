@@ -157,33 +157,85 @@ class _AppShellState extends State<AppShell> {
 
   Future<bool?> _askResume(RunJournalSnapshot snapshot) {
     final courseName = snapshot.courseName;
+    final summary =
+        '${Formatters.distanceKm(snapshot.distanceMeters)} · '
+        '${Formatters.duration(snapshot.elapsed)} 기록이 남아 있어요';
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('진행 중이던 러닝이 있어요'),
-        content: Text(
-          '${courseName == null ? '' : '$courseName\n'}'
-          '${Formatters.distanceKm(snapshot.distanceMeters)} · '
-          '${Formatters.duration(snapshot.elapsed)}\n'
-          '이어서 달리면 여기까지의 경로가 그대로 이어져요.',
-          style: const TextStyle(height: 1.5),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 36),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '진행 중이던 러닝이 있어요',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                courseName == null ? summary : '$courseName\n$summary',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: AppColors.textSubtle,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.surfaceMuted,
+                        foregroundColor: AppColors.textSubtle,
+                        minimumSize: const Size(0, 52),
+                        padding: EdgeInsets.zero,
+                        textStyle: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: const Text('종료', maxLines: 1),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.ink,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 52),
+                        padding: EdgeInsets.zero,
+                        textStyle: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: const Text('이어서 달리기', maxLines: 1),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('종료'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('이어서 달리기'),
-          ),
-        ],
       ),
     );
   }
 
-  /// 러닝 탭으로 옮기고 그 코스를 지도에서 고른 상태로 연다.
   void _openCourse(String courseId, LogSource source) {
     setState(() => _index = _runningTab);
     _runningKey.currentState?.openCourse(courseId, source: source);
