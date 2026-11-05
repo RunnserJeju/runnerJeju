@@ -227,7 +227,7 @@ class _MonthSummary extends StatelessWidget {
           Expanded(
             child: MetricTile(
               label: '총 시간',
-              value: Formatters.duration(duration),
+              value: Formatters.durationHm(duration),
             ),
           ),
           Expanded(

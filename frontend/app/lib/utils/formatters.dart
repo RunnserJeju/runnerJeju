@@ -5,8 +5,7 @@ class Formatters {
   const Formatters._();
 
   /// 미터 → "5.23" (km 단위 문자열, 단위 기호는 붙이지 않는다)
-  static String distanceKm(double meters) =>
-      (meters / 1000).toStringAsFixed(2);
+  static String distanceKm(double meters) => (meters / 1000).toStringAsFixed(2);
 
   /// 미터 → "320m" / "1.2km". 얼마나 떨어져 있는지 한 줄로 말할 때 쓴다.
   /// [distanceKm]와 달리 단위를 붙이고, 가까우면 m로 말한다.
@@ -20,6 +19,13 @@ class Formatters {
     final m = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
     return h > 0 ? '${h.toString().padLeft(2, '0')}:$m:$s' : '$m:$s';
+  }
+
+  /// 누적 시간 → "09:30" (시:분, 초는 버린다). 하루 넘게 쌓여도 시간으로 센다.
+  static String durationHm(Duration elapsed) {
+    final h = elapsed.inHours.toString().padLeft(2, '0');
+    final m = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   /// km당 초 → "5'42\"". 계산 불가하면 "--'--\""
