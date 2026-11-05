@@ -29,6 +29,7 @@ import 'notice_service.dart';
 import 'partner_service.dart';
 import 'program_service.dart';
 import 'run_live_widget.dart';
+import 'run_journal.dart';
 import 'run_service.dart';
 import 'run_submission.dart';
 import 'run_tracker.dart';
@@ -105,7 +106,11 @@ class Services {
     verification,
     stamp,
     coupon,
+    runJournal,
   );
+
+  /// 러닝 중 기록의 기기 일지. 앱이 죽어도 복구할 수 있게 [runTracker]가 쓴다.
+  late final RunJournal runJournal = RunJournal();
 
   /// 협력업체(러닝 탭 협력업체 모드, 홈 추천 협력 업체).
   late final PartnerService partner = PartnerService(PartnerApi(apiClient));
@@ -138,6 +143,7 @@ class Services {
     location,
     motion,
     currentLocation,
+    runJournal,
   );
 
   /// 러닝 상태를 잠금화면에 미러링하는 표시 계층(Android 상시 알림 / iOS Live

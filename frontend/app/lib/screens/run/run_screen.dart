@@ -143,7 +143,7 @@ class _RunScreenState extends State<RunScreen> {
       unawaited(_liveWidget.start(_snapshot()));
       final courseId = widget.course?.id;
       writeLog(LogName.runStart, detail: {LogKeys.courseId: ?courseId});
-      unawaited(Services.instance.userLog.markRunStarted(courseId: courseId));
+      Services.instance.userLog.markRunStarted();
     }
     if (availability.isReady || !mounted) return;
 
@@ -205,7 +205,7 @@ class _RunScreenState extends State<RunScreen> {
         LogKeys.elapsedSec: _tracker.elapsed.inSeconds,
       },
     );
-    unawaited(Services.instance.userLog.markRunEnded());
+    Services.instance.userLog.markRunEnded();
     final record = _tracker.buildRecord();
     if (record == null) return;
     // 화면이 뜨기 전에 업로드를 시작한다. 결과 화면은 진행 상황을 구독만 한다.

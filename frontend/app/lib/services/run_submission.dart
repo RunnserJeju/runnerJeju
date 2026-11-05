@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/coupon.dart';
@@ -6,6 +8,7 @@ import '../models/run_stamp.dart';
 import '../models/run_verification.dart';
 import '../models/user_log.dart';
 import 'coupon_service.dart';
+import 'run_journal.dart';
 import 'run_service.dart';
 import 'stamp_service.dart';
 import 'user_log_service.dart';
@@ -38,9 +41,16 @@ class CouponMissCelebration extends Celebration {
 /// 업로드·검증은 멈추지 않는다 — 결과 화면이 저장 중에 닫히면 검증이 생략되던
 /// 문제(#104)를 막는다. 러닝 한 번에 하나만 돌고, 다음 submit이 상태를 덮어쓴다.
 class RunSubmission extends ChangeNotifier {
-  RunSubmission(this._run, this._verification, this._stamp, this._coupon);
+  RunSubmission(
+    this._run,
+    this._verification,
+    this._stamp,
+    this._coupon,
+    this._journal,
+  );
 
   final RunService _run;
+  final RunJournal _journal;
   final VerificationService _verification;
   final StampService _stamp;
   final CouponService _coupon;
@@ -122,6 +132,8 @@ class RunSubmission extends ChangeNotifier {
     uploadResult = result;
     uploading = false;
     notifyListeners();
+    // 서버가 받았으니 기기의 일지는 더 필요 없다.
+    unawaited(_journal.discardIfIdle());
 
     // 서버가 업로드 시점에 검증까지 끝내면 스탬프가 여기서 온다. 코스 스탬프 연출을
     // 쿠폰보다 먼저 띄우려고 검증 응답을 기다리지 않고 바로 받는다.

@@ -1,9 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/course_partner.dart';
+import '../models/running_course.dart';
 import '../models/user_log.dart';
+import '../services/run_journal.dart';
+import '../services/run_live_widget.dart';
+import '../services/service_locator.dart';
+import '../services/user_log_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/formatters.dart';
 import 'community/community_screen.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
@@ -32,6 +40,124 @@ class _AppShellState extends State<AppShell> {
   /// 러닝 탭은 IndexedStack 안에서 계속 살아 있어 State가 늘 붙어 있다.
   final GlobalKey<RunningScreenState> _runningKey = GlobalKey();
   final GlobalKey<CommunityScreenState> _communityKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recoverPendingRun());
+  }
+
+  /// 지난 실행이 러닝 중에 죽었으면 일지가 남아 있다. 종료 뒤 업로드 전에 죽은
+  /// 기록은 묻지 않고 올리고, 달리던 중이었으면 이어 달릴지 묻는다.
+  Future<void> _recoverPendingRun() async {
+    final journal = Services.instance.runJournal;
+    final snapshot = await journal.read();
+    if (snapshot == null || !mounted) return;
+
+    if (snapshot.finished) {
+      final record = snapshot.record;
+      if (record != null) {
+        unawaited(Services.instance.runSubmission.submit(record));
+      } else {
+        unawaited(journal.discard());
+      }
+      return;
+    }
+
+    final detail = {
+      LogKeys.courseId: ?snapshot.courseId,
+      LogKeys.distanceM: snapshot.distanceMeters.round(),
+      LogKeys.elapsedSec: snapshot.elapsed.inSeconds,
+    };
+    if (!snapshot.isResumable) {
+      // 첫 위치도 못 잡고 죽었다. 복구할 것이 없다.
+      writeLog(
+        LogName.runAbandon,
+        detail: {LogKeys.reason: 'app_killed', ...detail},
+      );
+      unawaited(journal.discard());
+      return;
+    }
+
+    final resume = await _askResume(snapshot);
+    if (!mounted) return;
+    if (resume != true) {
+      writeLog(
+        LogName.runAbandon,
+        detail: {LogKeys.reason: 'app_killed', ...detail},
+      );
+      await journal.discard();
+      return;
+    }
+
+    RunningCourse? course;
+    final courseId = snapshot.courseId;
+    if (courseId != null) {
+      try {
+        course = await Services.instance.course.loadCourse(courseId);
+      } catch (_) {
+        // 코스를 못 받으면 경로만 이어 달린다. 완주 판정은 서버가 코스 id로 한다.
+      }
+    }
+    final availability = await Services.instance.runTracker.restore(
+      snapshot,
+      course: course,
+    );
+    if (!mounted) return;
+    if (!availability.isReady) {
+      // 일지는 남겨 둔다. 권한을 켜고 다시 열면 다시 묻는다.
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(availability.message)));
+      return;
+    }
+
+    writeLog(LogName.runRecover, detail: detail);
+    Services.instance.userLog.markRunStarted();
+    unawaited(
+      Services.instance.runLiveWidget.start(
+        RunWidgetData(
+          distanceMeters: snapshot.distanceMeters,
+          elapsed: snapshot.elapsed,
+          paceSecondsPerKm: null,
+          paused: true,
+        ),
+      ),
+    );
+    setState(() => _index = _runningTab);
+    await _runningKey.currentState?.resumeRecoveredRun(
+      course: course,
+      origin: snapshot.points.last,
+    );
+  }
+
+  Future<bool?> _askResume(RunJournalSnapshot snapshot) {
+    final courseName = snapshot.courseName;
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('진행 중이던 러닝이 있어요'),
+        content: Text(
+          '${courseName == null ? '' : '$courseName\n'}'
+          '${Formatters.distanceKm(snapshot.distanceMeters)} · '
+          '${Formatters.duration(snapshot.elapsed)}\n'
+          '이어서 달리면 여기까지의 경로가 그대로 이어져요.',
+          style: const TextStyle(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('종료'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('이어서 달리기'),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// 러닝 탭으로 옮기고 그 코스를 지도에서 고른 상태로 연다.
   void _openCourse(String courseId, LogSource source) {

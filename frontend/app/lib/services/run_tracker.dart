@@ -11,6 +11,7 @@ import '../utils/geo_utils.dart';
 import 'current_location.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
+import 'run_journal.dart';
 
 enum RunStatus { idle, running, paused, finished }
 
@@ -19,10 +20,18 @@ enum RunStatus { idle, running, paused, finished }
 /// 위치 스트림을 구독해 경로/거리/시간을 누적하고, 화면은 여기만 바라본다.
 /// 서버 전송은 [RunTracker]의 책임이 아니라 [buildRecord] 결과를 받아 처리한다.
 class RunTracker extends ChangeNotifier {
-  RunTracker(this._locationService, this._motionService, this._currentLocation);
+  RunTracker(
+    this._locationService,
+    this._motionService,
+    this._currentLocation,
+    this._journal,
+  );
 
   final LocationService _locationService;
   final MotionService _motionService;
+
+  /// 러닝 중 기록을 기기에 남긴다. 앱이 죽어도 복구할 수 있게.
+  final RunJournal _journal;
 
   /// 앱 전역의 최신 현위치. 실제 GPS 러닝은 위치 스트림을 여기서 가져갔다
   /// 돌려주고, 받은 점을 흘려 넣는다([CurrentLocation] 참고). 시뮬레이션은
@@ -257,6 +266,7 @@ class RunTracker extends ChangeNotifier {
     // _startedAt은 여기서 잡지 않는다. 첫 유효 위치가 들어올 때 잡는다(elapsed 참고).
     _status = RunStatus.running;
     _activeLocation = location;
+    _journal.begin(courseId: course?.id, courseName: course?.name);
 
     _isRealGps = source == null;
     if (_isRealGps) {
@@ -303,6 +313,8 @@ class RunTracker extends ChangeNotifier {
       _status = RunStatus.paused;
       _beginPause();
       _ticker?.cancel();
+      _journal.pause();
+      unawaited(_journal.flush());
     }
     notifyListeners();
   }
@@ -313,6 +325,8 @@ class RunTracker extends ChangeNotifier {
     _status = RunStatus.paused;
     _beginPause();
     _ticker?.cancel();
+    _journal.pause();
+    unawaited(_journal.flush());
     notifyListeners();
   }
 
@@ -332,6 +346,7 @@ class RunTracker extends ChangeNotifier {
 
     _status = RunStatus.running;
     _endPause();
+    _journal.resume();
     // 일시정지 중 이동은 거리에 반영하지 않는다. 기준점만 버리고 _lastPosition은
     // 남긴다 — 그걸 비우면 지도에서 현위치 마커가 잠깐 사라진다.
     _commitAnchor = null;
@@ -370,6 +385,14 @@ class RunTracker extends ChangeNotifier {
     // 러닝 구독이 끊긴 뒤에 돌려준다. 순서가 바뀌면 평상시 스트림이 러닝
     // 설정을 물려받는다.
     if (_isRealGps) _currentLocation.reclaimFromRun();
+    // 업로드 전에 죽어도 기록이 남게 확정값을 적어 둔다. 지우는 건 업로드 뒤.
+    _journal.finish(
+      startedAt: _startedAt!,
+      endedAt: _endedAt!,
+      distanceMeters: _distanceMeters,
+      duration: elapsed,
+    );
+    unawaited(_journal.flush());
     notifyListeners();
   }
 
@@ -392,6 +415,46 @@ class RunTracker extends ChangeNotifier {
     );
   }
 
+  /// 앱이 죽기 전 일지에 남은 러닝을 이어 달릴 수 있게 되살린다.
+  ///
+  /// 멈춤 상태로 돌아온다 — 죽어 있던 시간은 멈춤으로 치고, 사용자가 이어서를
+  /// 누르면 [resume]이 위치 구독을 다시 연다. 복구 뒤 첫 점은 새 구간으로
+  /// 시작돼 죽어 있던 동안의 이동이 거리에 들어가지 않는다.
+  Future<LocationAvailability> restore(
+    RunJournalSnapshot snapshot, {
+    RunningCourse? course,
+  }) async {
+    final availability = await _locationService.ensurePermission();
+    if (!availability.isReady) return availability;
+
+    _reset();
+    _targetCourse = course;
+    _courseLengthMeters = course == null ? 0 : GeoUtils.pathLength(course.path);
+    _coverage = course == null || course.path.isEmpty
+        ? null
+        : CourseCoverageTracker(course.path);
+    _path.addAll(snapshot.points);
+    for (final point in snapshot.points) {
+      _coverage?.add(point);
+    }
+    _distanceMeters = snapshot.distanceMeters;
+    _startedAt = snapshot.startedAt;
+    _pausedTotal = snapshot.pausedTotal;
+    _pausedAt = snapshot.pausedAt ?? snapshot.lastAt ?? DateTime.now();
+    _lastPosition = snapshot.points.lastOrNull;
+    _paceSamples.add((meters: _distanceMeters, elapsed: elapsed));
+
+    _status = RunStatus.paused;
+    _activeLocation = _locationService;
+    _isRealGps = true;
+    _motionService.start();
+    _currentLocation.yieldToRun();
+    _journal.reopen();
+    notifyListeners();
+
+    return availability;
+  }
+
   /// 결과 화면을 벗어날 때 호출해 다음 러닝을 받을 수 있는 상태로 되돌린다.
   void reset() {
     _reset();
@@ -411,6 +474,7 @@ class RunTracker extends ChangeNotifier {
         _startedAt = point.recordedAt ?? DateTime.now();
         // 위치가 잡히기 전에 멈췄다 풀었으면 그 멈춤은 시작 전의 일이다.
         _pausedTotal = Duration.zero;
+        _journal.startedAt(_startedAt!);
       }
       _lastPosition = point;
       _jumpRejections = 0;
@@ -456,6 +520,7 @@ class RunTracker extends ChangeNotifier {
     _path.add(point);
     _pathSnapshot = null;
     _coverage?.add(point);
+    _journal.point(point, distanceMeters: _distanceMeters);
     _paceSamples.add((meters: _distanceMeters, elapsed: elapsed));
 
     // 창 밖으로 완전히 나간 표본은 버린다. 창 경계 직전 표본 하나는 남겨야
