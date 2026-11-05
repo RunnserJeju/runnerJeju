@@ -53,6 +53,7 @@ enum LogName {
   runFinish('run_finish'),
   runAbandon('run_abandon'),
   runUploadFailed('run_upload_failed'),
+  runVerifyFailed('run_verify_failed'),
   runDetailOpen('run_detail_open'),
   runShare('run_share'),
   runShareFailed('run_share_failed'),

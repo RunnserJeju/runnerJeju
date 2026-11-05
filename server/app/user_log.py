@@ -43,6 +43,7 @@ LOG_NAMES: frozenset[str] = frozenset(
         "run_finish",
         "run_abandon",
         "run_upload_failed",
+        "run_verify_failed",
         "run_detail_open",
         "run_share",
         "run_share_failed",

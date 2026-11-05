@@ -30,6 +30,7 @@ import 'partner_service.dart';
 import 'program_service.dart';
 import 'run_live_widget.dart';
 import 'run_service.dart';
+import 'run_submission.dart';
 import 'run_tracker.dart';
 import 'share_card_renderer.dart';
 import 'stamp_service.dart';
@@ -97,6 +98,14 @@ class Services {
     VerificationApi(apiClient),
   );
   late final NoticeService notice = NoticeService(NoticeApi(apiClient));
+
+  /// 완료된 러닝의 업로드·검증·보상 조회. 화면이 닫혀도 끝까지 돈다(#104).
+  late final RunSubmission runSubmission = RunSubmission(
+    run,
+    verification,
+    stamp,
+    coupon,
+  );
 
   /// 협력업체(러닝 탭 협력업체 모드, 홈 추천 협력 업체).
   late final PartnerService partner = PartnerService(PartnerApi(apiClient));

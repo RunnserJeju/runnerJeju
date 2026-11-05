@@ -207,7 +207,10 @@ class _RunScreenState extends State<RunScreen> {
     );
     unawaited(Services.instance.userLog.markRunEnded());
     final record = _tracker.buildRecord();
-    if (record == null || !mounted) return;
+    if (record == null) return;
+    // 화면이 뜨기 전에 업로드를 시작한다. 결과 화면은 진행 상황을 구독만 한다.
+    unawaited(Services.instance.runSubmission.submit(record));
+    if (!mounted) return;
 
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => RunResultScreen(record: record)),
