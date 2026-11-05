@@ -687,6 +687,35 @@ export function issueCoupon(id: string, userIds: string[]): Promise<{ issued: nu
   })
 }
 
+export interface StampIssueResult {
+  issued: number
+  /** 이미 갖고 있어 건너뛴 회원 수. */
+  skipped: number
+}
+
+/** 스탬프 수동 지급 — 획득 조건·노출 여부를 따지지 않고 스탬프만 준다(연쇄 보상 없음). */
+export function issueStamp(id: string, userIds: string[]): Promise<StampIssueResult> {
+  return request(`/admin/stamps/${id}/issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_ids: userIds }),
+  })
+}
+
+export interface UserStamp {
+  id: string
+  stamp_definition_id: string
+  name: string
+  display_image_url: string | null
+  acquired_at: string
+  /** 달린 기록으로 받았으면 true, 운영자 지급 등 러닝 없이 받았으면 false. */
+  from_run: boolean
+}
+
+export function getUserStamps(id: string): Promise<UserStamp[]> {
+  return request(`/admin/users/${id}/stamps`)
+}
+
 export function listIssuedCoupons(
   id: string,
   limit: number,
@@ -956,6 +985,10 @@ export interface AdminRun {
   duration_sec: number
   started_at: string
   ended_at: string
+  /** 완주 / 검증 중 / 미완주 / 코스 없이 뛴 러닝. */
+  completion: 'completed' | 'pending' | 'incomplete' | 'none'
+  /** 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 null. */
+  match_rate: number | null
 }
 
 /** 모든 회원의 러닝 기록. from/to는 KST 날짜(YYYY-MM-DD) 양끝 포함, 시작 시각 기준. */
@@ -965,6 +998,7 @@ export function listAdminRuns(
   order: 'asc' | 'desc',
   limit: number,
   offset: number,
+  q = '',
 ): Promise<{ total: number; items: AdminRun[] }> {
   const params = new URLSearchParams({
     from,
@@ -973,6 +1007,7 @@ export function listAdminRuns(
     limit: String(limit),
     offset: String(offset),
   })
+  if (q.trim()) params.set('q', q.trim())
   return request(`/admin/runs?${params}`)
 }
 

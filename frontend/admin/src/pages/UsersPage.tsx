@@ -4,6 +4,7 @@ import { ApiError, getUser, listUsers, type UserDetail, type UserSortKey, type U
 import Modal from '../components/Modal'
 import SortTh, { type SortState } from '../components/SortTh'
 import UserCouponSection from '../components/UserCouponSection'
+import UserStampSection from '../components/UserStampSection'
 
 const PAGE_SIZE = 50
 
@@ -227,6 +228,7 @@ export default function UsersPage({ onUnauthorized }: Props) {
               </tbody>
             </table>
           )}
+          <UserStampSection userId={detail.id} onUnauthorized={onUnauthorized} />
           <UserCouponSection userId={detail.id} onUnauthorized={onUnauthorized} />
         </Modal>
       )}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.deps import current_user_id
 from app.models import Course, Run, Verification
+from app.routers.verifications import earned_stamp_id, verify_run
 from app.schemas import RunCreate, RunOut, RunUploadResult
 
 router = APIRouter(tags=["runs"])
@@ -46,14 +47,17 @@ def create_run(
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ):
-    """러닝 기록 저장.
+    """러닝 기록 저장. 코스 러닝이면 같은 트랜잭션에서 완주 검증까지 끝낸다.
 
-    여기서는 검증을 하지 않는다. 경로 검증은 CPU를 오래 쓰는 작업이라
-    별도 엔드포인트(POST /runs/{id}/verification)로 분리해 두었고,
-    스탬프도 그 검증 결과로만 발급된다.
+    검증을 앱의 후속 요청(POST /runs/{id}/verification)에만 맡기면, 앱이 결과 화면을
+    저장 중에 닫았을 때 기록만 남고 완주 처리가 영영 안 된다(#104). 그 요청은
+    이제 여기서 만든 결과를 그대로 돌려받는다.
     """
-    if payload.course_id is not None and db.get(Course, payload.course_id) is None:
-        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+    course = None
+    if payload.course_id is not None:
+        course = db.get(Course, payload.course_id)
+        if course is None:
+            raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
 
     if payload.ended_at < payload.started_at:
         raise HTTPException(status_code=422, detail="종료 시각이 시작 시각보다 빨라요.")
@@ -75,10 +79,16 @@ def create_run(
     )
 
     db.add(run)
+    db.flush()  # run.id 확정
+    verification = verify_run(db, user_id, run, course) if course is not None else None
     db.commit()
     db.refresh(run)
 
-    return {"record": to_run_out(run), "earned_stamp_id": None}
+    completed = verification is not None and verification.status == "matched"
+    return {
+        "record": to_run_out(run, completed=completed),
+        "earned_stamp_id": earned_stamp_id(db, run.id, course.id) if completed else None,
+    }
 
 
 @router.get("/runs", response_model=list[RunOut])

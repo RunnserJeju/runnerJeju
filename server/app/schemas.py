@@ -432,9 +432,7 @@ class RunOut(BaseModel):
 class RunUploadResult(BaseModel):
     record: RunOut
 
-    # 스탬프는 검증(POST /runs/{id}/verification) 결과로만 발급되므로 여기서는 항상 None이다.
-    # 필드를 남겨둔 이유는 클라이언트가 이미 이 키를 읽고 있고, 나중에 검증이
-    # 동기로 끝나는 경로가 생기면 다시 채울 수 있기 때문이다.
+    # 업로드 때 검증까지 끝나므로(#104) 완주면 이 러닝으로 받은 코스 스탬프가 실린다.
     earned_stamp_id: uuid.UUID | None = None
 
 
@@ -859,6 +857,9 @@ class AdminRunOut(BaseModel):
     duration_sec: int
     started_at: datetime
     ended_at: datetime
+    # completed 완주 / pending 검증 중 / incomplete 미완주 / none 코스 없이 뛴 러닝
+    completion: str
+    match_rate: float | None  # 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 None
 
 
 class AdminRunListOut(BaseModel):
@@ -931,6 +932,25 @@ class IssueRequest(BaseModel):
 
 class IssueResult(BaseModel):
     issued: int
+
+
+class StampIssueResult(BaseModel):
+    """스탬프 수동 지급 결과. skipped는 이미 갖고 있어 건너뛴 회원 수."""
+
+    issued: int
+    skipped: int
+
+
+class UserStampOut(BaseModel):
+    """회원이 보유한 스탬프 한 개."""
+
+    id: uuid.UUID
+    stamp_definition_id: uuid.UUID
+    name: str
+    display_image_url: str | None
+    acquired_at: datetime
+    # 달린 기록으로 받았으면 True, 운영자 지급 등 러닝 없이 받았으면 False
+    from_run: bool
 
 
 class IssuedCouponOut(BaseModel):
