@@ -99,9 +99,9 @@ class RunTracker extends ChangeNotifier {
   /// 실제 현위치까지의 거리가 첫 구간으로 잡힌다.
   static const Duration _maxSampleAge = Duration(seconds: 10);
 
-  /// 직전 확정점에서 이 속도를 넘는 이동은 GPS 튐으로 본다(m/s). 8m/s는
-  /// 2'05"/km — 러닝 코스에서 나올 수 없는 값이다.
-  static const double _maxPlausibleSpeed = 8;
+  /// 직전 확정점에서 이 속도를 넘는 이동은 GPS 튐으로 본다(m/s). 15m/s는
+  /// 1'07"/km — 사람이 낼 수 없는 속도라 진짜 이동을 거를 일은 없다.
+  static const double _maxPlausibleSpeed = 15;
 
   /// [_maxPlausibleSpeed]로 연속 이만큼 거르면 튐이 아니라 기준점이 낡은 것
   /// (터널·지하도를 지나 진짜 이동했다)으로 보고 기준점을 갈아 끼운다. 그때의
