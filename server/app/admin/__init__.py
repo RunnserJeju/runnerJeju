@@ -20,6 +20,7 @@ from app.admin import (
     partners,
     rewards,
     running_weeks,
+    runs,
     stamps,
     user_logs,
     users,
@@ -37,6 +38,7 @@ admin_router.include_router(events.router)
 admin_router.include_router(stamps.router)
 admin_router.include_router(running_weeks.router)
 admin_router.include_router(users.router)
+admin_router.include_router(runs.router)
 admin_router.include_router(metrics_router)
 admin_router.include_router(user_logs.router)
 admin_router.include_router(coupons.router)

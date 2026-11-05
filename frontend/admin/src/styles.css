@@ -1022,3 +1022,28 @@ tbody tr.selected {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* 러닝 기록 탭: 기간 바. 입력칸·버튼을 같은 높이로 맞춘다. */
+.run-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.run-filter label {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.run-filter input[type='date'] {
+  width: auto;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.run-summary {
+  margin: 14px 0 12px;
+  font-size: 13px;
+}

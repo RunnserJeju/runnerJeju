@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../exceptions/app_exception.dart';
 import '../../models/coupon.dart';
@@ -132,48 +131,54 @@ class _CouponUseScreenState extends State<CouponUseScreen> {
               },
             ),
           const SizedBox(height: 28),
-          Center(
-            child: SizedBox(
-              width: 200,
-              child: TextField(
-                controller: _pin,
-                autofocus: true,
-                enabled: !_using,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                maxLength: _pinLength,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onSubmitted: (_) => _use(),
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 16,
-                  color: AppColors.ink,
-                ),
-                decoration: const InputDecoration(
-                  hintText: '••••',
-                  counterText: '',
+          // 입력 버튼은 입력칸 옆에 둔다. 하단 바에 두면 키보드에 가려진다.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 180,
+                child: TextField(
+                  controller: _pin,
+                  autofocus: true,
+                  enabled: !_using,
+                  obscureText: true,
+                  // 기본 문자 키보드 — 완료 키가 있어 iOS에서도 키보드를 내릴 수 있다.
+                  textInputAction: TextInputAction.done,
+                  textAlign: TextAlign.center,
+                  maxLength: _pinLength,
+                  onSubmitted: (_) => _use(),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 16,
+                    color: AppColors.ink,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: '••••',
+                    counterText: '',
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: _ready ? _use : null,
+                // 테마 기본은 가로 무한(전체 폭)이라 Row 안에서는 폭을 정해 줘야 한다.
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(88, 54),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
+                child: Text(_using ? '처리 중' : '입력'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _pin.text.length < _pinLength ? '쿠폰 번호 4자리를 입력해 주세요' : '',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSubtle),
           ),
         ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: FilledButton(
-            onPressed: _ready ? _use : null,
-            child: Text(
-              _using
-                  ? '처리 중…'
-                  : _pin.text.length < _pinLength
-                  ? '쿠폰 번호 4자리를 입력해 주세요'
-                  : '사용하기',
-            ),
-          ),
-        ),
       ),
     );
   }
