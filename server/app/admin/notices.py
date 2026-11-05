@@ -72,6 +72,7 @@ def create_notice(
         body=payload.body,
         link_url=payload.link_url,
         link_label=payload.link_label,
+        show_on_launch=payload.show_on_launch,
         starts_at=payload.starts_at,
         ends_at=payload.ends_at,
     )
@@ -97,6 +98,7 @@ def update_notice(
     notice.body = payload.body
     notice.link_url = payload.link_url
     notice.link_label = payload.link_label
+    notice.show_on_launch = payload.show_on_launch
     notice.starts_at = payload.starts_at
     notice.ends_at = payload.ends_at
 

@@ -8,12 +8,21 @@ export interface NoticeFormValues {
   /** 외부 주소. 개발자가 넣은 앱 화면(app:…)이면 그 값을 그대로 들고 있다가 돌려보낸다. */
   linkUrl: string
   linkLabel: string
+  showOnLaunch: boolean
   startsAt: string
   endsAt: string
 }
 
 export function emptyNoticeValues(): NoticeFormValues {
-  return { title: '', body: '', linkUrl: '', linkLabel: '', startsAt: '', endsAt: '' }
+  return {
+    title: '',
+    body: '',
+    linkUrl: '',
+    linkLabel: '',
+    showOnLaunch: false,
+    startsAt: '',
+    endsAt: '',
+  }
 }
 
 const isAppLink = (url: string) => url.startsWith(NOTICE_APP_LINK_PREFIX)
@@ -32,6 +41,7 @@ export function valuesFromNotice(notice: Notice): NoticeFormValues {
     body: notice.body,
     linkUrl: notice.link_url ?? '',
     linkLabel: notice.link_label ?? '',
+    showOnLaunch: notice.show_on_launch,
     startsAt: toLocalInput(notice.starts_at),
     endsAt: toLocalInput(notice.ends_at),
   }
@@ -67,6 +77,7 @@ export function validateNotice(
       body,
       link_url: linkUrl || null,
       link_label: linkUrl && linkLabel ? linkLabel : null,
+      show_on_launch: values.showOnLaunch,
       starts_at: startsAt ? startsAt.toISOString() : null,
       ends_at: endsAt ? endsAt.toISOString() : null,
     },
@@ -104,7 +115,10 @@ export default function NoticeForm({ values, onChange }: Props) {
       <div className="row">
         <div className="field">
           <label htmlFor="notice-link">
-            버튼 링크 <span className="hint">다른 화면(혹은 외부 앱) 이동 필요 시 작성. 비우면 버튼 없음</span>
+            버튼 링크{' '}
+            <span className="hint">
+              다른 화면(혹은 외부 앱) 이동 필요 시 작성. 비우면 버튼 없음
+            </span>
           </label>
           {isAppLink(values.linkUrl) ? (
             // 앱 화면 연결은 개발자가 DB에 넣는다 — 여기선 보여 주고 끊을 수만 있다.
@@ -138,6 +152,20 @@ export default function NoticeForm({ values, onChange }: Props) {
             onChange={(event) => set({ linkLabel: event.target.value })}
           />
         </div>
+      </div>
+      <div className="field">
+        <label>
+          <input
+            type="checkbox"
+            checked={values.showOnLaunch}
+            onChange={(event) => set({ showOnLaunch: event.target.checked })}
+          />{' '}
+          앱 실행 시 노출{' '}
+          <span className="hint">
+            앱을 켜자마자 팝업으로 떠요. 여러 공지가 켜져 있으면 가장 최근 것 하나만, 앱을 켤 때 한
+            번 떠요
+          </span>
+        </label>
       </div>
       <div className="row">
         <div className="field">

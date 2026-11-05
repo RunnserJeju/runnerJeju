@@ -213,32 +213,50 @@ class _MonthSummary extends StatelessWidget {
       for (final r in runs)
         if (r.completed && r.courseId != null) r.courseId,
     }.length;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: MetricTile(
-              label: '총 거리',
-              value: Formatters.distanceKm(distance),
-              unit: 'km',
+    // 세 칸을 같은 너비로 나누고 가운데 정렬한다. 칸 사이는 세로선, 달력과는 아래 가로선으로 가른다.
+    const divider = VerticalDivider(
+      width: 1,
+      thickness: 1,
+      color: AppColors.line,
+    );
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                Expanded(
+                  child: MetricTile(
+                    label: '총 거리',
+                    value: Formatters.distanceKm(distance),
+                    unit: 'km',
+                    alignment: CrossAxisAlignment.center,
+                  ),
+                ),
+                divider,
+                Expanded(
+                  child: MetricTile(
+                    label: '총 시간',
+                    value: Formatters.durationHm(duration),
+                    alignment: CrossAxisAlignment.center,
+                  ),
+                ),
+                divider,
+                Expanded(
+                  child: MetricTile(
+                    label: '완주 코스',
+                    value: '$completedCourses',
+                    unit: '개',
+                    alignment: CrossAxisAlignment.center,
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: MetricTile(
-              label: '총 시간',
-              value: Formatters.duration(duration),
-            ),
-          ),
-          Expanded(
-            child: MetricTile(
-              label: '완주 코스',
-              value: '$completedCourses',
-              unit: '개',
-            ),
-          ),
-        ],
-      ),
+        ),
+        const Divider(height: 1, thickness: 1, color: AppColors.line),
+      ],
     );
   }
 }

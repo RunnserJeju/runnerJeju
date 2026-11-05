@@ -4,7 +4,6 @@ import 'dart:math';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../api/user_log_api.dart';
@@ -33,17 +32,14 @@ void writeLog(LogName name, {Map<String, dynamic> detail = const {}}) {
 /// - 러닝 이탈 감지: 러닝 시작 때 로컬에 표시를 남기고 종료 때 지운다. 다음 실행
 ///   때 표시가 남아 있으면 앱이 러닝 중 죽은 것이므로 run_abandon으로 기록한다.
 class UserLogService with WidgetsBindingObserver {
-  UserLogService(this._api, {FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+  UserLogService(this._api);
 
   final UserLogApi _api;
-  final FlutterSecureStorage _storage;
 
   static const _flushCount = 20;
   static const _flushEvery = Duration(seconds: 5);
   static const _queueCap = 200;
   static const _sessionGap = Duration(minutes: 30);
-  static const _activeRunKey = 'user_log.active_run';
 
   final List<UserLog> _queue = [];
   Timer? _flushTimer;
@@ -77,17 +73,8 @@ class UserLogService with WidgetsBindingObserver {
     } catch (_) {}
     WidgetsBinding.instance.addObserver(this);
 
-    final abandoned = await _readActiveRun();
-    if (abandoned != null) {
-      await _storage.delete(key: _activeRunKey);
-      writeLog(
-        LogName.runAbandon,
-        detail: {
-          LogKeys.reason: 'app_killed',
-          if (abandoned.isNotEmpty) LogKeys.courseId: abandoned,
-        },
-      );
-    }
+    // 러닝 중 죽은 흔적은 RunJournal이 남기고, run_abandon/run_recover 로그는
+    // 복구 팝업(AppShell)이 사용자 선택에 따라 남긴다.
     writeLog(LogName.appOpen, detail: {'os': Platform.operatingSystemVersion});
   }
 
@@ -151,29 +138,11 @@ class UserLogService with WidgetsBindingObserver {
 
   // --- 러닝 이탈 감지 ------------------------------------------------------
 
-  /// 러닝 화면이 시작 직후 부른다. 로컬 표시를 남겨 앱이 죽어도 흔적이 남게 한다.
-  Future<void> markRunStarted({String? courseId}) async {
-    _runActive = true;
-    try {
-      await _storage.write(key: _activeRunKey, value: courseId ?? '');
-    } catch (_) {}
-  }
+  /// 러닝 화면이 시작 직후 부른다. 러닝 중 백그라운드 복귀를 새 세션으로 세지 않게.
+  void markRunStarted() => _runActive = true;
 
   /// 러닝 화면이 정상 종료 직후 부른다.
-  Future<void> markRunEnded() async {
-    _runActive = false;
-    try {
-      await _storage.delete(key: _activeRunKey);
-    } catch (_) {}
-  }
-
-  Future<String?> _readActiveRun() async {
-    try {
-      return await _storage.read(key: _activeRunKey);
-    } catch (_) {
-      return null;
-    }
-  }
+  void markRunEnded() => _runActive = false;
 
   // --- 세션 ----------------------------------------------------------------
 

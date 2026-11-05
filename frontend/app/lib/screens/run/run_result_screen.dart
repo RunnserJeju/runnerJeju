@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../models/coupon.dart';
 import '../../models/run_record.dart';
 import '../../models/run_stamp.dart';
 import '../../models/run_verification.dart';
-import '../../models/user_log.dart';
+import '../../services/run_submission.dart';
 import '../../services/service_locator.dart';
-import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/coupon_card.dart';
 import '../../widgets/coupon_celebration.dart';
@@ -16,7 +14,8 @@ import '../../widgets/stamp_badge.dart';
 import '../../widgets/stamp_celebration.dart';
 import 'run_share_screen.dart';
 
-/// 러닝 결과: 기록을 서버에 저장하고, 완주 스탬프를 받았으면 함께 보여준다.
+/// 러닝 결과. 저장·검증은 [RunSubmission]이 돌리고 여기서는 진행 상황과 보상을
+/// 보여준다. 여는 쪽이 먼저 submit한다.
 class RunResultScreen extends StatefulWidget {
   const RunResultScreen({super.key, required this.record});
 
@@ -27,210 +26,37 @@ class RunResultScreen extends StatefulWidget {
 }
 
 class _RunResultScreenState extends State<RunResultScreen> {
-  /// 기록 저장은 화면 진입 시 자동으로 1회 실행하고, 실패하면 재시도 버튼을 준다.
-  RunUploadResult? _uploadResult;
-  RunStamp? _earnedStamp;
-
-  /// 획득 팝업은 한 번만. 스탬프가 업로드·검증 양쪽에서 올 수 있어서 막는다.
-  bool _celebrated = false;
-
-  /// 완주로 받은 코스완료 쿠폰. 스탬프 팝업이 닫힌 뒤 이어서 보여준다.
-  Coupon? _earnedCoupon;
-
-  /// 코스완료 쿠폰 추첨 팝업(당첨·낙첨)은 한 번만. 재시도로 같은 검증을 다시 받아도 막는다.
-  bool _courseDrawCelebrated = false;
-
-  bool _runningWeekCelebrated = false;
-
-  /// 이 러닝으로 받은 러닝위크 쿠폰(줄 리워드·스페셜). 코스완료 쿠폰 아래에 같이 보여준다.
-  final List<Coupon> _runningWeekCoupons = [];
-  String? _saveError;
-  bool _saving = true;
-
-  /// 코스를 따라 달린 경우에만 수행하는 경로 검증.
-  RunVerification? _verification;
-  String? _verificationError;
-  bool _verifying = false;
+  RunSubmission get _submission => Services.instance.runSubmission;
 
   @override
   void initState() {
     super.initState();
-    _save();
+    _submission.addListener(_onSubmissionChanged);
+    _submission.onCelebration = _showCelebration;
   }
 
-  Future<void> _save() async {
-    setState(() {
-      _saving = true;
-      _saveError = null;
-    });
-
-    try {
-      final result = await Services.instance.run.saveRecord(widget.record);
-      if (!mounted) return;
-
-      setState(() {
-        _uploadResult = result;
-        _saving = false;
-      });
-
-      // 저장된 기록 id가 있어야 검증을 요청할 수 있다.
-      final runId = result.record.id;
-      final courseId = widget.record.courseId;
-      if (runId != null && courseId != null) {
-        await _verify(runId: runId, courseId: courseId);
-      }
-
-      if (result.earnedStampId != null) {
-        await _loadStamp(result.earnedStampId!);
-      }
-    } catch (e) {
-      final courseId = widget.record.courseId;
-      writeLog(
-        LogName.runUploadFailed,
-        detail: {LogKeys.courseId: ?courseId, LogKeys.error: '$e'},
-      );
-      if (!mounted) return;
-      setState(() {
-        _saveError = '$e';
-        _saving = false;
-      });
+  @override
+  void dispose() {
+    _submission.removeListener(_onSubmissionChanged);
+    if (_submission.onCelebration == _showCelebration) {
+      _submission.onCelebration = null;
     }
+    super.dispose();
   }
 
-  /// 경로 검증 요청. 검증 실패는 기록 저장을 되돌리지 않고 배너로만 알린다.
-  Future<void> _verify({
-    required String runId,
-    required String courseId,
-  }) async {
-    setState(() {
-      _verifying = true;
-      _verificationError = null;
-    });
-
-    try {
-      final verification = await Services.instance.verification.verify(
-        runId: runId,
-        courseId: courseId,
-      );
-      if (!mounted) return;
-
-      setState(() {
-        _verification = verification;
-        _verifying = false;
-      });
-
-      // 스탬프는 업로드 응답과 검증 응답 어느 쪽에서도 올 수 있다. 같은 id면
-      // 이미 받아 둔 것이라 다시 부르지 않는다.
-      final stampId = verification.earnedStampId;
-      if (stampId != null && stampId != _uploadResult?.earnedStampId) {
-        await _loadStamp(stampId);
-      }
-      await _celebrateCourseDraw(verification);
-      await _celebrateRunningWeek(verification);
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _verificationError = '$e';
-        _verifying = false;
-      });
-    }
+  void _onSubmissionChanged() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _retryVerification() async {
-    final runId = _uploadResult?.record.id;
-    final courseId = widget.record.courseId;
-    if (runId == null || courseId == null) return;
-
-    await _verify(runId: runId, courseId: courseId);
-  }
-
-  /// 스탬프 조회 실패는 저장 자체를 실패로 만들지 않는다. 기본 도안으로 대체된다.
-  Future<void> _loadStamp(String stampId) async {
-    try {
-      final stamp = await Services.instance.stamp.loadStamp(stampId);
-      if (!mounted) return;
-      setState(() => _earnedStamp = stamp);
-      if (!_celebrated) {
-        _celebrated = true;
-        await showStampCelebration(context, stamp);
-      }
-    } catch (_) {
-      // 무시: 스탬프 획득 사실은 이미 업로드 결과로 알고 있다.
-    }
-  }
-
-  /// 쿠폰 조회 실패도 저장을 실패로 만들지 않는다. 마이페이지에서 다시 볼 수 있다.
-  Future<void> _loadCoupon(String couponId, {bool runningWeek = false}) async {
-    try {
-      final coupon = await Services.instance.coupon.loadCoupon(couponId);
-      if (!mounted) return;
-      setState(() {
-        if (runningWeek) {
-          _runningWeekCoupons.add(coupon);
-        } else {
-          _earnedCoupon = coupon;
-        }
-      });
-      await showCouponCelebration(context, coupon);
-    } catch (_) {
-      // 무시.
-    }
-  }
-
-  /// 추첨 한 건의 팝업. 당첨이면 쿠폰을 불러와 획득 팝업, 아니면 '다음 기회에' 팝업.
-  Future<void> _celebrateDraw(CouponDraw draw, {bool runningWeek = false}) async {
+  Future<void> _showCelebration(Celebration celebration) async {
     if (!mounted) return;
-    if (draw.won) {
-      await _loadCoupon(draw.userCouponId!, runningWeek: runningWeek);
-    } else {
-      await showCouponMiss(context, name: draw.name, benefit: draw.benefit);
-    }
-  }
-
-  /// 코스완료 쿠폰 추첨 팝업. 구 서버는 추첨 목록이 없어 당첨 id로만 띄운다.
-  Future<void> _celebrateCourseDraw(RunVerification verification) async {
-    if (_courseDrawCelebrated) return;
-    final draws = verification.courseDraws;
-    if (draws.isEmpty) {
-      final couponId = verification.earnedCouponId;
-      if (couponId != null && _earnedCoupon == null) {
-        _courseDrawCelebrated = true;
-        await _loadCoupon(couponId);
-      }
-      return;
-    }
-    _courseDrawCelebrated = true;
-    for (final draw in draws) {
-      await _celebrateDraw(draw);
-    }
-  }
-
-  /// 러닝위크 스탬프(코스 전용 → 빙고 줄 수 순)와 러닝위크 쿠폰 추첨(줄 리워드 → 스페셜)을
-  /// 코스 스탬프·쿠폰 팝업 뒤에 이어서 보여준다. 재시도로 같은 검증을 다시 받아도 한 번만.
-  Future<void> _celebrateRunningWeek(RunVerification verification) async {
-    if (_runningWeekCelebrated) return;
-    _runningWeekCelebrated = true;
-    for (final stampId in verification.earnedRunningWeekStampIds) {
-      try {
-        final stamp = await Services.instance.stamp.loadStamp(stampId);
-        if (!mounted) return;
+    switch (celebration) {
+      case StampCelebration(:final stamp):
         await showStampCelebration(context, stamp);
-      } catch (_) {
-        // 무시: 스탬프 탭에서 볼 수 있다.
-      }
-    }
-    final draws = verification.runningWeekDraws;
-    if (draws.isEmpty) {
-      // 구 서버: 당첨 id만 온다.
-      for (final couponId in verification.runningWeekCouponIds) {
-        if (!mounted) return;
-        await _loadCoupon(couponId, runningWeek: true);
-      }
-      return;
-    }
-    for (final draw in draws) {
-      await _celebrateDraw(draw, runningWeek: true);
+      case CouponCelebration(:final coupon):
+        await showCouponCelebration(context, coupon);
+      case CouponMissCelebration(:final name, :final benefit):
+        await showCouponMiss(context, name: name, benefit: benefit);
     }
   }
 
@@ -244,8 +70,9 @@ class _RunResultScreenState extends State<RunResultScreen> {
   void _openShare() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            RunShareScreen(record: _uploadResult?.record ?? widget.record),
+        builder: (_) => RunShareScreen(
+          record: _submission.uploadResult?.record ?? widget.record,
+        ),
       ),
     );
   }
@@ -253,6 +80,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
   @override
   Widget build(BuildContext context) {
     final record = widget.record;
+    final s = _submission;
 
     return PopScope(
       canPop: false,
@@ -274,31 +102,29 @@ class _RunResultScreenState extends State<RunResultScreen> {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
             _SaveStatusBanner(
-              saving: _saving,
-              error: _saveError,
-              earnedStamp:
-                  _uploadResult?.earnedStamp == true ||
-                  _verification?.earnedStampId != null,
-              onRetry: _save,
+              saving: s.uploading,
+              error: s.uploadError,
+              earnedStamp: s.earnedStampAny,
+              onRetry: s.retryUpload,
             ),
-            if (record.isCourseRun && _saveError == null) ...[
+            if (record.isCourseRun && s.uploadError == null) ...[
               const SizedBox(height: 12),
               _VerificationBanner(
-                verifying: _verifying,
-                verification: _verification,
-                error: _verificationError,
-                onRetry: _retryVerification,
+                verifying: s.verifying,
+                verification: s.verification,
+                error: s.verificationError,
+                onRetry: s.retryVerify,
               ),
             ],
-            if (_earnedStamp != null) ...[
+            if (s.earnedStamp != null) ...[
               const SizedBox(height: 20),
-              _EarnedStampCard(stamp: _earnedStamp!),
+              _EarnedStampCard(stamp: s.earnedStamp!),
             ],
-            if (_earnedCoupon != null) ...[
+            if (s.earnedCoupon != null) ...[
               const SizedBox(height: 12),
-              CouponCard(coupon: _earnedCoupon!),
+              CouponCard(coupon: s.earnedCoupon!),
             ],
-            for (final coupon in _runningWeekCoupons) ...[
+            for (final coupon in s.runningWeekCoupons) ...[
               const SizedBox(height: 12),
               CouponCard(coupon: coupon),
             ],
@@ -313,7 +139,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
             const SizedBox(height: 20),
             RunMetricsCard(record: record),
             const SizedBox(height: 28),
-            if (!_saving && _saveError == null) ...[
+            if (!s.uploading && s.uploadError == null) ...[
               OutlinedButton.icon(
                 onPressed: _openShare,
                 icon: const Icon(Icons.ios_share_rounded),

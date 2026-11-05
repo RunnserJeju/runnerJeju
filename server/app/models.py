@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -486,6 +487,11 @@ class Notice(Base):
     # 개발자가 DB에 직접 넣음 — 운영툴은 못 바꾼다, admin/notices). label null이면 앱 기본 문구.
     link_url: Mapped[str | None] = mapped_column(String(500), default=None)
     link_label: Mapped[str | None] = mapped_column(String(40), default=None)
+
+    # 앱을 켜자마자 팝업으로 띄울지. 켜진 공지가 여럿이면 앱이 가장 최근 것 하나만 띄운다.
+    show_on_launch: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
 
     # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
     # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).

@@ -15,6 +15,10 @@ import 'marker_canvas.dart';
 /// 달리기 지도는 원을 1dp 작게 쓰고, 방향을 알면 원 바깥에 삼각형을 붙인
 /// 판([buildRunHeadingMarker])으로 바꿔 끼운다.
 
+/// 현위치 마커의 라벨 우선순위. 카카오맵은 rank가 높을수록 위에 그리므로, 코스 시작·도착
+/// 칩('왕복' 등)과 시설 배지(기본 0)보다 크게 줘서 언제나 맨 위에 보이게 한다.
+const int myPositionMarkerRank = 1000;
+
 /// 마커 한 변(dp).
 const double myPositionMarkerSize = 21;
 

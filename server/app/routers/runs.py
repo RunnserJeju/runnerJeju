@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime
 
@@ -11,6 +12,7 @@ from app.models import Course, Run, Verification
 from app.routers.verifications import earned_stamp_id, verify_run
 from app.schemas import RunCreate, RunOut, RunUploadResult
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["runs"])
 
 
@@ -80,7 +82,13 @@ def create_run(
 
     db.add(run)
     db.flush()  # run.id 확정
-    verification = verify_run(db, user_id, run, course) if course is not None else None
+    verification = None
+    if course is not None:
+        try:
+            verification = verify_run(db, user_id, run, course)
+        except Exception:
+            # 검증이 터져도 기록 저장은 성공해야 한다. 앱의 후속 검증 요청이 다시 시도한다.
+            logger.exception("업로드 시 검증 실패 run=%s course=%s", run.id, course.id)
     db.commit()
     db.refresh(run)
 

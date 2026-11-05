@@ -1,12 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/course_partner.dart';
+import '../models/run_record.dart';
 import '../models/user_log.dart';
+import '../services/run_tracker.dart';
+import '../services/service_locator.dart';
+import '../services/user_log_service.dart';
 import '../theme/app_theme.dart';
 import 'community/community_screen.dart';
 import 'home/home_screen.dart';
 import 'profile/profile_screen.dart';
+import 'run/run_result_screen.dart';
 import 'running/running_screen.dart';
 import 'stamp/stamp_screen.dart';
 
@@ -33,7 +40,77 @@ class _AppShellState extends State<AppShell> {
   final GlobalKey<RunningScreenState> _runningKey = GlobalKey();
   final GlobalKey<CommunityScreenState> _communityKey = GlobalKey();
 
-  /// 러닝 탭으로 옮기고 그 코스를 지도에서 고른 상태로 연다.
+  @override
+  void initState() {
+    super.initState();
+    Services.instance.runRecovery.begin();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recoverPendingRun());
+  }
+
+  /// 지난 실행이 러닝 중이거나 업로드 전에 죽었으면 일지가 남아 있다. 묻지 않고
+  /// 죽기 전 마지막 점까지를 기록으로 올리고 결과 화면으로 간다.
+  Future<void> _recoverPendingRun() async {
+    final recovery = Services.instance.runRecovery;
+    final journal = Services.instance.runJournal;
+    final record = await journal.read();
+    if (record == null || !_canRecover) {
+      recovery.settle(false);
+      return;
+    }
+
+    final detail = {
+      LogKeys.courseId: ?record.courseId,
+      LogKeys.distanceM: record.distanceMeters.round(),
+      LogKeys.elapsedSec: record.duration.inSeconds,
+    };
+    // 러닝 화면의 종료와 같은 기준: 너무 짧으면 기록이 아니다.
+    if (record.isTooShort) {
+      writeLog(
+        LogName.runAbandon,
+        detail: {LogKeys.reason: 'app_killed', ...detail},
+      );
+      unawaited(journal.discard());
+      recovery.settle(false);
+      return;
+    }
+    // 응답만 못 받고 서버엔 들어갔을 수 있어 같은 시작 시각 기록이 있으면 다시 올리지 않는다.
+    final uploaded = await _alreadyUploaded(record);
+    if (uploaded) unawaited(journal.discard());
+    if (uploaded || !mounted || !_canRecover) {
+      recovery.settle(false);
+      return;
+    }
+
+    writeLog(LogName.runRecover, detail: detail);
+    recovery.settle(true);
+    unawaited(Services.instance.runSubmission.submit(record));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => RunResultScreen(record: record)),
+    );
+  }
+
+  /// 읽는 사이 새 러닝이 시작됐으면 일지는 이미 그 러닝 것이다. 건드리지 않는다.
+  bool get _canRecover =>
+      mounted && Services.instance.runTracker.status == RunStatus.idle;
+
+  Future<bool> _alreadyUploaded(RunRecord record) async {
+    try {
+      final records = await Services.instance.run.loadMyRecords(
+        limit: 5,
+        since: record.startedAt.subtract(const Duration(minutes: 1)),
+        until: record.startedAt.add(const Duration(minutes: 1)),
+        withPath: false,
+      );
+      return records.any(
+        (r) =>
+            r.startedAt.difference(record.startedAt).abs() <
+            const Duration(seconds: 2),
+      );
+    } catch (_) {
+      return false; // 확인을 못 하면 올린다. 중복이 유실보다 낫다.
+    }
+  }
+
   void _openCourse(String courseId, LogSource source) {
     setState(() => _index = _runningTab);
     _runningKey.currentState?.openCourse(courseId, source: source);

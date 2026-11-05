@@ -11,6 +11,7 @@ import '../utils/geo_utils.dart';
 import 'current_location.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
+import 'run_journal.dart';
 
 enum RunStatus { idle, running, paused, finished }
 
@@ -19,10 +20,18 @@ enum RunStatus { idle, running, paused, finished }
 /// 위치 스트림을 구독해 경로/거리/시간을 누적하고, 화면은 여기만 바라본다.
 /// 서버 전송은 [RunTracker]의 책임이 아니라 [buildRecord] 결과를 받아 처리한다.
 class RunTracker extends ChangeNotifier {
-  RunTracker(this._locationService, this._motionService, this._currentLocation);
+  RunTracker(
+    this._locationService,
+    this._motionService,
+    this._currentLocation,
+    this._journal,
+  );
 
   final LocationService _locationService;
   final MotionService _motionService;
+
+  /// 러닝 중 기록을 기기에 남긴다. 앱이 죽어도 복구할 수 있게.
+  final RunJournal _journal;
 
   /// 앱 전역의 최신 현위치. 실제 GPS 러닝은 위치 스트림을 여기서 가져갔다
   /// 돌려주고, 받은 점을 흘려 넣는다([CurrentLocation] 참고). 시뮬레이션은
@@ -90,9 +99,9 @@ class RunTracker extends ChangeNotifier {
   /// 실제 현위치까지의 거리가 첫 구간으로 잡힌다.
   static const Duration _maxSampleAge = Duration(seconds: 10);
 
-  /// 직전 확정점에서 이 속도를 넘는 이동은 GPS 튐으로 본다(m/s). 8m/s는
-  /// 2'05"/km — 러닝 코스에서 나올 수 없는 값이다.
-  static const double _maxPlausibleSpeed = 8;
+  /// 직전 확정점에서 이 속도를 넘는 이동은 GPS 튐으로 본다(m/s). 15m/s는
+  /// 1'07"/km — 사람이 낼 수 없는 속도라 진짜 이동을 거를 일은 없다.
+  static const double _maxPlausibleSpeed = 15;
 
   /// [_maxPlausibleSpeed]로 연속 이만큼 거르면 튐이 아니라 기준점이 낡은 것
   /// (터널·지하도를 지나 진짜 이동했다)으로 보고 기준점을 갈아 끼운다. 그때의
@@ -257,6 +266,7 @@ class RunTracker extends ChangeNotifier {
     // _startedAt은 여기서 잡지 않는다. 첫 유효 위치가 들어올 때 잡는다(elapsed 참고).
     _status = RunStatus.running;
     _activeLocation = location;
+    _journal.begin(courseId: course?.id, courseName: course?.name);
 
     _isRealGps = source == null;
     if (_isRealGps) {
@@ -303,6 +313,8 @@ class RunTracker extends ChangeNotifier {
       _status = RunStatus.paused;
       _beginPause();
       _ticker?.cancel();
+      _journal.pause();
+      unawaited(_journal.flush());
     }
     notifyListeners();
   }
@@ -313,6 +325,8 @@ class RunTracker extends ChangeNotifier {
     _status = RunStatus.paused;
     _beginPause();
     _ticker?.cancel();
+    _journal.pause();
+    unawaited(_journal.flush());
     notifyListeners();
   }
 
@@ -332,6 +346,7 @@ class RunTracker extends ChangeNotifier {
 
     _status = RunStatus.running;
     _endPause();
+    _journal.resume();
     // 일시정지 중 이동은 거리에 반영하지 않는다. 기준점만 버리고 _lastPosition은
     // 남긴다 — 그걸 비우면 지도에서 현위치 마커가 잠깐 사라진다.
     _commitAnchor = null;
@@ -370,6 +385,14 @@ class RunTracker extends ChangeNotifier {
     // 러닝 구독이 끊긴 뒤에 돌려준다. 순서가 바뀌면 평상시 스트림이 러닝
     // 설정을 물려받는다.
     if (_isRealGps) _currentLocation.reclaimFromRun();
+    // 업로드 전에 죽어도 기록이 남게 확정값을 적어 둔다. 지우는 건 업로드 뒤.
+    _journal.finish(
+      startedAt: _startedAt!,
+      endedAt: _endedAt!,
+      distanceMeters: _distanceMeters,
+      duration: elapsed,
+    );
+    unawaited(_journal.flush());
     notifyListeners();
   }
 
@@ -411,6 +434,7 @@ class RunTracker extends ChangeNotifier {
         _startedAt = point.recordedAt ?? DateTime.now();
         // 위치가 잡히기 전에 멈췄다 풀었으면 그 멈춤은 시작 전의 일이다.
         _pausedTotal = Duration.zero;
+        _journal.startedAt(_startedAt!);
       }
       _lastPosition = point;
       _jumpRejections = 0;
@@ -456,6 +480,7 @@ class RunTracker extends ChangeNotifier {
     _path.add(point);
     _pathSnapshot = null;
     _coverage?.add(point);
+    _journal.point(point, distanceMeters: _distanceMeters);
     _paceSamples.add((meters: _distanceMeters, elapsed: elapsed));
 
     // 창 밖으로 완전히 나간 표본은 버린다. 창 경계 직전 표본 하나는 남겨야
