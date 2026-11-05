@@ -10,7 +10,7 @@
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -179,6 +179,25 @@ def delete_stamp_image(stamp_id: uuid.UUID, db: Session = Depends(get_db)):
         db.refresh(definition)
         storage.delete_image(old_url, bucket=storage.SUPABASE_STAMP_BUCKET)
     return _single_out(db, definition)
+
+
+@router.get("/stamps/{stamp_id}/holders", response_model=list[uuid.UUID])
+def stamp_holders(
+    stamp_id: uuid.UUID,
+    user_ids: list[uuid.UUID] = Query(default=[], max_length=100),
+    db: Session = Depends(get_db),
+):
+    """주어진 회원 중 이 스탬프를 이미 가진 회원 id. 지급 화면에서 '보유' 표시를 하려고 쓴다."""
+    _load_or_404(db, stamp_id)
+    if not user_ids:
+        return []
+    held = db.execute(
+        select(Stamp.user_id).where(
+            Stamp.stamp_definition_id == stamp_id,
+            Stamp.user_id.in_([str(uid) for uid in user_ids]),
+        )
+    ).scalars()
+    return [uuid.UUID(uid) for uid in held]
 
 
 @router.post("/stamps/{stamp_id}/issue", response_model=StampIssueResult, status_code=201)
