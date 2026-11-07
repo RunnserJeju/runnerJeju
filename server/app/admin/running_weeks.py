@@ -11,8 +11,11 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import bingo, running_week, stamp_rules, storage
+from app.admin import audit
+from app.admin.auth import require_admin_session
 from app.db import get_db
 from app.models import (
+    AdminUser,
     Course,
     Coupon,
     RunningWeek,
@@ -291,7 +294,10 @@ def get_participant_bingo(
     status_code=201,
 )
 def complete_course(
-    week_id: uuid.UUID, payload: AdminCompletionRequest, db: Session = Depends(get_db)
+    week_id: uuid.UUID,
+    payload: AdminCompletionRequest,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin_session),
 ):
     """참가자의 코스 완주를 운영자가 인정한다. 실제 완주 인증 통과와 같은 흐름 —
     코스 스탬프 → 러닝위크 스탬프 → 완주 쿠폰 추첨 → 빙고 스탬프·줄 리워드 추첨.
@@ -302,7 +308,8 @@ def complete_course(
         raise HTTPException(status_code=404, detail="회원을 찾을 수 없어요.")
     if not running_week.participated(db, week.id, user_id):
         raise HTTPException(status_code=400, detail="이 회차 참가자가 아니에요.")
-    if db.get(Course, payload.course_id) is None:
+    course = db.get(Course, payload.course_id)
+    if course is None:
         raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
 
     def stamp_ids() -> set[uuid.UUID]:
@@ -316,6 +323,11 @@ def complete_course(
     stamps_before, coupons_before = stamp_ids(), coupon_ids()
     stamp_rules.on_course_completed(db, user_id, payload.course_id, None)
     running_week.on_course_completed(db, user_id, payload.course_id, None, week=week)
+    audit.record(
+        db, admin, audit.COURSE_COMPLETE,
+        target_type="course", target_id=course.id, user_id=user_id,
+        detail={"course_name": course.name, "running_week_id": str(week.id)},
+    )
     db.commit()
 
     new_stamps = stamp_ids() - stamps_before

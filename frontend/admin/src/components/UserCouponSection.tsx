@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   ApiError,
   getUserCoupons,
+  revokeUserCoupon,
   type CouponDrawResult,
   type CouponStatus,
   type UserCouponDraw,
@@ -10,6 +11,7 @@ import {
   type UserCoupons,
 } from "../api";
 import SortTh, { useSort } from "../components/SortTh";
+import { askRevokeReason } from "./revokeReason";
 
 type Tab = "held" | "used" | "draws";
 
@@ -23,12 +25,14 @@ const STATUS_LABEL: Record<CouponStatus, string> = {
   available: "사용 가능",
   used: "사용완료",
   expired: "만료",
+  revoked: "회수",
 };
 
 const STATUS_BADGE: Record<CouponStatus, string> = {
   available: "live",
   used: "scheduled",
   expired: "expired",
+  revoked: "revoked",
 };
 
 const RESULT_LABEL: Record<CouponDrawResult, string> = {
@@ -56,38 +60,70 @@ function sourceLabel(grantKey: string | null): string {
 interface Props {
   userId: string;
   onUnauthorized: () => void;
+  /** 회수가 끝나면 부른다. 운영 처리 이력을 다시 불러오는 용도. */
+  onChanged?: () => void;
 }
 
-/** 회원 상세 팝업의 쿠폰 섹션. 폴더 탭 3개(보유/사용 이력/추첨 이력)로 나눠 보여준다. */
-export default function UserCouponSection({ userId, onUnauthorized }: Props) {
+/** 회원 상세 팝업의 쿠폰 섹션. 폴더 탭 3개(보유/사용 이력/추첨 이력)로 나눠 보여준다.
+ * 회수된 쿠폰은 보유 탭에 '회수' 배지로 남는다 — 앱에서는 사라지지만 운영자는 봐야 한다. */
+export default function UserCouponSection({
+  userId,
+  onUnauthorized,
+  onChanged,
+}: Props) {
   const [tab, setTab] = useState<Tab>("held");
   const [data, setData] = useState<UserCoupons | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const handleError = useCallback(
+    (err: unknown, fallback: string) => {
+      if (err instanceof ApiError && err.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setError(err instanceof ApiError ? err.message : fallback);
+    },
+    [onUnauthorized],
+  );
+
+  const load = useCallback(() => {
     let stale = false;
-    setData(null);
     setError(null);
     getUserCoupons(userId)
       .then((result) => {
         if (!stale) setData(result);
       })
       .catch((err) => {
-        if (stale) return;
-        if (err instanceof ApiError && err.status === 401) {
-          onUnauthorized();
-          return;
-        }
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : "쿠폰 정보를 불러오지 못했어요.",
-        );
+        if (!stale) handleError(err, "쿠폰 정보를 불러오지 못했어요.");
       });
     return () => {
       stale = true;
     };
-  }, [userId, onUnauthorized]);
+  }, [userId, handleError]);
+
+  useEffect(() => {
+    setData(null);
+    return load();
+  }, [load]);
+
+  const revoke = async (row: UserCouponRow) => {
+    const reason = askRevokeReason(
+      `"${row.coupon_name}" 쿠폰(${row.code})을 회수할까요?\n\n앱의 쿠폰 목록에서 사라지고 사용할 수 없게 돼요. 되돌릴 수 없어요.`,
+    );
+    if (reason == null) return;
+    setBusyId(row.id);
+    setError(null);
+    try {
+      await revokeUserCoupon(userId, row.id, reason);
+      load();
+      onChanged?.();
+    } catch (err) {
+      handleError(err, "쿠폰을 회수하지 못했어요.");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const counts: Record<Tab, number | null> = {
     held: data?.held.length ?? null,
@@ -119,7 +155,12 @@ export default function UserCouponSection({ userId, onUnauthorized }: Props) {
         {error && <div className="error">{error}</div>}
         {data == null && !error && <p className="muted">불러오는 중…</p>}
         {data && tab === "held" && (
-          <CouponTable rows={data.held} empty="보유 중인 쿠폰이 없어요." />
+          <CouponTable
+            rows={data.held}
+            empty="보유 중인 쿠폰이 없어요."
+            onRevoke={revoke}
+            busyId={busyId}
+          />
         )}
         {data && tab === "used" && (
           <CouponTable rows={data.used} empty="사용한 쿠폰이 없어요." used />
@@ -179,15 +220,19 @@ function DrawTable({ rows }: { rows: UserCouponDraw[] }) {
   );
 }
 
-/** 보유/사용 탭 공용 표. 사용 탭은 사용 시각·업체 칸을 더 보여준다. */
+/** 보유/사용 탭 공용 표. 사용 탭은 사용 시각·업체 칸을, 보유 탭은 회수 버튼을 더 보여준다. */
 function CouponTable({
   rows,
   empty,
   used = false,
+  onRevoke,
+  busyId = null,
 }: {
   rows: UserCouponRow[];
   empty: string;
   used?: boolean;
+  onRevoke?: (row: UserCouponRow) => void;
+  busyId?: string | null;
 }) {
   const { sort, toggle, sorted } = useSort(rows, {
     coupon: (r) => r.coupon_name,
@@ -224,6 +269,7 @@ function CouponTable({
             <>
               {th("valid", "유효기간")}
               {th("status", "상태")}
+              {onRevoke && <th></th>}
             </>
           )}
         </tr>
@@ -258,10 +304,32 @@ function CouponTable({
                   {r.valid_until ? formatDate(r.valid_until) : "무기한"}
                 </td>
                 <td>
-                  <span className={`badge ${STATUS_BADGE[r.status]}`}>
+                  <span
+                    className={`badge ${STATUS_BADGE[r.status]}`}
+                    title={r.revoked_reason ?? undefined}
+                  >
                     {STATUS_LABEL[r.status]}
                   </span>
+                  {r.status === "revoked" && r.revoked_reason && (
+                    <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                      {r.revoked_reason}
+                    </div>
+                  )}
                 </td>
+                {onRevoke && (
+                  <td className="nowrap" style={{ textAlign: "right" }}>
+                    {r.status === "available" && (
+                      <button
+                        type="button"
+                        className="danger small"
+                        disabled={busyId != null}
+                        onClick={() => onRevoke(r)}
+                      >
+                        {busyId === r.id ? "회수 중…" : "회수"}
+                      </button>
+                    )}
+                  </td>
+                )}
               </>
             )}
           </tr>

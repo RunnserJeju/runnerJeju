@@ -20,9 +20,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.admin import audit
+from app.admin.auth import require_admin_session
 from app.admin.coupons import _effective_status
 from app.db import get_db
 from app.models import (
+    AdminAction,
+    AdminUser,
     Coupon,
     CouponDraw,
     Course,
@@ -36,7 +40,14 @@ from app.models import (
     Verification,
 )
 from app.routers.stamps import course_id_of
-from app.schemas import UserCouponsOut, UserDetailOut, UserListOut, UserStampOut
+from app.schemas import (
+    AdminActionOut,
+    AdminRevokeRequest,
+    UserCouponsOut,
+    UserDetailOut,
+    UserListOut,
+    UserStampOut,
+)
 from app.stamp_images import course_categories, resolve_image_url
 
 router = APIRouter(tags=["users"])
@@ -298,7 +309,9 @@ def get_user_coupons(user_id: uuid.UUID, db: Session = Depends(get_db)):
 
     held, used = [], []
     for uc, coupon, partner_name in rows:
-        status = _effective_status(uc.used_at, coupon.valid_until, now, uc.expired_at)
+        status = _effective_status(
+            uc.used_at, coupon.valid_until, now, uc.expired_at, uc.revoked_at
+        )
         row = {
             "id": uc.id,
             "code": uc.code,
@@ -312,6 +325,8 @@ def get_user_coupons(user_id: uuid.UUID, db: Session = Depends(get_db)):
             "valid_until": coupon.valid_until,
             "used_partner_name": partner_name,
             "status": status,
+            "revoked_at": uc.revoked_at,
+            "revoked_reason": uc.revoked_reason,
         }
         (used if status == "used" else held).append(row)
     # 사용 이력은 사용 시각 최신순.
@@ -341,3 +356,95 @@ def get_user_coupons(user_id: uuid.UUID, db: Session = Depends(get_db)):
             for d, name, code in draws
         ],
     }
+
+
+# --- 회수 · 운영 처리 이력 ------------------------------------------------------
+# 회수는 한 건씩만 한다. 연쇄 회수(스탬프를 빼면 빙고 보상도 빼기)는 하지 않는다 — 이미
+# 안내가 나간 리워드까지 사라지면 운영 사고라, 필요하면 운영자가 하나씩 더 회수한다.
+
+
+@router.post("/users/{user_id}/stamps/{stamp_id}/revoke", status_code=204)
+def revoke_stamp(
+    user_id: uuid.UUID,
+    stamp_id: uuid.UUID,
+    payload: AdminRevokeRequest,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin_session),
+):
+    """스탬프 한 개를 회수(삭제)한다. 빙고판은 스탬프에서 계산하므로 칸도 함께 비워진다.
+    이미 받은 빙고 줄 보상은 그대로 둔다."""
+    user = _load_user_or_404(db, user_id)
+    row = db.execute(
+        select(Stamp, StampDefinition)
+        .join(StampDefinition, StampDefinition.id == Stamp.stamp_definition_id)
+        .where(Stamp.id == stamp_id, Stamp.user_id == str(user.id))
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="이 회원의 스탬프가 아니에요.")
+    stamp, definition = row
+    audit.record(
+        db, admin, audit.STAMP_REVOKE,
+        target_type="stamp", target_id=stamp.id, user_id=str(user.id),
+        detail={
+            "definition_id": str(definition.id),
+            "name": definition.name,
+            "from_run": stamp.run_id is not None,
+            "reason": payload.reason,
+        },
+    )
+    db.delete(stamp)
+    db.commit()
+
+
+@router.post("/users/{user_id}/coupons/{user_coupon_id}/revoke", status_code=204)
+def revoke_coupon(
+    user_id: uuid.UUID,
+    user_coupon_id: uuid.UUID,
+    payload: AdminRevokeRequest,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin_session),
+):
+    """쿠폰 한 장을 회수한다. 지우지 않고 revoked_at을 남겨 앱에서 사라지고 사용도 막힌다.
+    이미 사용(지급완료)한 쿠폰은 되돌릴 수 없어 409. 추첨 기록은 그대로라 같은 조건으로
+    다시 추첨되지는 않는다."""
+    user = _load_user_or_404(db, user_id)
+    row = db.execute(
+        select(UserCoupon, Coupon)
+        .join(Coupon, Coupon.id == UserCoupon.coupon_id)
+        .where(UserCoupon.id == user_coupon_id, UserCoupon.user_id == str(user.id))
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="이 회원의 쿠폰이 아니에요.")
+    uc, coupon = row
+    if uc.used_at is not None:
+        raise HTTPException(status_code=409, detail="이미 사용한 쿠폰은 회수할 수 없어요.")
+    if uc.revoked_at is not None:
+        raise HTTPException(status_code=409, detail="이미 회수된 쿠폰이에요.")
+    uc.revoked_at = datetime.now(timezone.utc)
+    uc.revoked_reason = payload.reason
+    audit.record(
+        db, admin, audit.COUPON_REVOKE,
+        target_type="user_coupon", target_id=uc.id, user_id=str(user.id),
+        detail={
+            "coupon_id": str(coupon.id),
+            "coupon_name": coupon.name,
+            "code": uc.code,
+            "grant_key": uc.grant_key,
+            "reason": payload.reason,
+        },
+    )
+    db.commit()
+
+
+@router.get("/users/{user_id}/admin-actions", response_model=list[AdminActionOut])
+def get_user_admin_actions(user_id: uuid.UUID, db: Session = Depends(get_db)):
+    """이 회원에게 운영자가 한 처리(지급·회수·완주 인정·지급완료), 최신순 최대 100건."""
+    user = _load_user_or_404(db, user_id)
+    return list(
+        db.execute(
+            select(AdminAction)
+            .where(AdminAction.user_id == str(user.id))
+            .order_by(AdminAction.created_at.desc(), AdminAction.id.desc())
+            .limit(100)
+        ).scalars()
+    )

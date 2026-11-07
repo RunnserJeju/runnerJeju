@@ -16,8 +16,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import coupon_rules
+from app.admin import audit
+from app.admin.auth import require_admin_session
 from app.db import get_db
-from app.models import Coupon, CouponPartner, Partner, User, UserCoupon
+from app.models import AdminUser, Coupon, CouponPartner, Partner, User, UserCoupon
 from app.schemas import (
     CouponOut,
     CouponUpdate,
@@ -41,8 +43,11 @@ def _effective_status(
     valid_until: datetime | None,
     now: datetime,
     expired_at: datetime | None = None,
+    revoked_at: datetime | None = None,
 ) -> str:
-    """발급 쿠폰의 유효 상태. 사용이 만료보다 우선(이미 썼으니)."""
+    """발급 쿠폰의 유효 상태. 회수 > 사용 > 만료 순으로 우선한다(사용한 쿠폰은 회수 불가)."""
+    if revoked_at is not None:
+        return "revoked"
     if used_at is not None:
         return "used"
     if expired_at is not None or (valid_until is not None and valid_until < now):
@@ -157,7 +162,10 @@ def update_coupon(
 
 @router.post("/coupons/{coupon_id}/issue", response_model=IssueResult, status_code=201)
 def issue_coupon(
-    coupon_id: uuid.UUID, payload: IssueRequest, db: Session = Depends(get_db)
+    coupon_id: uuid.UUID,
+    payload: IssueRequest,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin_session),
 ):
     """지정한 회원들에게 쿠폰을 대량 발급한다.
 
@@ -186,6 +194,12 @@ def issue_coupon(
         remaining = max((coupon.stock or 0) - coupon_rules.issued_count(db, coupon.id), 0)
         db.rollback()
         raise HTTPException(status_code=400, detail=f"수량이 부족해요. 남은 수량 {remaining}장")
+    for uc in issued:
+        audit.record(
+            db, admin, audit.COUPON_ISSUE,
+            target_type="user_coupon", target_id=uc.id, user_id=uc.user_id,
+            detail={"coupon_id": str(coupon.id), "coupon_name": coupon.name},
+        )
     db.commit()
     return {"issued": len(issued)}
 
@@ -250,7 +264,7 @@ def list_issued(
             "used_at": uc.used_at,
             "used_partner_name": partner_name.get(uc.used_partner_id),
             "status": _effective_status(
-                uc.used_at, coupon.valid_until, now, uc.expired_at
+                uc.used_at, coupon.valid_until, now, uc.expired_at, uc.revoked_at
             ),
         }
         for uc in rows

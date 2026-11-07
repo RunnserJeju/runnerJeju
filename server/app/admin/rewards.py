@@ -13,9 +13,11 @@ from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import coupon_rules
+from app.admin import audit
+from app.admin.auth import require_admin_session
 from app.admin.coupons import _effective_status
 from app.db import get_db
-from app.models import Coupon, CouponDraw, User, UserCoupon
+from app.models import AdminUser, Coupon, CouponDraw, User, UserCoupon
 from app.schemas import CouponDrawListOut, RewardFulfillmentListOut, RewardFulfillmentOut
 
 router = APIRouter(tags=["rewards"])
@@ -49,7 +51,9 @@ def _fulfillment_out(uc: UserCoupon, coupon: Coupon, nickname: str | None, now: 
         "issued_at": uc.issued_at,
         "used_at": uc.used_at,
         "valid_until": coupon.valid_until,
-        "status": _effective_status(uc.used_at, coupon.valid_until, now, uc.expired_at),
+        "status": _effective_status(
+            uc.used_at, coupon.valid_until, now, uc.expired_at, uc.revoked_at
+        ),
     }
 
 
@@ -68,7 +72,7 @@ def list_fulfillments(
         .where(Coupon.redeem_type == coupon_rules.REDEEM_KAKAO_CHANNEL)
     )
     if pending_only:
-        stmt = stmt.where(UserCoupon.used_at.is_(None))
+        stmt = stmt.where(UserCoupon.used_at.is_(None), UserCoupon.revoked_at.is_(None))
     if q:
         needle = q.strip()
         if needle:
@@ -88,7 +92,11 @@ def list_fulfillments(
 
 
 @router.post("/rewards/fulfillments/{user_coupon_id}/complete", response_model=RewardFulfillmentOut)
-def complete_fulfillment(user_coupon_id: uuid.UUID, db: Session = Depends(get_db)):
+def complete_fulfillment(
+    user_coupon_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin_session),
+):
     """지급완료 처리. used_at이 비어 있고 만료되지 않은 경품 쿠폰만. 둘이 동시에 눌러도 한 번."""
     row = db.execute(
         select(UserCoupon, Coupon)
@@ -100,6 +108,8 @@ def complete_fulfillment(user_coupon_id: uuid.UUID, db: Session = Depends(get_db
     uc, coupon = row
     if coupon.redeem_type != coupon_rules.REDEEM_KAKAO_CHANNEL:
         raise HTTPException(status_code=400, detail="경품 쿠폰이 아니에요.")
+    if uc.revoked_at is not None:
+        raise HTTPException(status_code=409, detail="회수된 쿠폰이에요.")
     now = datetime.now(timezone.utc)
     if uc.expired_at is not None or (coupon.valid_until is not None and coupon.valid_until < now):
         raise HTTPException(status_code=410, detail="수령 기한이 지난 쿠폰이에요. 기한을 먼저 늘려 주세요.")
@@ -110,11 +120,17 @@ def complete_fulfillment(user_coupon_id: uuid.UUID, db: Session = Depends(get_db
             UserCoupon.id == user_coupon_id,
             UserCoupon.used_at.is_(None),
             UserCoupon.expired_at.is_(None),
+            UserCoupon.revoked_at.is_(None),
         )
         .values(used_at=now)
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=409, detail="이미 지급완료 처리된 쿠폰이에요.")
+    audit.record(
+        db, admin, audit.REWARD_FULFILL,
+        target_type="user_coupon", target_id=uc.id, user_id=uc.user_id,
+        detail={"coupon_name": coupon.name, "code": uc.code},
+    )
     db.commit()
     db.refresh(uc)
     nickname = _nicknames(db, [uc.user_id]).get(uc.user_id)

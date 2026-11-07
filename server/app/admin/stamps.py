@@ -15,8 +15,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import storage
+from app.admin import audit
+from app.admin.auth import require_admin_session
 from app.db import get_db
-from app.models import Stamp, StampDefinition, User
+from app.models import AdminUser, Stamp, StampDefinition, User
 from app.routers.stamps import course_id_of
 from app.schemas import (
     AdminStampDefinitionOut,
@@ -201,7 +203,12 @@ def stamp_holders(
 
 
 @router.post("/stamps/{stamp_id}/issue", response_model=StampIssueResult, status_code=201)
-def issue_stamp(stamp_id: uuid.UUID, payload: IssueRequest, db: Session = Depends(get_db)):
+def issue_stamp(
+    stamp_id: uuid.UUID,
+    payload: IssueRequest,
+    db: Session = Depends(get_db),
+    admin: AdminUser = Depends(require_admin_session),
+):
     """지정한 회원들에게 스탬프를 수동 지급한다 — 획득 조건·노출 여부·러닝위크 기간을 따지지 않는다.
 
     스탬프 한 개만 준다. 쿠폰 추첨·빙고 줄 보상 같은 연쇄 보상은 일으키지 않는다(앱 오류로
@@ -226,6 +233,13 @@ def issue_stamp(stamp_id: uuid.UUID, payload: IssueRequest, db: Session = Depend
     )
     targets = valid - already
     for uid in targets:
-        db.add(Stamp(user_id=uid, stamp_definition_id=definition.id, run_id=None))
+        stamp = Stamp(user_id=uid, stamp_definition_id=definition.id, run_id=None)
+        db.add(stamp)
+        db.flush()
+        audit.record(
+            db, admin, audit.STAMP_ISSUE,
+            target_type="stamp", target_id=stamp.id, user_id=uid,
+            detail={"definition_id": str(definition.id), "name": definition.name},
+        )
     db.commit()
     return {"issued": len(targets), "skipped": len(user_ids) - len(targets)}
