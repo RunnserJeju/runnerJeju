@@ -13,7 +13,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Run, Stamp, StampDefinition
+from app.models import Stamp, StampDefinition
 
 COURSE_COMPLETE = "course_complete"
 # 러닝위크 기간에 그 코스 완주. 회차·코스마다 하나이고 빙고 칸이 된다.
@@ -51,10 +51,13 @@ def course_stamp_definitions(db: Session, course_id: uuid.UUID) -> list[StampDef
     )
 
 
-def on_course_completed(db: Session, user_id: str, run: Run, course_id: uuid.UUID) -> None:
-    """완주 인증이 통과했을 때. 이 코스를 조건으로 가진 스탬프를 발급한다."""
+def on_course_completed(
+    db: Session, user_id: str, course_id: uuid.UUID, run_id: uuid.UUID | None
+) -> None:
+    """완주 인증이 통과했을 때. 이 코스를 조건으로 가진 스탬프를 발급한다.
+    run_id가 None이면 운영자가 러닝 없이 완주로 인정한 것."""
     for definition in course_stamp_definitions(db, course_id):
-        _grant(db, user_id, definition, run_id=run.id)
+        _grant(db, user_id, definition, run_id=run_id)
 
 
 def running_week_course_definitions(

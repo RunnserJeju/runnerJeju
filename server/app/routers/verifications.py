@@ -191,7 +191,7 @@ def verify_run(db: Session, user_id: str, run: Run, course: Course) -> Verificat
 
     if outcome.status == "matched":
         # 코스 스탬프는 상시, 쿠폰·빙고는 러닝위크일 때만(running_week가 판단).
-        stamp_rules.on_course_completed(db, user_id, run, course.id)
+        stamp_rules.on_course_completed(db, user_id, course.id, run.id)
         running_week.on_course_completed(db, user_id, course.id, run.id)
 
     return record

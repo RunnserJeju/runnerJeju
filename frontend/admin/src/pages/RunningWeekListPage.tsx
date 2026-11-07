@@ -2,13 +2,19 @@ import { useCallback, useEffect, useState } from 'react'
 
 import {
   ApiError,
+  completeCourse,
   createRunningWeek,
   deleteRunningWeekImage,
+  getParticipantBingo,
   listParticipations,
   listRunningWeeks,
+  searchParticipants,
   setRunningWeekImage,
   updateRunningWeek,
+  type BingoCell,
   type CourseVisibility,
+  type ParticipantBingo,
+  type ParticipantHit,
   type Participation,
   type RunningWeek,
   type RunningWeekPayload,
@@ -72,6 +78,8 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
   const [editing, setEditing] = useState<'new' | RunningWeek | null>(null)
   /** 아래 참가자 표가 보여 주는 회차. 처음엔 공개 중인 회차, 없으면 맨 위. */
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** 아래 영역: 참가자 목록 / 코스 완주 수동 처리. */
+  const [tab, setTab] = useState<'participants' | 'completion'>('participants')
   const { sort, toggle, sorted } = useSort(weeks, {
     round: (w) => w.round,
     title: (w) => w.title,
@@ -201,7 +209,29 @@ export default function RunningWeekListPage({ onUnauthorized }: Props) {
         </table>
       )}
 
-      {selected && <ParticipantSection week={selected} />}
+      {selected && (
+        <>
+          <div className="tabs" style={{ marginTop: 24 }}>
+            <button
+              className={tab === 'participants' ? 'active' : undefined}
+              onClick={() => setTab('participants')}
+            >
+              참가자 목록
+            </button>
+            <button
+              className={tab === 'completion' ? 'active' : undefined}
+              onClick={() => setTab('completion')}
+            >
+              러닝위크 코스 완주 수동 처리
+            </button>
+          </div>
+          {tab === 'participants' ? (
+            <ParticipantSection week={selected} />
+          ) : (
+            <CompletionSection week={selected} />
+          )}
+        </>
+      )}
 
       {editing && (
         <RunningWeekModal
@@ -518,7 +548,7 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
   }
 
   return (
-    <div className="card" style={{ marginTop: 24 }}>
+    <div className="card" style={{ marginTop: 16 }}>
       <h3 style={{ marginTop: 0 }}>
         참가자 — {week.round}회 {week.title}
         {rows && <span className="muted"> · {rows.length}명</span>}
@@ -585,6 +615,217 @@ function ParticipantSection({ week }: { week: RunningWeek }) {
             </button>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+function participantLabel(hit: ParticipantHit): string {
+  return [hit.nickname ?? '(닉네임 없음)', hit.name, hit.email].filter(Boolean).join(' · ')
+}
+
+/** 앱 오류로 완주 인증을 못 받은 참가자를 구제한다. 참가자를 찾아 빙고판을 보고, 칸(코스)을
+ * 골라 완주 처리하면 서버가 실제 인증 통과와 같은 함수를 불러 코스 스탬프·러닝위크 스탬프·
+ * 완주 쿠폰·빙고 보상까지 한 번에 처리한다. */
+function CompletionSection({ week }: { week: RunningWeek }) {
+  const [draft, setDraft] = useState('')
+  const [hits, setHits] = useState<ParticipantHit[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [picked, setPicked] = useState<ParticipantHit | null>(null)
+  const [bingo, setBingo] = useState<ParticipantBingo | null>(null)
+  const [cell, setCell] = useState<BingoCell | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+
+  // 회차가 바뀌면 다른 참가자 집합이다. 처음부터.
+  useEffect(() => {
+    setDraft('')
+    setHits(null)
+    setPicked(null)
+    setBingo(null)
+    setCell(null)
+    setError(null)
+    setMessage(null)
+  }, [week.id])
+
+  // 입력이 멎으면 찾는다. 두 글자 미만은 너무 많이 걸려 기다린다.
+  useEffect(() => {
+    const q = draft.trim()
+    if (q.length < 2) {
+      setHits(null)
+      return
+    }
+    let stale = false
+    setSearching(true)
+    const timer = setTimeout(() => {
+      searchParticipants(week.id, q)
+        .then((found) => {
+          if (stale) return
+          setHits(found)
+          setError(null)
+        })
+        .catch((err: unknown) => {
+          if (!stale) setError(err instanceof ApiError ? err.message : '참가자를 찾지 못했어요.')
+        })
+        .finally(() => {
+          if (!stale) setSearching(false)
+        })
+    }, 300)
+    return () => {
+      stale = true
+      clearTimeout(timer)
+    }
+  }, [draft, week.id])
+
+  const pick = (hit: ParticipantHit) => {
+    setPicked(hit)
+    setBingo(null)
+    setCell(null)
+    setMessage(null)
+    setError(null)
+    getParticipantBingo(week.id, hit.user_id)
+      .then(setBingo)
+      .catch((err: unknown) =>
+        setError(err instanceof ApiError ? err.message : '빙고판을 불러오지 못했어요.'),
+      )
+  }
+
+  const complete = async () => {
+    if (!picked || !cell?.stamp?.course_id) return
+    const ok = window.confirm(
+      `${participantLabel(picked)}\n"${cell.stamp.name}" 코스를 완주한 것으로 처리할까요?\n\n` +
+        '실제 완주 인증과 같은 보상(코스 스탬프·러닝위크 스탬프·완주 쿠폰·빙고 보상)이 바로 지급돼요.',
+    )
+    if (!ok) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await completeCourse(week.id, picked.user_id, cell.stamp.course_id)
+      setBingo(result.bingo)
+      setCell(null)
+      const granted = [...result.granted_stamps, ...result.granted_coupons]
+      setMessage(
+        granted.length > 0
+          ? `처리했어요. 새로 지급: ${granted.join(', ')} · 완성 ${result.bingo.completed_lines}줄`
+          : '처리했어요. 이미 다 받은 상태라 새로 지급된 건 없어요.',
+      )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '완주 처리에 실패했어요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h3 style={{ marginTop: 0 }}>
+        러닝위크 코스 완주 수동 처리 — {week.round}회 {week.title}
+      </h3>
+      <p className="muted">
+        앱 오류로 완주 인증을 못 받은 참가자를 구제해요. 실제로 달려 인증된 것과 똑같이 코스 스탬프,
+        러닝위크 스탬프, 코스 완주 쿠폰 추첨, 빙고 줄 스탬프·리워드까지 서버가 한 번에 처리해요.
+        이미 받은 건 다시 주지 않아요.
+      </p>
+      <div className="field">
+        <label htmlFor="rw-completion-search">참가자 검색</label>
+        <input
+          id="rw-completion-search"
+          type="search"
+          placeholder="닉네임, 신청 이름, 이메일 중 아무거나"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      </div>
+      {searching && <p className="muted">찾는 중…</p>}
+      {hits && hits.length === 0 && !searching && <p className="muted">이 회차 참가자 중에 없어요.</p>}
+      {hits && hits.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>닉네임</th>
+              <th>신청 이름</th>
+              <th>이메일</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {hits.map((hit) => (
+              <tr
+                key={hit.user_id}
+                className={picked?.user_id === hit.user_id ? 'selected' : undefined}
+                onClick={() => pick(hit)}
+              >
+                <td>{hit.nickname ?? <span className="muted">(탈퇴/미설정)</span>}</td>
+                <td>{hit.name}</td>
+                <td className="muted">{hit.email ?? '—'}</td>
+                <td className="nowrap">
+                  <button
+                    className="secondary small"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      pick(hit)
+                    }}
+                  >
+                    빙고판 보기
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {error && <div className="error">{error}</div>}
+      {message && <div className="notice">{message}</div>}
+
+      {picked && (
+        <div style={{ marginTop: 16 }}>
+          <h4 style={{ margin: '0 0 4px' }}>{participantLabel(picked)}</h4>
+          {bingo == null && !error && <p className="muted">빙고판 불러오는 중…</p>}
+          {bingo && (
+            <>
+              <p className="muted" style={{ marginTop: 0 }}>
+                완성 {bingo.completed_lines}줄 · 획득 {bingo.cells.filter((c) => c.acquired).length}칸.
+                아직 안 받은 칸을 누르면 그 코스를 완주 처리할 수 있어요.
+              </p>
+              <div className="bingo-grid">
+                {bingo.cells.map((c) => {
+                  const selectable = Boolean(c.stamp?.course_id) && !c.acquired
+                  const className = [
+                    'bingo-cell',
+                    c.acquired && 'acquired',
+                    cell?.position === c.position && 'picked',
+                    !c.stamp && 'empty',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                  return (
+                    <button
+                      key={c.position}
+                      type="button"
+                      className={className}
+                      disabled={!selectable || busy}
+                      title={c.acquired ? '이미 받은 칸' : undefined}
+                      onClick={() => {
+                        setCell(c)
+                        setMessage(null)
+                      }}
+                    >
+                      <span className="bingo-pos">{c.position + 1}</span>
+                      {c.stamp ? c.stamp.name.replace(/^\[러닝위크\]\s*/, '') : '빈 칸'}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="submit-row">
+                <button onClick={complete} disabled={!cell || busy}>
+                  {busy ? '처리 중…' : cell ? `"${cell.stamp?.name}" 러닝 완료 처리` : '칸을 골라 주세요'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   )
