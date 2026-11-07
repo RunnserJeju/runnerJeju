@@ -62,11 +62,20 @@ def next_round(db: Session) -> int:
 
 
 def on_course_completed(
-    db: Session, user_id: str, course_id: uuid.UUID, run_id: uuid.UUID
+    db: Session,
+    user_id: str,
+    course_id: uuid.UUID,
+    run_id: uuid.UUID | None,
+    *,
+    week: RunningWeek | None = None,
 ) -> None:
-    """완주 인증이 통과했을 때. 러닝위크가 아니거나 참가자가 아니면 아무것도 하지 않는다."""
-    # 운영자 전용 회차도 포함한다 — 참가 신청 여부가 이미 볼 수 있던 사람만 걸러 준다.
-    week = current_week(db, is_admin=True)
+    """완주 인증이 통과했을 때. 러닝위크가 아니거나 참가자가 아니면 아무것도 하지 않는다.
+
+    week를 주면 그 회차로 처리한다(운영자 수동 완주 인정 — 공개 기간을 따지지 않는다).
+    """
+    if week is None:
+        # 운영자 전용 회차도 포함한다 — 참가 신청 여부가 이미 볼 수 있던 사람만 걸러 준다.
+        week = current_week(db, is_admin=True)
     if week is None or not participated(db, week.id, user_id):
         return
     stamp_rules.on_running_week_course_completed(db, user_id, week.id, course_id, run_id)

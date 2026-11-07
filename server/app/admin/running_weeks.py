@@ -1,4 +1,4 @@
-"""운영자 전용 러닝위크 API — 회차 등록/수정, 배너 이미지, 빙고 배치, 참가자 조회.
+"""운영자 전용 러닝위크 API — 회차 등록/수정, 배너 이미지, 빙고 배치, 참가자 조회, 완주 수동 인정.
 
 앱 조회·참가 신청은 app.routers.running_weeks에 있다. 배너 이미지는 공지처럼 텍스트
 폼(JSON)과 파일(multipart)을 섞지 않으려고 PUT/DELETE /running-weeks/{id}/image로 뗐다.
@@ -6,14 +6,27 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import String, cast, func, select
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import running_week, stamp_rules, storage
+from app import bingo, running_week, stamp_rules, storage
 from app.db import get_db
-from app.models import RunningWeek, RunningWeekParticipation, User
+from app.models import (
+    Course,
+    Coupon,
+    RunningWeek,
+    RunningWeekParticipation,
+    Stamp,
+    StampDefinition,
+    User,
+    UserCoupon,
+)
 from app.schemas import (
+    AdminBingoOut,
+    AdminCompletionRequest,
+    AdminCompletionResult,
+    AdminParticipantSearchOut,
     AdminParticipationOut,
     AdminRunningWeekOut,
     BingoUpdate,
@@ -216,3 +229,115 @@ def delete_running_week_image(week_id: uuid.UUID, db: Session = Depends(get_db))
         db.refresh(week)
         storage.delete_image(image_url, bucket=storage.SUPABASE_STORAGE_BUCKET)
     return _to_out(db, week)
+
+
+# --- 코스 완주 수동 처리 ---------------------------------------------------
+# 앱 오류로 완주 인증을 못 받은 참가자를 운영자가 구제하는 길. 스탬프 한 개만 넣는
+# /stamps/{id}/issue와 달리 실제 인증 통과와 같은 함수를 불러 코스 스탬프·러닝위크 스탬프·
+# 완주 쿠폰·빙고 보상이 한 번에 처리된다.
+
+
+@router.get(
+    "/running-weeks/{week_id}/participants/search",
+    response_model=list[AdminParticipantSearchOut],
+)
+def search_participants(
+    week_id: uuid.UUID,
+    q: str = Query(min_length=1, max_length=100),
+    db: Session = Depends(get_db),
+):
+    """닉네임·신청 이름·이메일 부분일치로 이 회차 참가자를 찾는다(최대 20명)."""
+    _load_or_404(db, week_id)
+    like = f"%{q.strip()}%"
+    rows = db.execute(
+        select(RunningWeekParticipation, User.nickname, User.email)
+        .outerjoin(User, cast(User.id, String) == RunningWeekParticipation.user_id)
+        .where(
+            RunningWeekParticipation.running_week_id == week_id,
+            or_(
+                RunningWeekParticipation.name.ilike(like),
+                User.nickname.ilike(like),
+                User.email.ilike(like),
+            ),
+        )
+        .order_by(RunningWeekParticipation.created_at)
+        .limit(20)
+    ).all()
+    return [
+        {"user_id": p.user_id, "nickname": nickname, "email": email, "name": p.name}
+        for p, nickname, email in rows
+    ]
+
+
+def _bingo_out(db: Session, week: RunningWeek, user_id: str) -> dict:
+    board = bingo.board(db, week, user_id)
+    if board is None:
+        raise HTTPException(status_code=400, detail="이 회차는 빙고판 배치가 아직 없어요.")
+    return {**board, "participated": running_week.participated(db, week.id, user_id)}
+
+
+@router.get("/running-weeks/{week_id}/bingo", response_model=AdminBingoOut)
+def get_participant_bingo(
+    week_id: uuid.UUID, user_id: str = Query(min_length=1), db: Session = Depends(get_db)
+):
+    """한 사람의 빙고판 현황. 앱이 보는 것과 같은 계산."""
+    week = _load_or_404(db, week_id)
+    return _bingo_out(db, week, user_id)
+
+
+@router.post(
+    "/running-weeks/{week_id}/completions",
+    response_model=AdminCompletionResult,
+    status_code=201,
+)
+def complete_course(
+    week_id: uuid.UUID, payload: AdminCompletionRequest, db: Session = Depends(get_db)
+):
+    """참가자의 코스 완주를 운영자가 인정한다. 실제 완주 인증 통과와 같은 흐름 —
+    코스 스탬프 → 러닝위크 스탬프 → 완주 쿠폰 추첨 → 빙고 스탬프·줄 리워드 추첨.
+    이미 받은 것은 각 규칙이 멱등이라 다시 주지 않는다. run_id는 None(러닝 없이 인정)."""
+    week = _load_or_404(db, week_id)
+    user_id = payload.user_id
+    if db.execute(select(User.id).where(cast(User.id, String) == user_id)).first() is None:
+        raise HTTPException(status_code=404, detail="회원을 찾을 수 없어요.")
+    if not running_week.participated(db, week.id, user_id):
+        raise HTTPException(status_code=400, detail="이 회차 참가자가 아니에요.")
+    if db.get(Course, payload.course_id) is None:
+        raise HTTPException(status_code=404, detail="코스를 찾을 수 없어요.")
+
+    def stamp_ids() -> set[uuid.UUID]:
+        return set(db.execute(select(Stamp.id).where(Stamp.user_id == user_id)).scalars())
+
+    def coupon_ids() -> set[uuid.UUID]:
+        return set(
+            db.execute(select(UserCoupon.id).where(UserCoupon.user_id == user_id)).scalars()
+        )
+
+    stamps_before, coupons_before = stamp_ids(), coupon_ids()
+    stamp_rules.on_course_completed(db, user_id, payload.course_id, None)
+    running_week.on_course_completed(db, user_id, payload.course_id, None, week=week)
+    db.commit()
+
+    new_stamps = stamp_ids() - stamps_before
+    new_coupons = coupon_ids() - coupons_before
+    granted_stamps = list(
+        db.execute(
+            select(StampDefinition.name)
+            .join(Stamp, Stamp.stamp_definition_id == StampDefinition.id)
+            .where(Stamp.id.in_(new_stamps))
+            .order_by(Stamp.acquired_at)
+        ).scalars()
+    ) if new_stamps else []
+    granted_coupons = list(
+        db.execute(
+            select(Coupon.name)
+            .join(UserCoupon, UserCoupon.coupon_id == Coupon.id)
+            .where(UserCoupon.id.in_(new_coupons))
+            .order_by(UserCoupon.issued_at)
+        ).scalars()
+    ) if new_coupons else []
+    return {
+        "granted_stamps": granted_stamps,
+        "granted_coupons": granted_coupons,
+        "bingo": _bingo_out(db, week, user_id),
+    }

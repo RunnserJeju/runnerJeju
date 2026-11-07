@@ -1053,3 +1053,58 @@ tbody tr.selected {
   margin: 14px 0 12px;
   font-size: 13px;
 }
+
+/* 러닝위크 완주 수동 처리: 참가자 빙고판 5x5. 받은 칸은 진하게, 고른 칸은 테두리. */
+.bingo-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 640px;
+}
+
+.bingo-cell {
+  position: relative;
+  min-height: 64px;
+  padding: 16px 6px 8px;
+  background: var(--surface, #fff);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
+}
+
+.bingo-cell .bingo-pos {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.bingo-cell.acquired {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.bingo-cell.acquired .bingo-pos {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.bingo-cell.picked {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.bingo-cell.empty {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.bingo-cell:disabled {
+  cursor: default;
+  opacity: 1;
+}

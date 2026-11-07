@@ -663,6 +663,36 @@ class AdminRunningWeekOut(BaseModel):
     updated_at: datetime
 
 
+class AdminParticipantSearchOut(BaseModel):
+    """완주 수동 처리 화면의 참가자 검색 결과 한 줄."""
+
+    user_id: str
+    nickname: str | None
+    email: str | None
+    name: str
+
+
+class AdminBingoOut(BingoOut):
+    """운영자가 보는 참가자 빙고판. 칸마다 코스 이름을 같이 준다."""
+
+    participated: bool
+
+
+class AdminCompletionRequest(BaseModel):
+    """운영자 수동 완주 인정. 실제 완주 인증 통과와 같은 보상 흐름을 탄다."""
+
+    user_id: str = Field(min_length=1, max_length=100)
+    course_id: uuid.UUID
+
+
+class AdminCompletionResult(BaseModel):
+    """이번 처리로 새로 생긴 것들. 이미 받은 건 다시 주지 않으므로 비어 있을 수 있다."""
+
+    granted_stamps: list[str]
+    granted_coupons: list[str]
+    bingo: AdminBingoOut
+
+
 class AdminParticipationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

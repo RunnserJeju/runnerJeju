@@ -461,6 +461,54 @@ export function listParticipations(id: string): Promise<Participation[]> {
   return request(`/admin/running-weeks/${id}/participations`)
 }
 
+/** 완주 수동 처리 화면의 참가자 검색 결과 한 줄. */
+export interface ParticipantHit {
+  user_id: string
+  nickname: string | null
+  email: string | null
+  /** 참가 신청에 적은 이름. */
+  name: string
+}
+
+export interface BingoCell {
+  position: number
+  /** 칸의 스탬프. 운영자가 숨긴 스탬프면 null(빈 칸). */
+  stamp: { id: string; name: string; image_url: string | null; course_id: string | null } | null
+  acquired: boolean
+}
+
+/** 참가자 한 명의 빙고판. 앱이 보는 것과 같은 계산. */
+export interface ParticipantBingo {
+  cells: BingoCell[]
+  completed_lines: number
+  participated: boolean
+}
+
+/** 완주 수동 처리 결과. 이미 받은 건 다시 주지 않아 빈 배열일 수 있다. */
+export interface CompletionResult {
+  granted_stamps: string[]
+  granted_coupons: string[]
+  bingo: ParticipantBingo
+}
+
+/** 닉네임·신청 이름·이메일 부분일치로 이 회차 참가자를 찾는다(최대 20명). */
+export function searchParticipants(weekId: string, q: string): Promise<ParticipantHit[]> {
+  return request(`/admin/running-weeks/${weekId}/participants/search?${new URLSearchParams({ q })}`)
+}
+
+export function getParticipantBingo(weekId: string, userId: string): Promise<ParticipantBingo> {
+  return request(`/admin/running-weeks/${weekId}/bingo?${new URLSearchParams({ user_id: userId })}`)
+}
+
+/** 코스 완주를 운영자가 인정한다. 서버가 실제 완주 인증 통과와 같은 보상 흐름을 돈다. */
+export function completeCourse(weekId: string, userId: string, courseId: string): Promise<CompletionResult> {
+  return request(`/admin/running-weeks/${weekId}/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, course_id: courseId }),
+  })
+}
+
 // --- 이벤트 -------------------------------------------------------------
 
 /** 커뮤니티 이벤트. 그림(선택) + 게시글. 본문 링크는 앱에서 눌러 열 수 있다. */
