@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ApiError, getUser, listUsers, type UserDetail, type UserSortKey, type UserSummary } from '../api'
 import Modal from '../components/Modal'
 import SortTh, { type SortState } from '../components/SortTh'
+import UserAdminActionSection from '../components/UserAdminActionSection'
 import UserCouponSection from '../components/UserCouponSection'
 import UserStampSection from '../components/UserStampSection'
 
@@ -47,6 +48,9 @@ export default function UsersPage({ onUnauthorized }: Props) {
   const [total, setTotal] = useState(0)
   const [users, setUsers] = useState<UserSummary[] | null>(null)
   const [detail, setDetail] = useState<UserDetail | null>(null)
+  // 회수·지급이 일어나면 올라간다. 운영 처리 이력 섹션이 이걸 보고 다시 불러온다.
+  const [actionsVersion, setActionsVersion] = useState(0)
+  const bumpActions = useCallback(() => setActionsVersion((v) => v + 1), [])
   const [error, setError] = useState<string | null>(null)
 
   const handleError = useCallback(
@@ -228,8 +232,21 @@ export default function UsersPage({ onUnauthorized }: Props) {
               </tbody>
             </table>
           )}
-          <UserStampSection userId={detail.id} onUnauthorized={onUnauthorized} />
-          <UserCouponSection userId={detail.id} onUnauthorized={onUnauthorized} />
+          <UserStampSection
+            userId={detail.id}
+            onUnauthorized={onUnauthorized}
+            onChanged={bumpActions}
+          />
+          <UserCouponSection
+            userId={detail.id}
+            onUnauthorized={onUnauthorized}
+            onChanged={bumpActions}
+          />
+          <UserAdminActionSection
+            userId={detail.id}
+            onUnauthorized={onUnauthorized}
+            version={actionsVersion}
+          />
         </Modal>
       )}
     </>

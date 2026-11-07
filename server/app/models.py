@@ -660,6 +660,30 @@ class AdminUser(Base):
     )
 
 
+class AdminAction(Base):
+    """운영툴에서 한 행위 로그(app/admin/audit.py). 지급·회수·완주 인정처럼 데이터를 바꾸는
+    행위만 남긴다. 운영자 계정이 지워져도 로그는 남도록 username을 같이 적는다."""
+
+    __tablename__ = "admin_actions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    admin_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("admin_users.id", ondelete="SET NULL"), default=None
+    )
+    admin_username: Mapped[str] = mapped_column(String(50))
+    action: Mapped[str] = mapped_column(String(50))
+    target_type: Mapped[str] = mapped_column(String(30))
+    target_id: Mapped[str | None] = mapped_column(String(100), default=None)
+    # 영향을 받은 앱 사용자(토큰 sub 문자열). 회원 상세의 "운영 처리 이력"이 이걸로 찾는다.
+    user_id: Mapped[str | None] = mapped_column(String(100), index=True, default=None)
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
 class AdminSession(Base):
     """운영자 로그인 세션 1개. 로그인 시 발급, 로그아웃/만료 시 무효화한다.
 
@@ -837,6 +861,12 @@ class UserCoupon(Base):
     expired_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 운영자가 회수한 시각·사유. 회수된 쿠폰은 앱에 내려가지 않고 사용도 막힌다. 지우지 않는 건
+    # "왜 없어졌나"를 나중에 답하기 위해서다. 사용한 쿠폰은 회수할 수 없다.
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    revoked_reason: Mapped[str | None] = mapped_column(String(200), default=None)
     # 어느 업체에서 썼는지. 업체가 지워지면 None으로 남는다.
     used_partner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

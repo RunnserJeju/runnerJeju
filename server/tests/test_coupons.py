@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from app import coupon_rules
 from app.admin import coupons as admin_coupons
-from app.models import Coupon, CouponDraw, Partner, UserCoupon
+from app.models import AdminUser, Coupon, CouponDraw, Partner, UserCoupon
 from app.routers import coupons as app_coupons
 from app.schemas import CouponUseRequest, IssueRequest
 
@@ -160,6 +160,9 @@ class TestIssuedUsedCounts:
 # --- 운영자: 지급 ---------------------------------------------------------
 
 
+_ADMIN = AdminUser(id=uuid.uuid4(), username="tester", display_name="테스터", password_hash="")
+
+
 class TestIssueCoupon:
     def test_issues_only_to_existing_users(self):
         coupon = _coupon()
@@ -168,18 +171,21 @@ class TestIssueCoupon:
         db = SeqFake([_Result([coupon]), _Result([u1, u2]), _Result([])])
 
         result = admin_coupons.issue_coupon(
-            coupon.id, IssueRequest(user_ids=[u1, u2, ghost]), db
+            coupon.id, IssueRequest(user_ids=[u1, u2, ghost]), db, _ADMIN
         )
 
         assert result == {"issued": 2}
-        assert {uc.user_id for uc in db.added} == {str(u1), str(u2)}
+        issued = [a for a in db.added if isinstance(a, UserCoupon)]
+        assert {uc.user_id for uc in issued} == {str(u1), str(u2)}
+        # 지급 한 장마다 운영 로그 한 줄
+        assert sum(not isinstance(a, UserCoupon) for a in db.added) == 2
         assert db.committed is True
 
     def test_404_when_coupon_missing(self):
         db = SeqFake([_Result([])])
         with pytest.raises(HTTPException) as exc:
             admin_coupons.issue_coupon(
-                uuid.uuid4(), IssueRequest(user_ids=[uuid.uuid4()]), db
+                uuid.uuid4(), IssueRequest(user_ids=[uuid.uuid4()]), db, _ADMIN
             )
         assert exc.value.status_code == 404
 

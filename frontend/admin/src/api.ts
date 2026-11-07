@@ -704,7 +704,8 @@ export interface CouponPayload {
   partner_ids: string[]
 }
 
-export type CouponStatus = 'available' | 'used' | 'expired'
+/** revoked = 운영자 회수. 앱에는 안 보이고 사용도 막힌다. */
+export type CouponStatus = 'available' | 'used' | 'expired' | 'revoked'
 
 export interface IssuedCoupon {
   id: string
@@ -1005,6 +1006,8 @@ export interface UserCouponRow {
   valid_until: string | null
   used_partner_name: string | null
   status: CouponStatus
+  revoked_at: string | null
+  revoked_reason: string | null
 }
 
 export interface UserCouponDraw {
@@ -1026,6 +1029,51 @@ export interface UserCoupons {
 
 export function getUserCoupons(id: string): Promise<UserCoupons> {
   return request(`/admin/users/${id}/coupons`)
+}
+
+// --- 회수 · 운영 처리 이력 ---------------------------------------------------
+// 회수는 한 건씩만. 스탬프를 빼도 그걸로 받은 빙고 보상은 자동으로 빠지지 않는다.
+
+function revokeBody(reason: string): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  }
+}
+
+/** 스탬프 삭제. 빙고판은 스탬프에서 계산하므로 칸도 함께 비워진다. */
+export function revokeUserStamp(userId: string, stampId: string, reason: string): Promise<void> {
+  return request(`/admin/users/${userId}/stamps/${stampId}/revoke`, revokeBody(reason))
+}
+
+/** 쿠폰 회수. 사용(지급완료)한 쿠폰은 409. */
+export function revokeUserCoupon(userId: string, userCouponId: string, reason: string): Promise<void> {
+  return request(`/admin/users/${userId}/coupons/${userCouponId}/revoke`, revokeBody(reason))
+}
+
+export type AdminActionKind =
+  | 'stamp_issue'
+  | 'stamp_revoke'
+  | 'coupon_issue'
+  | 'coupon_revoke'
+  | 'course_complete'
+  | 'reward_fulfill'
+
+export interface AdminAction {
+  id: string
+  created_at: string
+  admin_username: string
+  action: AdminActionKind | string
+  target_type: string
+  target_id: string | null
+  /** 행위별 부가 정보(name/coupon_name/course_name/code/reason …). */
+  detail: Record<string, unknown>
+}
+
+/** 이 회원에게 운영자가 한 처리, 최신순 최대 100건. */
+export function getUserAdminActions(id: string): Promise<AdminAction[]> {
+  return request(`/admin/users/${id}/admin-actions`)
 }
 
 // --- 러닝 기록 ---------------------------------------------------------------

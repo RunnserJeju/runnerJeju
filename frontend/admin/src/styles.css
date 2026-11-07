@@ -373,6 +373,11 @@ tbody tr:hover {
   color: var(--muted);
 }
 
+.badge.revoked {
+  background: #fdecec;
+  color: #a12f2f;
+}
+
 .facility {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -796,6 +801,11 @@ button.link {
 
 .search-row input {
   max-width: 320px;
+}
+
+/* 탭 바로 아래 검색창(경품 지급)은 탭 밑줄에 붙지 않게 띄운다. */
+.tabs + .search-row {
+  margin-top: 16px;
 }
 
 .users-table td {

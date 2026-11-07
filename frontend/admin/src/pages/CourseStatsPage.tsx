@@ -91,7 +91,7 @@ export default function CourseStatsPage({ onUnauthorized }: Props) {
   return (
     <>
       <div className="page-head">
-        <h2>코스</h2>
+        <h2>러닝</h2>
         {tab === 'stats' && (
           <button className="secondary small" onClick={download} disabled={!sorted?.length}>
             CSV 다운로드

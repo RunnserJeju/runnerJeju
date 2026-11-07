@@ -29,8 +29,11 @@ def _effective_status(
     valid_until: datetime | None,
     now: datetime,
     expired_at: datetime | None = None,
+    revoked_at: datetime | None = None,
 ) -> str:
-    """발급 쿠폰의 유효 상태. 사용이 만료보다 우선(이미 썼으니)."""
+    """발급 쿠폰의 유효 상태. 회수 > 사용 > 만료 순으로 우선한다(사용한 쿠폰은 회수 불가)."""
+    if revoked_at is not None:
+        return "revoked"
     if used_at is not None:
         return "used"
     if expired_at is not None or (valid_until is not None and valid_until < now):
@@ -101,7 +104,7 @@ def _rows_to_out(db: Session, rows: list) -> list[dict]:
             "used_at": uc.used_at,
             "valid_until": coupon.valid_until,
             "status": _effective_status(
-                uc.used_at, coupon.valid_until, now, uc.expired_at
+                uc.used_at, coupon.valid_until, now, uc.expired_at, uc.revoked_at
             ),
             "redeem_type": coupon.redeem_type,
             "partner_ids": allowed.get(coupon.id),
@@ -136,7 +139,11 @@ def my_coupons(
     rows = db.execute(
         select(UserCoupon, Coupon)
         .join(Coupon, Coupon.id == UserCoupon.coupon_id)
-        .where(UserCoupon.user_id == user_id, UserCoupon.expired_at.is_(None))
+        .where(
+            UserCoupon.user_id == user_id,
+            UserCoupon.expired_at.is_(None),
+            UserCoupon.revoked_at.is_(None),
+        )
         .order_by(UserCoupon.issued_at.desc())
     ).all()
     return _rows_to_out(db, list(rows))
@@ -172,6 +179,9 @@ def use_coupon(
         raise HTTPException(status_code=400, detail="운영자가 지급 처리하는 쿠폰이에요.")
     if uc.used_at is not None:
         raise HTTPException(status_code=409, detail="이미 사용한 쿠폰이에요.")
+    if uc.revoked_at is not None:
+        # 앱은 410을 받으면 목록에서 치운다(만료와 같은 처리).
+        raise HTTPException(status_code=410, detail="회수된 쿠폰이에요.")
 
     now = datetime.now(timezone.utc)
     if uc.expired_at is not None or (

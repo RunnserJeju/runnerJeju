@@ -912,7 +912,7 @@ class AdminRunListOut(BaseModel):
 # 한다. 발급분은 템플릿을 라이브 참조(수정 즉시 반영). 상태는 used_at(사용) ·
 # expired_at(만료, 서버가 알아챈 시점에 저장) · valid_until(아직 저장 전인 만료)로 계산한다.
 
-CouponStatus = Literal["available", "used", "expired"]
+CouponStatus = Literal["available", "used", "expired", "revoked"]
 CouponTriggerType = Literal["manual", "course_complete", "bingo_complete", "bingo_lines"]
 # partner_pin: 앱에서 업체 번호 입력. kakao_channel: 카카오톡 채널 문의 후 운영자가 지급완료 처리.
 CouponRedeemType = Literal["partner_pin", "kakao_channel"]
@@ -984,6 +984,34 @@ class UserStampOut(BaseModel):
     acquired_at: datetime
     # 달린 기록으로 받았으면 True, 운영자 지급 등 러닝 없이 받았으면 False
     from_run: bool
+
+
+class AdminRevokeRequest(BaseModel):
+    """스탬프·쿠폰 회수. 사유는 운영 처리 이력에 남는다."""
+
+    reason: str = Field(min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def _strip_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("사유를 입력해 주세요.")
+        return value
+
+
+class AdminActionOut(BaseModel):
+    """운영 처리 이력 한 줄."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    admin_username: str
+    action: str
+    target_type: str
+    target_id: str | None
+    detail: dict
 
 
 class IssuedCouponOut(BaseModel):
@@ -1061,6 +1089,8 @@ class UserCouponRowOut(BaseModel):
     valid_until: datetime | None
     used_partner_name: str | None
     status: CouponStatus
+    revoked_at: datetime | None = None
+    revoked_reason: str | None = None
 
 
 class UserCouponDrawOut(BaseModel):

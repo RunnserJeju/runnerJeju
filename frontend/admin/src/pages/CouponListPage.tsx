@@ -481,6 +481,7 @@ const STATUS_LABEL: Record<IssuedCoupon['status'], string> = {
   available: '사용 가능',
   used: '사용함',
   expired: '만료',
+  revoked: '회수',
 }
 
 export { STATUS_LABEL }
@@ -531,7 +532,7 @@ function IssuedSection({ coupon }: { coupon: Coupon }) {
                 <td className="muted nowrap">{new Date(item.issued_at).toLocaleString()}</td>
                 <td>
                   <span
-                    className={`badge ${item.status === 'available' ? 'live' : item.status === 'used' ? 'scheduled' : 'expired'}`}
+                    className={`badge ${item.status === 'available' ? 'live' : item.status === 'used' ? 'scheduled' : item.status === 'revoked' ? 'revoked' : 'expired'}`}
                   >
                     {STATUS_LABEL[item.status]}
                   </span>
