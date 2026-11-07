@@ -803,6 +803,11 @@ button.link {
   max-width: 320px;
 }
 
+/* 탭 바로 아래 검색창(경품 지급)은 탭 밑줄에 붙지 않게 띄운다. */
+.tabs + .search-row {
+  margin-top: 16px;
+}
+
 .users-table td {
   font-size: 13px;
 }

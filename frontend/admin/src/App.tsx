@@ -41,11 +41,11 @@ type Page =
 const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
   {
     // 지표 쪽은 전부 조회 전용이다. 로그는 원본 행을 보는 화면이라 여기 둔다.
-    // 대시보드는 그래프, 나머지는 표. 코스·회원은 목록형 자료라 따로 뺐다.
+    // 대시보드는 그래프, 나머지는 표. 러닝(코스별)·회원은 목록형 자료라 따로 뺐다.
     group: '지표',
     items: [
       { key: 'dashboard', label: '대시보드' },
-      { key: 'course-stats', label: '코스' },
+      { key: 'course-stats', label: '러닝' },
       { key: 'users', label: '회원' },
       { key: 'logs', label: '로그' },
     ],
