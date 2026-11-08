@@ -63,6 +63,7 @@ enum LogName {
   couponView('coupon_view'),
   couponUseClick('coupon_use_click'),
   // 커뮤니티
+  eventDetailOpen('event_detail_open'),
   externalLinkOpen('external_link_open'),
   // 계정
   login('login'),
@@ -82,6 +83,8 @@ abstract final class LogKeys {
   static const runId = 'run_id';
   static const noticeId = 'notice_id';
   static const partnerId = 'partner_id';
+  static const eventId = 'event_id';
+  static const url = 'url';
   static const source = 'source';
   static const section = 'section';
   static const position = 'position';

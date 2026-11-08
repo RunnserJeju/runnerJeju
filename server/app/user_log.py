@@ -17,6 +17,9 @@ DETAIL_MAX_BYTES = 2048
 # 서버가 직접 기록하는 로그.
 COURSE_DETAIL_OPEN = "course_detail_open"
 
+# 이벤트 상세 열기(detail: event_id). 운영툴 이벤트 조회수가 이걸 센다(admin/events).
+EVENT_DETAIL_OPEN = "event_detail_open"
+
 LOG_NAMES: frozenset[str] = frozenset(
     {
         COURSE_DETAIL_OPEN,
@@ -53,6 +56,8 @@ LOG_NAMES: frozenset[str] = frozenset(
         "coupon_view",
         "coupon_use_click",
         # 커뮤니티
+        EVENT_DETAIL_OPEN,
+        # 외부 링크 (detail: url + 어디서 열었는지 partner_id 또는 event_id)
         "external_link_open",
         # 계정
         "login",

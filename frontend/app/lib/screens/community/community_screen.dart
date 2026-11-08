@@ -5,7 +5,9 @@ import '../../features/running_week/running_week.dart';
 import '../../features/running_week/running_week_banner.dart';
 import '../../features/running_week/running_week_screen.dart';
 import '../../models/community_event.dart';
+import '../../models/user_log.dart';
 import '../../services/service_locator.dart';
+import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/linked_text.dart';
@@ -54,7 +56,13 @@ class CommunityScreenState extends State<CommunityScreen> {
     }
   }
 
-  void _openEvent(CommunityEvent event) {
+  /// [position]은 목록에서 몇 번째였는지(0부터) — 순서가 조회에 미치는 영향을 보려고 남긴다.
+  void _openEvent(CommunityEvent event, int position) {
+    // 운영툴 이벤트 조회수가 이 로그를 센다(admin/events).
+    writeLog(
+      LogName.eventDetailOpen,
+      detail: {LogKeys.eventId: event.id, LogKeys.position: position},
+    );
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => EventDetailScreen(event: event)));
@@ -168,7 +176,7 @@ class CommunityScreenState extends State<CommunityScreen> {
           itemCount: events!.length,
           itemBuilder: (context, index) => _EventCard(
             event: events[index],
-            onTap: () => _openEvent(events[index]),
+            onTap: () => _openEvent(events[index], index),
           ),
           separatorBuilder: (_, _) => const SizedBox(height: 12),
         ),

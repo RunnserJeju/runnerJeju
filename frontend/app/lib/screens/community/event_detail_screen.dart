@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/community_event.dart';
+import '../../models/user_log.dart';
+import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/linked_text.dart';
@@ -60,6 +62,11 @@ class EventDetailScreen extends StatelessWidget {
                 const SizedBox(height: 18),
                 LinkedText(
                   event.body,
+                  // 이벤트 본문 링크(신청 폼 등)를 몇 번 눌렀는지 이벤트별로 본다.
+                  onOpenLink: (url) => writeLog(
+                    LogName.externalLinkOpen,
+                    detail: {LogKeys.eventId: event.id, LogKeys.url: url},
+                  ),
                   style: const TextStyle(
                     fontSize: 15,
                     height: 1.6,

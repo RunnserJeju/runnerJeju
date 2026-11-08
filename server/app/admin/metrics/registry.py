@@ -109,6 +109,7 @@ LOG_LABELS = {
     "coupon_view": "쿠폰 보기",
     "coupon_use_click": "쿠폰 사용 클릭",
     "external_link_open": "외부 링크",
+    "event_detail_open": "이벤트 상세 조회",
     "login": "로그인",
     "login_failed": "로그인 실패",
     "logout": "로그아웃",

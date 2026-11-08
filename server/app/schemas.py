@@ -808,7 +808,8 @@ class EventCreate(BaseModel):
     ends_at: datetime | None = None
     is_active: bool = True
     visibility: Visibility = "admin"
-    sort_order: int = 0
+    # 순서는 여기서 받지 않는다 — PUT /admin/events/order로만 바꾼다. 옛 운영툴이
+    # sort_order를 같이 보내도 무시된다(정의되지 않은 필드).
 
     @model_validator(mode="after")
     def _check_period(self):
@@ -838,6 +839,22 @@ class AdminEventOut(EventOut):
     visibility: Visibility
     sort_order: int
     updated_at: datetime
+
+
+class EventOrder(BaseModel):
+    """이벤트 순서 저장(PUT /admin/events/order). 이벤트 전부의 id를 보여줄 순서대로."""
+
+    ids: list[uuid.UUID]
+
+
+class EventViewCount(BaseModel):
+    """이벤트 하나의 상세 조회 수(GET /admin/events/views). 앱의 event_detail_open 로그를 센다."""
+
+    event_id: uuid.UUID
+    # 상세를 연 횟수(같은 사람이 여러 번 열면 그만큼).
+    views: int
+    # 상세를 연 사람 수(로그인 사용자 기준, 중복 제외).
+    viewers: int
 
 
 # --- 회원 (운영자 조회) ---------------------------------------------------

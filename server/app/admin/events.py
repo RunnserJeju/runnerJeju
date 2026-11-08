@@ -7,13 +7,19 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
-from app import storage
+from app import storage, user_log
 from app.db import get_db
-from app.models import Event
-from app.schemas import AdminEventOut, EventCreate, EventUpdate
+from app.models import Event, UserLog
+from app.schemas import (
+    AdminEventOut,
+    EventCreate,
+    EventOrder,
+    EventUpdate,
+    EventViewCount,
+)
 
 router = APIRouter(tags=["events"])
 
@@ -40,7 +46,6 @@ def _apply(event: Event, payload: EventCreate) -> None:
     event.ends_at = payload.ends_at
     event.is_active = payload.is_active
     event.visibility = payload.visibility
-    event.sort_order = payload.sort_order
 
 
 @router.get("/events", response_model=list[AdminEventOut])
@@ -51,9 +56,63 @@ def list_events(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/events/views", response_model=list[EventViewCount])
+def event_view_counts(db: Session = Depends(get_db)):
+    """이벤트별 상세 조회 수(전체 기간). 앱이 상세를 열 때 남기는 event_detail_open을 센다.
+
+    조회한 적 없는 이벤트는 빠진다(0으로 보면 된다). 로그는 앱 업데이트 뒤부터 쌓인다.
+    """
+    event_id = UserLog.detail["event_id"].astext
+    # GROUP BY는 식이 아니라 결과 열 이름으로 묶는다. 식을 그대로 두면 키('event_id')가
+    # SELECT와 GROUP BY에 따로 바인딩돼 Postgres가 다른 식으로 본다(metrics/sources 참고).
+    rows = db.execute(
+        select(
+            event_id.label("viewed_event_id"),
+            func.count(),
+            func.count(distinct(UserLog.user_id)),
+        )
+        .where(UserLog.log_name == user_log.EVENT_DETAIL_OPEN, event_id.is_not(None))
+        .group_by("viewed_event_id")
+    ).all()
+
+    counts = []
+    for raw_id, views, viewers in rows:
+        try:
+            parsed = uuid.UUID(raw_id)
+        except ValueError:
+            continue  # 앱이 이상한 값을 보냈다. 세지 않는다.
+        counts.append({"event_id": parsed, "views": views, "viewers": viewers})
+    return counts
+
+
+@router.put("/events/order", response_model=list[AdminEventOut])
+def reorder_events(payload: EventOrder, db: Session = Depends(get_db)):
+    """이벤트 순서를 통째로 다시 매긴다. 공지 순서(PUT /admin/notices/order)와 같은 규칙 —
+    전부를 받고, 그새 목록이 바뀌었으면 409."""
+    ids = payload.ids
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="같은 이벤트가 두 번 들어 있어요.")
+
+    events = {event.id: event for event in db.execute(select(Event)).scalars()}
+    if set(ids) != set(events):
+        raise HTTPException(
+            status_code=409,
+            detail="그새 이벤트 목록이 바뀌었어요. 새로고침한 뒤 다시 정해 주세요.",
+        )
+
+    for order, event_id in enumerate(ids):
+        events[event_id].sort_order = order
+    db.commit()
+
+    return [events[event_id] for event_id in ids]
+
+
 @router.post("/events", response_model=AdminEventOut, status_code=201)
 def create_event(payload: EventCreate, db: Session = Depends(get_db)):
-    event = Event()
+    """이벤트를 등록한다. 맨 앞에 붙는다."""
+    # 지금 맨 앞보다 하나 앞. 음수가 돼도 상관없다 — 순서를 저장하면 0부터 다시 매긴다.
+    first = db.execute(select(func.min(Event.sort_order))).scalar()
+    event = Event(sort_order=(first if first is not None else 0) - 1)
     _apply(event, payload)
     db.add(event)
     db.commit()

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ApiError, listNotices, reorderNotices, type Notice } from '../api'
 import NoticeCreateModal from '../modals/NoticeCreateModal'
 import NoticeEditModal from '../modals/NoticeEditModal'
+import { OrderCell, OrderSaveRow, useListOrder } from './ListOrder'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -32,30 +33,12 @@ function formatDateTime(iso: string | null): string {
 }
 
 /**
- * 저장 안 한 순서를 새로 받은 목록에 맞춘다. 순서를 바꾸던 중에 공지를 추가·삭제해도
- * 바꾸던 순서가 날아가지 않게 — 새 공지는 서버처럼 맨 앞에, 지운 공지는 뺀다.
- * 바꾸던 게 없으면 결과가 서버 순서와 같다.
- */
-function keepLocalOrder(previous: string[] | null, loaded: Notice[]): string[] {
-  const ids = loaded.map((notice) => notice.id)
-  if (!previous) return ids
-  const alive = new Set(ids)
-  const known = new Set(previous)
-  return [...ids.filter((id) => !known.has(id)), ...previous.filter((id) => alive.has(id))]
-}
-
-/**
  * 홈 구성 페이지의 공지사항 섹션. 위에서부터 앱 홈 배너·공지 목록에 나오고, 팝업이 켜진
  * 공지는 앱을 켤 때 이 순서대로 하나씩 뜬다. 순서는 ↑↓로 바꾸고 저장한다. 등록·수정은 모달.
  */
 export default function NoticeSection({ onUnauthorized }: Props) {
   const [notices, setNotices] = useState<Notice[] | null>(null)
-  /** 화면에 보이는 순서(공지 id). 저장 전이면 서버 순서와 다르다. */
-  const [order, setOrder] = useState<string[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [orderError, setOrderError] = useState<string | null>(null)
-  const [savingOrder, setSavingOrder] = useState(false)
-  const [orderSaved, setOrderSaved] = useState(false)
   const [creating, setCreating] = useState(false)
   /** 수정 모달 대상. message는 등록 직후 이어서 열 때 전달된다. */
   const [editing, setEditing] = useState<{ id: string; message?: string } | null>(null)
@@ -64,7 +47,6 @@ export default function NoticeSection({ onUnauthorized }: Props) {
     listNotices()
       .then((loaded) => {
         setNotices(loaded)
-        setOrder((previous) => keepLocalOrder(previous, loaded))
         setError(null)
       })
       .catch((err: unknown) => {
@@ -81,40 +63,13 @@ export default function NoticeSection({ onUnauthorized }: Props) {
   }, [reload])
 
   const now = new Date()
-  const byId = new Map((notices ?? []).map((notice) => [notice.id, notice]))
-  const ordered = (order ?? []).flatMap((id) => byId.get(id) ?? [])
-  const serverKey = (notices ?? []).map((notice) => notice.id).join(',')
-  const orderDirty = order != null && order.join(',') !== serverKey
-
-  const move = (index: number, delta: number) => {
-    if (!order) return
-    const next = [...order]
-    const [moved] = next.splice(index, 1)
-    next.splice(index + delta, 0, moved)
-    setOrder(next)
-    setOrderSaved(false)
-    setOrderError(null)
-  }
-
-  const saveOrder = async () => {
-    if (!order) return
-    setSavingOrder(true)
-    setOrderError(null)
-    try {
-      const saved = await reorderNotices(order)
-      setNotices(saved)
-      setOrder(saved.map((notice) => notice.id))
-      setOrderSaved(true)
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        onUnauthorized()
-        return
-      }
-      setOrderError(err instanceof ApiError ? err.message : '순서를 저장하지 못했어요.')
-    } finally {
-      setSavingOrder(false)
-    }
-  }
+  const order = useListOrder({
+    items: notices,
+    save: reorderNotices,
+    onSaved: setNotices,
+    onUnauthorized,
+  })
+  const { ordered } = order
 
   return (
     <div className="card">
@@ -173,56 +128,14 @@ export default function NoticeSection({ onUnauthorized }: Props) {
                       : '상시'}
                   </td>
                   <td className="muted">{formatDateTime(notice.created_at)}</td>
-                  {/* 행을 누르면 수정 모달이 열리므로 버튼 클릭은 행까지 올리지 않는다. */}
-                  <td
-                    style={{ width: 1, whiteSpace: 'nowrap' }}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <div className="row" style={{ gap: 6 }}>
-                      <button
-                        className="secondary small"
-                        disabled={index === 0}
-                        onClick={() => move(index, -1)}
-                        aria-label="위로"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        className="secondary small"
-                        disabled={index === ordered.length - 1}
-                        onClick={() => move(index, 1)}
-                        aria-label="아래로"
-                      >
-                        ↓
-                      </button>
-                    </div>
-                  </td>
+                  <OrderCell index={index} count={ordered.length} onMove={order.move} />
                 </tr>
               )
             })}
           </tbody>
         </table>
       )}
-      {orderError && <div className="error">{orderError}</div>}
-      {notices && notices.length > 1 && (orderDirty || orderSaved) && (
-        <div className="submit-row">
-          <button onClick={saveOrder} disabled={!orderDirty || savingOrder}>
-            {savingOrder ? '저장 중…' : '순서 저장'}
-          </button>
-          {orderDirty && (
-            <button
-              className="secondary"
-              onClick={() => {
-                setOrder(notices.map((notice) => notice.id))
-                setOrderError(null)
-              }}
-            >
-              되돌리기
-            </button>
-          )}
-          {orderSaved && !orderDirty && <span className="muted">순서를 저장했어요.</span>}
-        </div>
-      )}
+      <OrderSaveRow state={order} />
 
       {creating && (
         <NoticeCreateModal

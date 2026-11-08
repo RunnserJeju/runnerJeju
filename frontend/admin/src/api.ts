@@ -524,11 +524,13 @@ export interface CommunityEvent {
   is_active: boolean
   /** 공개 범위. admin이면 운영자 계정에만 보인다(코스와 같다). */
   visibility: CourseVisibility
+  /** 앱 목록 순서(작을수록 위). 순서 저장(reorderEvents)으로만 바뀐다. */
   sort_order: number
   created_at: string
   updated_at: string
 }
 
+/** 등록/수정 페이로드. 순서는 여기서 안 보낸다 — reorderEvents로만. */
 export interface CommunityEventPayload {
   title: string
   body: string
@@ -536,11 +538,33 @@ export interface CommunityEventPayload {
   ends_at: string | null
   is_active: boolean
   visibility: CourseVisibility
-  sort_order: number
+}
+
+/** 이벤트 하나의 상세 조회 수. 조회가 없는 이벤트는 목록에 없다(0). */
+export interface EventViewCount {
+  event_id: string
+  /** 상세를 연 횟수. */
+  views: number
+  /** 상세를 연 사람 수(중복 제외). */
+  viewers: number
 }
 
 export function listEvents(): Promise<CommunityEvent[]> {
   return request('/admin/events')
+}
+
+/** 이벤트별 상세 조회 수(전체 기간). 앱 업데이트 뒤부터 쌓인다. */
+export function listEventViews(): Promise<EventViewCount[]> {
+  return request('/admin/events/views')
+}
+
+/** 이벤트 순서를 통째로 저장한다. 이벤트 전부의 id를 보여줄 순서대로. 그새 목록이 바뀌었으면 409. */
+export function reorderEvents(ids: string[]): Promise<CommunityEvent[]> {
+  return request('/admin/events/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
 }
 
 export function createEvent(payload: CommunityEventPayload): Promise<CommunityEvent> {

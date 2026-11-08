@@ -639,7 +639,8 @@ class Event(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # 'public' | 'admin'. 러닝위크와 같다 — admin이면 운영자 계정에만 보인다.
     visibility: Mapped[str] = mapped_column(String(20), default="admin")
-    # 앱 목록 정렬. 작을수록 위, 같으면 최신순.
+    # 앱 목록 순서. 작을수록 위, 같으면 최신순. 운영툴에서 통째로 다시 매기고
+    # (PUT /admin/events/order), 새 이벤트는 맨 앞에 붙는다 — 공지와 같다.
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(

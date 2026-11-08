@@ -12,10 +12,13 @@ import '../theme/app_theme.dart';
 ///
 /// 누르면 외부 브라우저(또는 그 주소를 받는 앱)로 연다.
 class LinkedText extends StatefulWidget {
-  const LinkedText(this.text, {super.key, this.style});
+  const LinkedText(this.text, {super.key, this.style, this.onOpenLink});
 
   final String text;
   final TextStyle? style;
+
+  /// 링크를 누르면 열기 전에 불린다(주소). 로그용.
+  final ValueChanged<String>? onOpenLink;
 
   @override
   State<LinkedText> createState() => _LinkedTextState();
@@ -69,6 +72,7 @@ class _LinkedTextState extends State<LinkedText> {
   Future<void> _open(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
+    widget.onOpenLink?.call(url);
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!opened && mounted) {
       ScaffoldMessenger.of(
