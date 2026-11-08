@@ -38,6 +38,8 @@ class _RunResultScreenState extends State<RunResultScreen> {
   @override
   void initState() {
     super.initState();
+    // 러닝 화면에 이어 러닝 탭의 지도를 계속 내려 둔다. 이 화면에도 지도가 있다.
+    Services.instance.runFlow.enter();
     _submission.addListener(_onSubmissionChanged);
     _submission.onCelebration = _showCelebration;
     // 화면이 뜨기 전에 검증까지 끝났을 수 있다. 그때는 알림이 다시 오지 않는다.
@@ -50,6 +52,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
     if (_submission.onCelebration == _showCelebration) {
       _submission.onCelebration = null;
     }
+    Services.instance.runFlow.leave();
     super.dispose();
   }
 

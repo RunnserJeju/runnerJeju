@@ -90,6 +90,8 @@ class _RunScreenState extends State<RunScreen> {
   @override
   void initState() {
     super.initState();
+    // 떠 있는 동안 러닝 탭의 지도를 내린다 — 지도 엔진이 둘 뜨지 않게.
+    Services.instance.runFlow.enter();
     _tracker.addListener(_onTrackerChanged);
     Services.instance.heading.start();
     _initialCenter = widget.initialCenter;
@@ -104,6 +106,7 @@ class _RunScreenState extends State<RunScreen> {
     // 화면을 벗어나면 잠금화면 위젯도 걷어낸다 — 유령 위젯이 남지 않게.
     // (정상 종료는 _finish에서 이미 걷지만, 여기서 한 번 더 안전망을 둔다.)
     unawaited(_liveWidget.stop());
+    Services.instance.runFlow.leave();
     super.dispose();
   }
 
