@@ -52,3 +52,4 @@ def get_home_curation(
 ):
     """홈 '러닝 코스 큐레이션'과 '추천 협력 업체'에 띄울 것(순서대로)."""
     return load_curation(db, is_admin=is_admin)
+  

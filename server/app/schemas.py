@@ -416,6 +416,18 @@ class RunCreate(BaseModel):
     path: list[RunPointSchema]
 
 
+class RunContinue(BaseModel):
+    """이어달리기로 붙일 구간 하나. 코스는 원래 기록의 것을 그대로 쓴다."""
+
+    # 앱이 구간마다 만드는 id. 업로드를 재시도해도 같은 구간이 두 번 붙지 않는다.
+    segment_id: uuid.UUID
+    started_at: datetime
+    ended_at: datetime
+    distance_meters: float
+    duration_sec: int
+    path: list[RunPointSchema]
+
+
 class RunOut(BaseModel):
     id: uuid.UUID
     course_id: uuid.UUID | None
@@ -427,6 +439,8 @@ class RunOut(BaseModel):
     path: list[RunPointSchema]
     # 이 러닝으로 코스 완주 인증이 통과했는지.
     completed: bool = False
+    # 코스 경로 일치율 0~1. 이어달리기 목록(GET /runs/continuable)에서만 채운다.
+    match_rate: float | None = None
 
 
 class RunUploadResult(BaseModel):

@@ -14,6 +14,15 @@ class RunApi {
     return RunUploadResult.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// 이어달리기 구간을 원래 기록 뒤에 붙인다. 합쳐진 기록이 돌아온다.
+  Future<RunUploadResult> continueRecord(RunRecord segment) async {
+    final response = await _client.dio.post(
+      '/runs/${segment.continuesRunId}/continue',
+      data: segment.toContinueJson(),
+    );
+    return RunUploadResult.fromJson(response.data as Map<String, dynamic>);
+  }
+
   /// 내 러닝 기록 목록(최근 순). [since] 이상 [until] 미만으로 거른다.
   /// [withPath]가 false면 경로가 빠진다(달력처럼 많이 받을 때).
   Future<List<RunRecord>> fetchMyRecords({
@@ -30,6 +39,16 @@ class RunApi {
         if (until != null) 'until': until.toUtc().toIso8601String(),
         if (!withPath) 'with_path': false,
       },
+    );
+
+    return parseList(response.data, RunRecord.fromJson);
+  }
+
+  /// 이어 달릴 수 있는 미완주 기록(최근 순, 경로 없음). 기간(최근 7일)은 서버가 정한다.
+  Future<List<RunRecord>> fetchContinuableRecords({int limit = 20}) async {
+    final response = await _client.dio.get(
+      '/runs/continuable',
+      queryParameters: {'limit': limit},
     );
 
     return parseList(response.data, RunRecord.fromJson);

@@ -332,8 +332,19 @@ class Run(Base):
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
+    # 이어달리기로 붙인 구간들(붙인 순). 한 구간은 {segment_id, started_at, ended_at,
+    # distance_meters, duration_sec, point_count, appended_at}. segment_id로 같은 구간이
+    # 두 번 붙는 것(업로드 재시도)을 막고, 나중에 기록을 다시 나눌 근거가 된다.
+    continuations: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    # 이어달리기로 기록이 바뀐 마지막 시각. 한 번도 안 바뀌었으면 None.
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
     )
 
     course: Mapped[Course | None] = relationship()

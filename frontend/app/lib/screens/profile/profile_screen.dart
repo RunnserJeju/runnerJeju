@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/run_record.dart';
 import '../../models/user.dart';
 import '../../models/user_log.dart';
 import '../../services/service_locator.dart';
@@ -8,13 +9,16 @@ import '../../utils/formatters.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/section_title.dart';
 import '../auth/login_screen.dart';
+import '../run/continue_run.dart';
 import 'completed_courses_screen.dart';
 import 'coupon_list_screen.dart';
 import 'favorite_courses_screen.dart';
+import 'incomplete_runs.dart';
 import 'member_info_screen.dart';
 import 'run_calendar.dart';
 
-/// 마이페이지: 프로필 카드(누르면 회원 정보) → 캘린더 → 항목 목록(각자 화면으로 들어간다).
+/// 마이페이지: 프로필 카드(누르면 회원 정보) → 캘린더 → 미완주 기록
+/// → 항목 목록(각자 화면으로 들어간다).
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.onOpenCourse});
 
@@ -60,6 +64,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _user = Services.instance.auth.loadCurrentUser());
   }
 
+  void _startContinuation(RunRecord record) =>
+      openContinuationRun(context, record);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,6 +95,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SectionTitle('캘린더'),
             const SizedBox(height: 12),
             RunCalendar(key: ValueKey(_generation)),
+            // 위 간격은 섹션이 갖는다.
+            IncompleteRunsSection(
+              // 달력과 같은 형제라 키 값이 겹치면 안 된다.
+              key: ValueKey('incomplete-$_generation'),
+              onContinue: _startContinuation,
+            ),
             const SizedBox(height: 24),
             _MenuEntry(
               icon: Icons.flag_rounded,

@@ -8,6 +8,7 @@ import '../models/run_record.dart';
 import '../models/running_course.dart';
 import '../utils/course_coverage.dart';
 import '../utils/geo_utils.dart';
+import '../utils/uuid.dart';
 import 'current_location.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
@@ -58,6 +59,13 @@ class RunTracker extends ChangeNotifier {
   /// 지금 멈춰 있다면 그 멈춤이 시작된 시각. 달리는 중이면 null.
   DateTime? _pausedAt;
   RunningCourse? _targetCourse;
+
+  /// 이어달리기면 이어 붙일 원래 기록(경로 포함). 이번 러닝의 거리·시간·경로는 이
+  /// 기록 뒤의 구간만 들고, 화면에 보이는 누적값은 여기에 더해 만든다.
+  RunRecord? _base;
+
+  /// 이어달리기 구간의 id. 업로드 재시도·복구 때 같은 구간이 두 번 붙지 않게 한다.
+  String? _segmentId;
 
   /// [_targetCourse]의 경로를 실측한 길이(m). 진행률 분모라 매 틱 다시 재지 않고
   /// 코스를 잡을 때 한 번만 계산한다.
@@ -135,7 +143,19 @@ class RunTracker extends ChangeNotifier {
   /// 그때마다 수천 점을 복사하면 낭비다.
   List<GeoPoint> get path => _pathSnapshot ??= List.unmodifiable(_path);
   List<GeoPoint>? _pathSnapshot;
+
+  /// 이번 러닝(이어달리기면 이번 구간)의 거리.
   double get distanceMeters => _distanceMeters;
+
+  /// 이어 붙일 원래 기록. 이어달리기가 아니면 null.
+  RunRecord? get continuation => _base;
+
+  /// 화면에 보이는 거리. 이어달리기면 원래 기록 거리를 더한 누적값이다.
+  double get totalDistanceMeters =>
+      (_base?.distanceMeters ?? 0) + _distanceMeters;
+
+  /// 화면에 보이는 시간. 이어달리기면 원래 기록 시간을 더한 누적값이다.
+  Duration get totalElapsed => (_base?.duration ?? Duration.zero) + elapsed;
 
   /// 실제로 달린 시간(멈춰 있던 시간 제외).
   ///
@@ -177,13 +197,14 @@ class RunTracker extends ChangeNotifier {
   bool get isAwaitingFix => _status == RunStatus.running && _startedAt == null;
 
   /// 러닝 전체의 평균 페이스(km당 초). [_minPaceMeters] 전에는 null.
+  /// 이어달리기면 원래 기록까지 합친 누적 평균이다.
   ///
   /// 최근 페이스와 같은 문턱을 쓴다. 화면의 주 지표는 최근 페이스이고 평균은
   /// 그 아래 보조로 붙는데, 문턱이 다르면 주 지표는 "--"인데 보조만 먼저 숫자가
   /// 뜨고, 그 숫자가 바로 문턱으로 가리려던 초반 오차다.
   double? get paceSecondsPerKm {
     if (_distanceMeters < _minPaceMeters) return null;
-    return elapsed.inMilliseconds / 1000 / (_distanceMeters / 1000);
+    return totalElapsed.inMilliseconds / 1000 / (totalDistanceMeters / 1000);
   }
 
   /// 최근 1km의 페이스(km당 초). 1km를 아직 못 뛰었으면 지금까지 전체가 창이라
@@ -216,6 +237,7 @@ class RunTracker extends ChangeNotifier {
   double? get courseCoverage => _targetCourse == null ? null : _coverage?.ratio;
 
   /// 누적 주행 거리 ÷ 코스 거리 (1.0 초과 가능). 자유 러닝이면 null.
+  /// 이어달리기면 원래 기록 거리도 넣는다 — 서버가 합친 경로 전체를 재는 것과 같다.
   ///
   /// 분모는 `course.distanceKm`이 아니라 **코스 경로를 실측한 길이**다. 서버
   /// 검증도 `courses` 컬럼이 아니라 `path`를 재서 같은 비율을 구하므로
@@ -224,7 +246,7 @@ class RunTracker extends ChangeNotifier {
   /// 쓰면 최대 수백 m가 어긋난다.
   double? get _distanceRatio {
     if (_targetCourse == null || _courseLengthMeters <= 0) return null;
-    return _distanceMeters / _courseLengthMeters;
+    return totalDistanceMeters / _courseLengthMeters;
   }
 
   /// 화면에 보여주는 코스 진행도 0.0~1.0. 자유 러닝이면 null.
@@ -243,14 +265,34 @@ class RunTracker extends ChangeNotifier {
     return math.min(coverage, distanceRatio).clamp(0.0, 1.0);
   }
 
+  /// [course]를 [path]로 [distanceMeters]만큼 달렸을 때의 [courseProgress].
+  /// 이어달리기 화면이 시작 전에 원래 기록의 진행도를 보여줄 때 쓴다.
+  static double? progressFor(
+    RunningCourse course,
+    List<GeoPoint> path,
+    double distanceMeters,
+  ) {
+    final length = GeoUtils.pathLength(course.path);
+    if (course.path.isEmpty || length <= 0) return null;
+    final coverage = CourseCoverageTracker(course.path);
+    for (final point in path) {
+      coverage.add(point);
+    }
+    return math.min(coverage.ratio, distanceMeters / length).clamp(0.0, 1.0);
+  }
+
   /// 러닝 시작. [course]를 주면 코스를 따라 달리는 러닝이 된다.
   /// 권한이 없으면 사유를 반환하고 시작하지 않는다.
   ///
   /// [source]를 주면 이번 러닝만 그 위치원을 쓴다. 디버그 빌드의 시뮬레이션
   /// 러닝이 유일한 사용처이고, 주지 않으면 평소대로 실제 GPS를 쓴다.
+  ///
+  /// [continuation]을 주면 그 기록에 이어 달린다. 경로까지 받은 기록이어야 한다 —
+  /// 코스 진행률을 원래 경로에서부터 이어 세기 때문이다.
   Future<LocationAvailability> start({
     RunningCourse? course,
     LocationService? source,
+    RunRecord? continuation,
   }) async {
     final location = source ?? _locationService;
 
@@ -263,10 +305,22 @@ class RunTracker extends ChangeNotifier {
     _coverage = course == null || course.path.isEmpty
         ? null
         : CourseCoverageTracker(course.path);
+    _base = continuation;
+    _segmentId = continuation == null ? null : newUuidV4();
+    // 원래 경로를 먼저 넣어 진행률이 이미 달린 만큼에서 시작하게 한다. 그 경로의
+    // 끊긴 자리 표시도 그대로 지켜진다.
+    for (final point in continuation?.path ?? const <GeoPoint>[]) {
+      _coverage?.add(point);
+    }
     // _startedAt은 여기서 잡지 않는다. 첫 유효 위치가 들어올 때 잡는다(elapsed 참고).
     _status = RunStatus.running;
     _activeLocation = location;
-    _journal.begin(courseId: course?.id, courseName: course?.name);
+    _journal.begin(
+      courseId: course?.id,
+      courseName: course?.name,
+      continuesRunId: continuation?.id,
+      segmentId: _segmentId,
+    );
 
     _isRealGps = source == null;
     if (_isRealGps) {
@@ -397,6 +451,7 @@ class RunTracker extends ChangeNotifier {
   }
 
   /// 종료된 러닝을 서버 전송용 기록으로 변환한다. 종료 전이면 null.
+  /// 이어달리기면 이번 구간만 담긴 기록이다([RunRecord.continuesRunId]).
   RunRecord? buildRecord() {
     final startedAt = _startedAt;
     final endedAt = _endedAt;
@@ -412,6 +467,8 @@ class RunTracker extends ChangeNotifier {
       distanceMeters: _distanceMeters,
       duration: elapsed,
       path: List.of(_path),
+      continuesRunId: _base?.id,
+      segmentId: _segmentId,
     );
   }
 
@@ -438,7 +495,9 @@ class RunTracker extends ChangeNotifier {
       }
       _lastPosition = point;
       _jumpRejections = 0;
-      _commit(_path.isEmpty ? point : point.asSegmentStart());
+      // 이어달리기의 첫 점도 끊긴 자리다. 원래 기록이 끝난 곳에서 여기까지는
+      // 달린 길이 아니라 코스 진행률에서도 잇지 않는다.
+      _commit(_path.isEmpty && _base == null ? point : point.asSegmentStart());
       notifyListeners();
       return;
     }
@@ -551,6 +610,8 @@ class RunTracker extends ChangeNotifier {
     _pausedTotal = Duration.zero;
     _pausedAt = null;
     _targetCourse = null;
+    _base = null;
+    _segmentId = null;
     _courseLengthMeters = 0;
     _lastPosition = null;
     _commitAnchor = null;

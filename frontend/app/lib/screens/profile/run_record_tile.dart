@@ -6,32 +6,32 @@ import '../../services/service_locator.dart';
 import '../../utils/formatters.dart';
 import '../run/run_detail_screen.dart';
 
-/// 러닝 기록 한 줄. 누르면 상세. 경로 없이 받은 기록(달력)은 상세를 열기 전에
-/// 경로까지 다시 받는다.
+/// 기록 상세를 연다. 경로 없이 받은 기록(달력·미완주 목록)은 열기 전에 경로까지 다시 받는다.
+Future<void> openRunDetail(BuildContext context, RunRecord record) async {
+  var full = record;
+  final id = record.id;
+  if (record.path.isEmpty && id != null) {
+    try {
+      full = await Services.instance.run.loadRecord(id);
+    } on AppException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
+  }
+  if (!context.mounted) return;
+  Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => RunDetailScreen(record: full)));
+}
+
+/// 러닝 기록 한 줄. 누르면 상세.
 class RunRecordTile extends StatelessWidget {
   const RunRecordTile({super.key, required this.record});
 
   final RunRecord record;
-
-  Future<void> _open(BuildContext context) async {
-    var full = record;
-    final id = record.id;
-    if (record.path.isEmpty && id != null) {
-      try {
-        full = await Services.instance.run.loadRecord(id);
-      } on AppException catch (e) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
-        return;
-      }
-    }
-    if (!context.mounted) return;
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => RunDetailScreen(record: full)));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +43,7 @@ class RunRecordTile extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _open(context),
+        onTap: () => openRunDetail(context, record),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(

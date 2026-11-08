@@ -6,12 +6,15 @@ import '../../models/run_verification.dart';
 import '../../services/run_submission.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/continuation_window.dart';
+import '../../widgets/continue_run_prompt.dart';
 import '../../widgets/coupon_card.dart';
 import '../../widgets/coupon_celebration.dart';
 import '../../widgets/run_metrics_card.dart';
 import '../../widgets/run_map_view.dart';
 import '../../widgets/stamp_badge.dart';
 import '../../widgets/stamp_celebration.dart';
+import 'continue_run.dart';
 import 'run_share_screen.dart';
 
 /// 러닝 결과. 저장·검증은 [RunSubmission]이 돌리고 여기서는 진행 상황과 보상을
@@ -28,11 +31,17 @@ class RunResultScreen extends StatefulWidget {
 class _RunResultScreenState extends State<RunResultScreen> {
   RunSubmission get _submission => Services.instance.runSubmission;
 
+  /// 이어 달리기 팝업은 한 화면에 한 번만. 다시 시도로 같은 검증을 또 받아도 다시
+  /// 묻지 않는다.
+  bool _offeredContinuation = false;
+
   @override
   void initState() {
     super.initState();
     _submission.addListener(_onSubmissionChanged);
     _submission.onCelebration = _showCelebration;
+    // 화면이 뜨기 전에 검증까지 끝났을 수 있다. 그때는 알림이 다시 오지 않는다.
+    _maybeOfferContinuation();
   }
 
   @override
@@ -45,7 +54,39 @@ class _RunResultScreenState extends State<RunResultScreen> {
   }
 
   void _onSubmissionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    _maybeOfferContinuation();
+  }
+
+  /// 코스를 완주하지 못했으면 이어 달릴지 한 번 묻는다. 앱이 죽었다 복구된 기록도
+  /// 이 화면으로 오므로 같은 팝업을 받는다.
+  ///
+  /// 검증까지 끝나 미완주(mismatched)로 판정됐을 때만이다 — 실패(failed)는 경로가
+  /// 비어 판정 자체를 못 한 것이라 이어 달려도 소용이 없다. 묻는 대상은 서버가 돌려준
+  /// 기록(이어달리기였으면 합쳐진 기록)이라 그 id에 다시 이어 붙는다.
+  void _maybeOfferContinuation() {
+    if (_offeredContinuation) return;
+    final saved = _submission.uploadResult?.record;
+    final result = _submission.verification;
+    if (saved == null ||
+        result == null ||
+        result.status != VerificationStatus.mismatched ||
+        !saved.isCourseRun ||
+        !ContinuationWindow.isOpen(saved.startedAt)) {
+      return;
+    }
+    _offeredContinuation = true;
+
+    // 알림 중에 setState를 부른 직후라 다음 프레임에 띄운다.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final accepted = await showContinueRunPrompt(context);
+      if (!accepted || !mounted) return;
+      // 결과 화면을 닫을 때처럼 지난 러닝을 비워야 새 러닝 화면에 남지 않는다.
+      Services.instance.runTracker.reset();
+      await openContinuationRun(context, saved, replace: true);
+    });
   }
 
   Future<void> _showCelebration(Celebration celebration) async {
@@ -79,8 +120,10 @@ class _RunResultScreenState extends State<RunResultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final record = widget.record;
     final s = _submission;
+    // 저장되면 서버가 돌려준 기록을 보여준다. 이어달리기면 합쳐진 기록이고, 복구된
+    // 이어달리기처럼 여는 쪽이 구간만 넘긴 경우도 이걸로 전체가 보인다.
+    final record = s.uploadResult?.record ?? widget.record;
 
     return PopScope(
       canPop: false,
