@@ -922,3 +922,36 @@ class CouponDraw(Base):
     drawn_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class CrashReport(Base):
+    """앱 크래시·ANR·iOS 멈춤 한 건. 원본 덤프는 비공개 Storage(dump_path)에, 여기는 요약만.
+
+    id는 앱이 만든다 — 업로드를 재시도해도 같은 건이 두 번 쌓이지 않는다. 크래시 순간에는
+    앱이 아무것도 못 하므로 다음 실행 때 올라온다(occurred_at이 실제 시각).
+    """
+
+    __tablename__ = "crash_reports"
+    __table_args__ = (Index("ix_crash_reports_occurred", "occurred_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(100), default=None, index=True)
+    session_id: Mapped[str | None] = mapped_column(String(36), default=None)
+    platform: Mapped[str | None] = mapped_column(String(10), default=None)
+    # 올린 앱의 버전. 크래시 난 버전과 다를 수 있다(업데이트 직후) — context에 따로 담기도 한다.
+    app_version: Mapped[str | None] = mapped_column(String(20), default=None)
+    device: Mapped[str | None] = mapped_column(String(100), default=None)
+    os_version: Mapped[str | None] = mapped_column(String(100), default=None)
+    # android_crash | android_native | android_anr | ios_crash | ios_hang | dart_error
+    kind: Mapped[str] = mapped_column(String(20))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    summary: Mapped[str | None] = mapped_column(String(500), default=None)
+    # 죽은 자리의 라이브러리·함수. 같은 원인끼리 묶는 기준.
+    culprit: Mapped[str | None] = mapped_column(String(200), default=None)
+    stack: Mapped[str | None] = mapped_column(Text, default=None)
+    dump_path: Mapped[str | None] = mapped_column(String(200), default=None)
+    # 당시 러닝 상태, Android 종료 정보(importance·메모리) 등 앱이 아는 문맥.
+    context: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

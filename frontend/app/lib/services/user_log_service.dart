@@ -57,6 +57,7 @@ class UserLogService with WidgetsBindingObserver {
 
   String get sessionId => _sessionId;
   String get appVersion => _appVersion;
+  String get device => _device;
   String get platform => Platform.isIOS ? 'ios' : 'android';
 
   /// 앱 시작 시 한 번. 앱 버전을 읽고 생명주기를 구독한 뒤 app_open을 남긴다.

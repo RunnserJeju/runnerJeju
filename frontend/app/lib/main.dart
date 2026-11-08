@@ -33,6 +33,9 @@ Future<void> main() async {
   // 행동 로그 시작(app_open, 지난 러닝 이탈 감지). 기다리지 않는다.
   unawaited(Services.instance.userLog.start());
 
+  // 지난 실행의 크래시 덤프를 서버로 올리고, 이번 실행의 Dart 예외를 받는다. 기다리지 않는다.
+  unawaited(Services.instance.crashReporter.start());
+
   runApp(const RunnersJejuApp());
 }
 

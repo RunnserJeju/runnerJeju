@@ -1234,3 +1234,25 @@ class UserLogListOut(BaseModel):
 
     items: list[UserLogOut]
     next_cursor: str | None
+
+
+# --- 크래시 리포트 -----------------------------------------------------------
+
+CrashKind = Literal[
+    "android_crash", "android_native", "android_anr", "ios_crash", "ios_hang", "dart_error"
+]
+
+
+class CrashReportIn(BaseModel):
+    """POST /crash-reports의 meta(JSON 문자열). 덤프 파일은 따로 온다(multipart)."""
+
+    # 앱이 만든 id. 재시도해도 같은 값이라 한 건만 남는다.
+    id: uuid.UUID
+    kind: CrashKind
+    occurred_at: datetime
+    # 앱이 아는 한 줄 요약·스택(Kotlin 크래시, Dart 오류). 덤프에서 뽑은 값이 있으면 그쪽이 우선.
+    summary: str | None = None
+    stack: str | None = None
+    device: str | None = None
+    os_version: str | None = None
+    context: dict = Field(default_factory=dict)

@@ -1,6 +1,7 @@
 import '../api/auth_api.dart';
 import '../api/coupon_api.dart';
 import '../api/course_api.dart';
+import '../api/crash_api.dart';
 import '../api/event_api.dart';
 import '../api/favorite_api.dart';
 import '../api/home_api.dart';
@@ -17,6 +18,7 @@ import '../network/client_context_interceptor.dart';
 import 'auth_service.dart';
 import 'coupon_service.dart';
 import 'course_service.dart';
+import 'crash_reporter.dart';
 import 'current_location.dart';
 import 'event_service.dart';
 import 'favorite_service.dart';
@@ -157,4 +159,11 @@ class Services {
   /// 러닝 상태를 잠금화면에 미러링하는 표시 계층(Android 상시 알림 / iOS Live
   /// Activity). 데이터는 [runTracker]가 굴리고, 이건 화면 밖 표시만 맡는다.
   late final RunLiveWidget runLiveWidget = RunLiveWidget();
+
+  /// 크래시 콜스택을 서버로 올린다. 수집은 네이티브(CrashCollector.kt / CrashDiagnostics)가 한다.
+  late final CrashReporter crashReporter = CrashReporter(
+    CrashApi(apiClient),
+    userLog,
+    runTracker,
+  );
 }
