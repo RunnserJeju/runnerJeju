@@ -499,10 +499,15 @@ class Notice(Base):
     link_url: Mapped[str | None] = mapped_column(String(500), default=None)
     link_label: Mapped[str | None] = mapped_column(String(40), default=None)
 
-    # 앱을 켜자마자 팝업으로 띄울지. 켜진 공지가 여럿이면 앱이 가장 최근 것 하나만 띄운다.
+    # 앱을 켜자마자 팝업으로 띄울지. 켜진 공지가 여럿이면 앱이 sort_order 순으로 하나씩
+    # 띄운다(하나를 닫으면 다음 것).
     show_on_launch: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=false()
     )
+
+    # 노출 순서(작을수록 앞). 홈 배너·공지 목록·실행 시 팝업이 모두 이 순서를 따른다.
+    # 운영툴에서 통째로 다시 매기고(PUT /admin/notices/order), 새 공지는 맨 앞에 붙는다.
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
     # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).

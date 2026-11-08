@@ -784,9 +784,16 @@ class NoticeOut(BaseModel):
     link_url: str | None = None
     link_label: str | None = None
     show_on_launch: bool = False
+    sort_order: int = 0
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime
+
+
+class NoticeOrder(BaseModel):
+    """공지 순서 저장(PUT /admin/notices/order). 공지 전부의 id를 보여줄 순서대로."""
+
+    ids: list[uuid.UUID]
 
 
 # --- 이벤트 ----------------------------------------------------------------

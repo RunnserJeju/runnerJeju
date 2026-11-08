@@ -102,8 +102,10 @@ export interface Notice {
   /** 상세 아래 버튼. 외부 주소, 또는 개발자가 넣은 앱 화면(app:…) — 후자는 여기서 못 바꾼다. */
   link_url: string | null
   link_label: string | null
-  /** 앱을 켜자마자 팝업으로 띄운다. */
+  /** 앱을 켜자마자 팝업으로 띄운다. 여럿이면 sort_order 순으로 하나씩 뜬다. */
   show_on_launch: boolean
+  /** 노출 순서(작을수록 앞). 홈 배너·공지 목록·실행 시 팝업이 이 순서를 따른다. */
+  sort_order: number
   starts_at: string | null
   ends_at: string | null
   created_at: string
@@ -591,6 +593,15 @@ export function updateNotice(id: string, payload: NoticePayload): Promise<Notice
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  })
+}
+
+/** 공지 순서를 통째로 저장한다. 공지 전부의 id를 보여줄 순서대로. 그새 목록이 바뀌었으면 409. */
+export function reorderNotices(ids: string[]): Promise<Notice[]> {
+  return request('/admin/notices/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
   })
 }
 

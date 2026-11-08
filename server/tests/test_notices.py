@@ -21,7 +21,7 @@ from app import storage
 from app.admin import notices as admin_notices_router
 from app.models import Notice
 from app.routers import notices as notices_router
-from app.schemas import NoticeCreate, NoticeUpdate
+from app.schemas import NoticeCreate, NoticeOrder, NoticeUpdate
 
 NOW = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
 DAY = timedelta(days=1)
@@ -46,6 +46,11 @@ class _FakeResult:
 
     def scalars(self):
         return self._rows
+
+    def scalar(self):
+        # 라우터가 scalar()로 읽는 건 맨 앞 순서(min(sort_order))뿐이다.
+        orders = [row.sort_order for row in self._rows if row.sort_order is not None]
+        return min(orders) if orders else None
 
 
 class FakeSession:
@@ -161,6 +166,53 @@ class TestCreateNotice:
         result = admin_notices_router.create_notice(payload, db)
 
         assert result.starts_at is None and result.ends_at is None
+
+
+class TestNoticeOrder:
+    def test_new_notice_goes_first(self):
+        db = FakeSession([_notice(sort_order=0), _notice(sort_order=1)])
+
+        result = admin_notices_router.create_notice(
+            NoticeCreate(title="새 공지", body="내용"), db
+        )
+
+        assert result.sort_order == -1
+
+    def test_first_notice_starts_before_zero(self):
+        result = admin_notices_router.create_notice(
+            NoticeCreate(title="첫 공지", body="내용"), FakeSession()
+        )
+        assert result.sort_order == -1
+
+    def test_reorder_renumbers_from_zero(self):
+        a, b, c = _notice(sort_order=-1), _notice(sort_order=0), _notice(sort_order=1)
+        db = FakeSession([a, b, c])
+
+        result = admin_notices_router.reorder_notices(
+            NoticeOrder(ids=[c.id, a.id, b.id]), db
+        )
+
+        assert [n.id for n in result] == [c.id, a.id, b.id]
+        assert (c.sort_order, a.sort_order, b.sort_order) == (0, 1, 2)
+
+    def test_reorder_rejects_stale_list(self):
+        # 운영툴이 목록을 연 뒤 다른 사람이 공지를 추가했다 — 새 공지가 빠진 목록.
+        a, b = _notice(), _notice()
+        db = FakeSession([a, b, _notice()])
+
+        with pytest.raises(HTTPException) as exc:
+            admin_notices_router.reorder_notices(NoticeOrder(ids=[b.id, a.id]), db)
+
+        assert exc.value.status_code == 409
+
+    def test_reorder_rejects_duplicates(self):
+        a = _notice()
+        db = FakeSession([a])
+
+        with pytest.raises(HTTPException) as exc:
+            admin_notices_router.reorder_notices(NoticeOrder(ids=[a.id, a.id]), db)
+
+        assert exc.value.status_code == 422
 
 
 class TestUpdateNotice:

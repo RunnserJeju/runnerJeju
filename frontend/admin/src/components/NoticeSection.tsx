@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { ApiError, listNotices, type Notice } from '../api'
+import { ApiError, listNotices, reorderNotices, type Notice } from '../api'
 import NoticeCreateModal from '../modals/NoticeCreateModal'
 import NoticeEditModal from '../modals/NoticeEditModal'
-import SortTh, { useSort } from '../components/SortTh'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -33,12 +32,30 @@ function formatDateTime(iso: string | null): string {
 }
 
 /**
- * 홈 구성 페이지의 공지사항 섹션. 이미지가 있는 공지가 앱 홈 상단 캐러셀에 최신순으로
- * 나오고, 나머지는 텍스트 공지로만 보인다. 등록·수정은 모달.
+ * 저장 안 한 순서를 새로 받은 목록에 맞춘다. 순서를 바꾸던 중에 공지를 추가·삭제해도
+ * 바꾸던 순서가 날아가지 않게 — 새 공지는 서버처럼 맨 앞에, 지운 공지는 뺀다.
+ * 바꾸던 게 없으면 결과가 서버 순서와 같다.
+ */
+function keepLocalOrder(previous: string[] | null, loaded: Notice[]): string[] {
+  const ids = loaded.map((notice) => notice.id)
+  if (!previous) return ids
+  const alive = new Set(ids)
+  const known = new Set(previous)
+  return [...ids.filter((id) => !known.has(id)), ...previous.filter((id) => alive.has(id))]
+}
+
+/**
+ * 홈 구성 페이지의 공지사항 섹션. 위에서부터 앱 홈 배너·공지 목록에 나오고, 팝업이 켜진
+ * 공지는 앱을 켤 때 이 순서대로 하나씩 뜬다. 순서는 ↑↓로 바꾸고 저장한다. 등록·수정은 모달.
  */
 export default function NoticeSection({ onUnauthorized }: Props) {
   const [notices, setNotices] = useState<Notice[] | null>(null)
+  /** 화면에 보이는 순서(공지 id). 저장 전이면 서버 순서와 다르다. */
+  const [order, setOrder] = useState<string[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [orderError, setOrderError] = useState<string | null>(null)
+  const [savingOrder, setSavingOrder] = useState(false)
+  const [orderSaved, setOrderSaved] = useState(false)
   const [creating, setCreating] = useState(false)
   /** 수정 모달 대상. message는 등록 직후 이어서 열 때 전달된다. */
   const [editing, setEditing] = useState<{ id: string; message?: string } | null>(null)
@@ -47,6 +64,7 @@ export default function NoticeSection({ onUnauthorized }: Props) {
     listNotices()
       .then((loaded) => {
         setNotices(loaded)
+        setOrder((previous) => keepLocalOrder(previous, loaded))
         setError(null)
       })
       .catch((err: unknown) => {
@@ -63,12 +81,40 @@ export default function NoticeSection({ onUnauthorized }: Props) {
   }, [reload])
 
   const now = new Date()
-  const { sort, toggle, sorted } = useSort(notices, {
-    title: (n) => n.title,
-    status: (n) => VISIBILITY_LABEL[visibilityOf(n, now)],
-    period: (n) => n.starts_at ?? n.ends_at,
-    created: (n) => n.created_at,
-  })
+  const byId = new Map((notices ?? []).map((notice) => [notice.id, notice]))
+  const ordered = (order ?? []).flatMap((id) => byId.get(id) ?? [])
+  const serverKey = (notices ?? []).map((notice) => notice.id).join(',')
+  const orderDirty = order != null && order.join(',') !== serverKey
+
+  const move = (index: number, delta: number) => {
+    if (!order) return
+    const next = [...order]
+    const [moved] = next.splice(index, 1)
+    next.splice(index + delta, 0, moved)
+    setOrder(next)
+    setOrderSaved(false)
+    setOrderError(null)
+  }
+
+  const saveOrder = async () => {
+    if (!order) return
+    setSavingOrder(true)
+    setOrderError(null)
+    try {
+      const saved = await reorderNotices(order)
+      setNotices(saved)
+      setOrder(saved.map((notice) => notice.id))
+      setOrderSaved(true)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onUnauthorized()
+        return
+      }
+      setOrderError(err instanceof ApiError ? err.message : '순서를 저장하지 못했어요.')
+    } finally {
+      setSavingOrder(false)
+    }
+  }
 
   return (
     <div className="card">
@@ -76,7 +122,10 @@ export default function NoticeSection({ onUnauthorized }: Props) {
         <h3 style={{ margin: 0 }}>공지사항</h3>
         <button onClick={() => setCreating(true)}>+ 공지 추가</button>
       </div>
-      <p className="muted">이미지가 있는 공지만 앱 홈 상단 배너에 나와요.</p>
+      <p className="muted">
+        위에서부터 앱에 보이는 순서예요. 이미지가 있는 공지만 홈 상단 배너에 나오고, 팝업이 켜진
+        공지는 앱을 켤 때 이 순서대로 하나씩 떠요.
+      </p>
       {error && <div className="error">{error}</div>}
       {notices == null && !error && <p className="muted">불러오는 중…</p>}
       {notices && notices.length === 0 && <p className="muted">등록된 공지가 없어요.</p>}
@@ -84,26 +133,23 @@ export default function NoticeSection({ onUnauthorized }: Props) {
         <table>
           <thead>
             <tr>
+              <th style={{ width: 32 }}>#</th>
               <th></th>
-              <SortTh sortKey="title" sort={sort} onToggle={toggle}>
-                제목
-              </SortTh>
-              <SortTh sortKey="status" sort={sort} onToggle={toggle}>
-                상태
-              </SortTh>
-              <SortTh sortKey="period" sort={sort} onToggle={toggle}>
-                노출 기간
-              </SortTh>
-              <SortTh sortKey="created" sort={sort} onToggle={toggle}>
-                등록일
-              </SortTh>
+              <th>제목</th>
+              <th>상태</th>
+              <th>노출 기간</th>
+              <th>등록일</th>
+              <th>순서</th>
             </tr>
           </thead>
           <tbody>
-            {sorted!.map((notice) => {
+            {ordered.map((notice, index) => {
               const visibility = visibilityOf(notice, now)
               return (
                 <tr key={notice.id} onClick={() => setEditing({ id: notice.id })}>
+                  <td>
+                    <strong>{index + 1}</strong>
+                  </td>
                   <td style={{ width: 104 }}>
                     {notice.image_url ? (
                       <img className="thumb wide" src={notice.image_url} alt="" />
@@ -116,7 +162,10 @@ export default function NoticeSection({ onUnauthorized }: Props) {
                     <div className="muted clamp">{notice.body}</div>
                   </td>
                   <td>
-                    <span className={`badge ${visibility}`}>{VISIBILITY_LABEL[visibility]}</span>
+                    <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                      <span className={`badge ${visibility}`}>{VISIBILITY_LABEL[visibility]}</span>
+                      {notice.show_on_launch && <span className="badge popup">팝업</span>}
+                    </div>
                   </td>
                   <td className="muted">
                     {notice.starts_at || notice.ends_at
@@ -124,11 +173,55 @@ export default function NoticeSection({ onUnauthorized }: Props) {
                       : '상시'}
                   </td>
                   <td className="muted">{formatDateTime(notice.created_at)}</td>
+                  {/* 행을 누르면 수정 모달이 열리므로 버튼 클릭은 행까지 올리지 않는다. */}
+                  <td
+                    style={{ width: 1, whiteSpace: 'nowrap' }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="row" style={{ gap: 6 }}>
+                      <button
+                        className="secondary small"
+                        disabled={index === 0}
+                        onClick={() => move(index, -1)}
+                        aria-label="위로"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        className="secondary small"
+                        disabled={index === ordered.length - 1}
+                        onClick={() => move(index, 1)}
+                        aria-label="아래로"
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+      )}
+      {orderError && <div className="error">{orderError}</div>}
+      {notices && notices.length > 1 && (orderDirty || orderSaved) && (
+        <div className="submit-row">
+          <button onClick={saveOrder} disabled={!orderDirty || savingOrder}>
+            {savingOrder ? '저장 중…' : '순서 저장'}
+          </button>
+          {orderDirty && (
+            <button
+              className="secondary"
+              onClick={() => {
+                setOrder(notices.map((notice) => notice.id))
+                setOrderError(null)
+              }}
+            >
+              되돌리기
+            </button>
+          )}
+          {orderSaved && !orderDirty && <span className="muted">순서를 저장했어요.</span>}
+        </div>
       )}
 
       {creating && (

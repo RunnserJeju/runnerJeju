@@ -80,7 +80,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// '앱 실행 시 노출'이 켜진 공지가 있으면 가장 최근 것 하나를 팝업으로 띄운다. 실행당 한 번.
+  /// '앱 실행 시 노출'이 켜진 공지를 운영자가 정한 순서(서버가 내려준 순서)대로 하나씩
+  /// 팝업으로 띄운다. 하나를 닫으면(닫기·다시 보지 않기·바깥 누르기) 다음 것이 뜨고,
+  /// 링크 버튼으로 다른 화면에 넘어가면 남은 것은 띄우지 않는다. 실행당 한 번.
   /// 공지를 못 불러왔으면 조용히 넘어간다.
   void _showLaunchNotice() {
     if (_launchNoticeShown) return;
@@ -89,24 +91,26 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_launchNoticeShown) return;
           // 지난 러닝 복구 팝업·결과 화면이 뜨는 실행이면 공지는 겹쳐 띄우지 않는다.
           if (await Services.instance.runRecovery.takesOverLaunch) return;
-          // 켜진 공지 중 가장 최근 것. '다시 보지 않기'를 누른 공지는 건너뛴다.
-          Notice? launch;
-          for (final notice in notices.where((n) => n.showOnLaunch)) {
-            if (!await Services.instance.notice.isLaunchDismissed(notice.id)) {
-              launch = notice;
-              break;
-            }
-          }
-          if (launch == null || _launchNoticeShown || !mounted) return;
+          // '다시 보지 않기'를 누른 공지는 건너뛴다.
+          final queue = <Notice>[
+            for (final notice in notices.where((n) => n.showOnLaunch))
+              if (!await Services.instance.notice.isLaunchDismissed(notice.id))
+                notice,
+          ];
+          if (queue.isEmpty || _launchNoticeShown || !mounted) return;
           _launchNoticeShown = true;
-          final shown = launch;
-          showNoticeDetail(
-            context,
-            shown,
-            onOpenRunningWeek: widget.onOpenRunningWeek,
-            onDismissForever: () =>
-                Services.instance.notice.dismissLaunch(shown.id),
-          );
+
+          for (final notice in queue) {
+            if (!mounted) return;
+            final openedLink = await showNoticeDetail(
+              context,
+              notice,
+              onOpenRunningWeek: widget.onOpenRunningWeek,
+              onDismissForever: () =>
+                  Services.instance.notice.dismissLaunch(notice.id),
+            );
+            if (openedLink) return;
+          }
         })
         .catchError((_) {});
   }
@@ -510,13 +514,16 @@ class _PartnerItem extends StatelessWidget {
 /// 공지 상세 팝업. 배너를 누르거나 앱 실행 시 노출 공지로 연다. 링크가 있으면 본문 아래에 버튼.
 /// [onDismissForever]를 주면(실행 시 팝업) 카드 아래에 '다시 보지 않기 | 닫기'를 둔다.
 /// 직접 연 공지는 버튼 줄 없이 바깥을 눌러 닫는다.
-void showNoticeDetail(
+///
+/// 팝업이 닫히면 끝난다. 링크 버튼으로 나갔으면 true — 실행 시 팝업이 여럿일 때 남은
+/// 것을 띄울지 여기서 가른다(다른 화면으로 넘어간 사람 위에 팝업을 계속 띄우지 않는다).
+Future<bool> showNoticeDetail(
   BuildContext context,
   Notice notice, {
   required VoidCallback onOpenRunningWeek,
   VoidCallback? onDismissForever,
-}) {
-  showDialog<void>(
+}) async {
+  final openedLink = await showDialog<bool>(
     context: context,
     builder: (context) {
       // 팝업 카드와 그 아래 버튼 줄을 한 묶음으로 가운데에 띄운다. 버튼은 카드 밖, 어두운 배경 위.
@@ -587,7 +594,7 @@ void showNoticeDetail(
                               onPressed: () async {
                                 // 시트를 닫은 뒤엔 이 context를 못 쓴다 — 미리 잡아 둔다.
                                 final messenger = ScaffoldMessenger.of(context);
-                                Navigator.of(context).pop();
+                                Navigator.of(context).pop(true);
                                 switch (link) {
                                   case RunningWeekLink():
                                     onOpenRunningWeek();
@@ -652,4 +659,6 @@ void showNoticeDetail(
       );
     },
   );
+  // 닫기·다시 보지 않기·바깥 누르기는 모두 null이다.
+  return openedLink ?? false;
 }

@@ -162,8 +162,8 @@ export default function NoticeForm({ values, onChange }: Props) {
           />{' '}
           앱 실행 시 노출{' '}
           <span className="hint">
-            앱을 켜자마자 팝업으로 떠요. 여러 공지가 켜져 있으면 가장 최근 것 하나만, 앱을 켤 때 한
-            번 떠요
+            앱을 켜자마자 팝업으로 떠요. 여러 공지가 켜져 있으면 공지 목록 순서대로 하나씩 떠요(하나를
+            닫으면 다음 것)
           </span>
         </label>
       </div>

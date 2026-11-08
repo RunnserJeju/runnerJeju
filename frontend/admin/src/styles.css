@@ -373,6 +373,11 @@ tbody tr:hover {
   color: var(--muted);
 }
 
+.badge.popup {
+  background: #fff4e0;
+  color: #9a5b00;
+}
+
 .badge.revoked {
   background: #fdecec;
   color: #a12f2f;
