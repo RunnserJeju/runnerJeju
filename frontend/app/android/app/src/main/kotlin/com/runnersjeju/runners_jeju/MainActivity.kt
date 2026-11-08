@@ -17,6 +17,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "runners_jeju/heading")
             .setStreamHandler(HeadingStreamHandler(this))
+        ExitInfoChannel.register(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "runners_jeju/downloads")
             .setMethodCallHandler { call, result ->
                 try {

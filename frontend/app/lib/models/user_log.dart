@@ -94,6 +94,9 @@ abstract final class LogKeys {
   static const error = 'error';
   static const device = 'device';
 
+  /// 앱이 죽었다 복구될 때 직전 종료 사유(reason·importance·at 등, Android만).
+  static const exit = 'exit';
+
   /// 코스 방향 바꾸기를 누른 뒤 역방향인지(true) 원래 방향인지(false).
   static const reversed = 'reversed';
 
