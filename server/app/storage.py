@@ -29,6 +29,8 @@ SUPABASE_COURSE_BUCKET = os.environ.get("SUPABASE_COURSE_BUCKET", "course-thumbn
 SUPABASE_STAMP_BUCKET = os.environ.get("SUPABASE_STAMP_BUCKET", "course-stamps")
 SUPABASE_PARTNER_BUCKET = os.environ.get("SUPABASE_PARTNER_BUCKET", "partner-images")
 SUPABASE_PROFILE_BUCKET = os.environ.get("SUPABASE_PROFILE_BUCKET", "profile-images")
+# 앱 크래시 원본 덤프. 사용자 기기 정보가 담겨 공개하지 않는다(비공개 버킷).
+SUPABASE_CRASH_BUCKET = os.environ.get("SUPABASE_CRASH_BUCKET", "crash-dumps")
 
 # try_create_public_bucket이 이미 확인한 버킷. 프로세스마다 한 번만 물어본다.
 _known_buckets: set[str] = set()
@@ -170,3 +172,27 @@ def delete_image(image_url: str, *, bucket: str | None = None) -> None:
         )
     except httpx.HTTPError:
         pass
+
+
+def upload_private(content: bytes, *, path: str, content_type: str, bucket: str) -> str:
+    """비공개 버킷에 올리고 버킷 안 경로를 돌려준다. 버킷은 Supabase 콘솔에서 미리 만들어 둔다.
+
+    같은 경로가 이미 있으면 덮어쓴다(업로드 재시도가 같은 경로로 온다).
+    """
+    if not SUPABASE_URL or not SUPABASE_API_SECRET_KEY:
+        raise StorageUploadError("Storage가 설정되어 있지 않아요 (SUPABASE_URL / SUPABASE_API_SECRET_KEY).")
+
+    response = httpx.put(
+        f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}",
+        headers={
+            "Authorization": f"Bearer {SUPABASE_API_SECRET_KEY}",
+            "apikey": SUPABASE_API_SECRET_KEY,
+            "Content-Type": content_type,
+            "x-upsert": "true",
+        },
+        content=content,
+        timeout=30,
+    )
+    if response.status_code >= 400:
+        raise StorageUploadError(f"파일 업로드에 실패했어요: {response.text[:200]}")
+    return path

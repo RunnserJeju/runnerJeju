@@ -124,6 +124,15 @@ export default function LogsPage({ onUnauthorized }: Props) {
             />
           </div>
           <div className="field">
+            <label htmlFor="log-nickname">닉네임</label>
+            <input
+              id="log-nickname"
+              value={draft.nickname ?? ''}
+              placeholder="부분 일치"
+              onChange={(e) => set('nickname', e.target.value)}
+            />
+          </div>
+          <div className="field">
             <label htmlFor="log-user">회원 id</label>
             <input
               id="log-user"

@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from app.admin import events as admin_events
 from app.models import Event
 from app.routers import events as events_router
-from app.schemas import EventCreate, EventUpdate
+from app.schemas import EventCreate, EventOrder, EventUpdate
 
 NOW = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
 DAY = timedelta(days=1)
@@ -42,6 +42,11 @@ class _FakeResult:
 
     def scalars(self):
         return self._rows
+
+    def scalar(self):
+        # 라우터가 scalar()로 읽는 건 맨 앞 순서(min(sort_order))뿐이다.
+        orders = [row.sort_order for row in self._rows if row.sort_order is not None]
+        return min(orders) if orders else None
 
 
 class FakeSession:
@@ -81,7 +86,6 @@ class TestAdminCrud:
             body="본문",
             starts_at=NOW,
             ends_at=NOW + DAY,
-            sort_order=2,
             is_active=False,
         )
 
@@ -89,19 +93,21 @@ class TestAdminCrud:
 
         assert result.title == "가을 챌린지" and result.body == "본문"
         assert result.starts_at == NOW and result.ends_at == NOW + DAY
-        assert result.sort_order == 2 and result.is_active is False
+        assert result.is_active is False
         assert result in db.added
 
     def test_update_replaces_fields(self):
-        e = _event(title="옛")
+        e = _event(title="옛", sort_order=3)
         db = FakeSession([e])
 
         admin_events.update_event(
-            e.id, EventUpdate(title="새", body="새 본문", is_active=False, sort_order=5), db
+            e.id, EventUpdate(title="새", body="새 본문", is_active=False), db
         )
 
         assert e.title == "새" and e.body == "새 본문"
-        assert e.is_active is False and e.sort_order == 5
+        assert e.is_active is False
+        # 순서는 수정으로 안 바뀐다 — 순서 저장(PUT /admin/events/order)으로만.
+        assert e.sort_order == 3
 
     def test_delete(self):
         e = _event()
@@ -117,6 +123,39 @@ class TestAdminCrud:
                 uuid.uuid4(), EventUpdate(title="t", body="b"), FakeSession()
             )
         assert exc.value.status_code == 404
+
+
+class TestEventOrder:
+    def test_new_event_goes_first(self):
+        db = FakeSession([_event(sort_order=0), _event(sort_order=1)])
+
+        result = admin_events.create_event(EventCreate(title="새", body="본문"), db)
+
+        assert result.sort_order == -1
+
+    def test_old_admin_sort_order_is_ignored(self):
+        # 옛 운영툴은 sort_order를 같이 보낸다. 받지 않고 맨 앞에 붙인다.
+        payload = EventCreate.model_validate({"title": "t", "body": "b", "sort_order": 9})
+        result = admin_events.create_event(payload, FakeSession())
+        assert result.sort_order == -1
+
+    def test_reorder_renumbers_from_zero(self):
+        a, b, c = _event(sort_order=-1), _event(sort_order=0), _event(sort_order=1)
+        db = FakeSession([a, b, c])
+
+        result = admin_events.reorder_events(EventOrder(ids=[c.id, a.id, b.id]), db)
+
+        assert [e.id for e in result] == [c.id, a.id, b.id]
+        assert (c.sort_order, a.sort_order, b.sort_order) == (0, 1, 2)
+
+    def test_reorder_rejects_stale_list(self):
+        a, b = _event(), _event()
+        db = FakeSession([a, b, _event()])
+
+        with pytest.raises(HTTPException) as exc:
+            admin_events.reorder_events(EventOrder(ids=[b.id, a.id]), db)
+
+        assert exc.value.status_code == 409
 
 
 class TestVisibility:

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { ApiError, listNotices, type Notice } from '../api'
+import { ApiError, listNotices, reorderNotices, type Notice } from '../api'
 import NoticeCreateModal from '../modals/NoticeCreateModal'
 import NoticeEditModal from '../modals/NoticeEditModal'
-import SortTh, { useSort } from '../components/SortTh'
+import { OrderCell, OrderSaveRow, useListOrder } from './ListOrder'
 
 interface Props {
   /** 목록 로딩이 401이면(세션 만료 등) 인증 화면으로 되돌린다. */
@@ -33,8 +33,8 @@ function formatDateTime(iso: string | null): string {
 }
 
 /**
- * 홈 구성 페이지의 공지사항 섹션. 이미지가 있는 공지가 앱 홈 상단 캐러셀에 최신순으로
- * 나오고, 나머지는 텍스트 공지로만 보인다. 등록·수정은 모달.
+ * 홈 구성 페이지의 공지사항 섹션. 위에서부터 앱 홈 배너·공지 목록에 나오고, 팝업이 켜진
+ * 공지는 앱을 켤 때 이 순서대로 하나씩 뜬다. 순서는 ↑↓로 바꾸고 저장한다. 등록·수정은 모달.
  */
 export default function NoticeSection({ onUnauthorized }: Props) {
   const [notices, setNotices] = useState<Notice[] | null>(null)
@@ -63,12 +63,13 @@ export default function NoticeSection({ onUnauthorized }: Props) {
   }, [reload])
 
   const now = new Date()
-  const { sort, toggle, sorted } = useSort(notices, {
-    title: (n) => n.title,
-    status: (n) => VISIBILITY_LABEL[visibilityOf(n, now)],
-    period: (n) => n.starts_at ?? n.ends_at,
-    created: (n) => n.created_at,
+  const order = useListOrder({
+    items: notices,
+    save: reorderNotices,
+    onSaved: setNotices,
+    onUnauthorized,
   })
+  const { ordered } = order
 
   return (
     <div className="card">
@@ -76,7 +77,10 @@ export default function NoticeSection({ onUnauthorized }: Props) {
         <h3 style={{ margin: 0 }}>공지사항</h3>
         <button onClick={() => setCreating(true)}>+ 공지 추가</button>
       </div>
-      <p className="muted">이미지가 있는 공지만 앱 홈 상단 배너에 나와요.</p>
+      <p className="muted">
+        위에서부터 앱에 보이는 순서예요. 이미지가 있는 공지만 홈 상단 배너에 나오고, 팝업이 켜진
+        공지는 앱을 켤 때 이 순서대로 하나씩 떠요.
+      </p>
       {error && <div className="error">{error}</div>}
       {notices == null && !error && <p className="muted">불러오는 중…</p>}
       {notices && notices.length === 0 && <p className="muted">등록된 공지가 없어요.</p>}
@@ -84,26 +88,23 @@ export default function NoticeSection({ onUnauthorized }: Props) {
         <table>
           <thead>
             <tr>
+              <th style={{ width: 32 }}>#</th>
               <th></th>
-              <SortTh sortKey="title" sort={sort} onToggle={toggle}>
-                제목
-              </SortTh>
-              <SortTh sortKey="status" sort={sort} onToggle={toggle}>
-                상태
-              </SortTh>
-              <SortTh sortKey="period" sort={sort} onToggle={toggle}>
-                노출 기간
-              </SortTh>
-              <SortTh sortKey="created" sort={sort} onToggle={toggle}>
-                등록일
-              </SortTh>
+              <th>제목</th>
+              <th>상태</th>
+              <th>노출 기간</th>
+              <th>등록일</th>
+              <th>순서</th>
             </tr>
           </thead>
           <tbody>
-            {sorted!.map((notice) => {
+            {ordered.map((notice, index) => {
               const visibility = visibilityOf(notice, now)
               return (
                 <tr key={notice.id} onClick={() => setEditing({ id: notice.id })}>
+                  <td>
+                    <strong>{index + 1}</strong>
+                  </td>
                   <td style={{ width: 104 }}>
                     {notice.image_url ? (
                       <img className="thumb wide" src={notice.image_url} alt="" />
@@ -116,7 +117,10 @@ export default function NoticeSection({ onUnauthorized }: Props) {
                     <div className="muted clamp">{notice.body}</div>
                   </td>
                   <td>
-                    <span className={`badge ${visibility}`}>{VISIBILITY_LABEL[visibility]}</span>
+                    <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                      <span className={`badge ${visibility}`}>{VISIBILITY_LABEL[visibility]}</span>
+                      {notice.show_on_launch && <span className="badge popup">팝업</span>}
+                    </div>
                   </td>
                   <td className="muted">
                     {notice.starts_at || notice.ends_at
@@ -124,12 +128,14 @@ export default function NoticeSection({ onUnauthorized }: Props) {
                       : '상시'}
                   </td>
                   <td className="muted">{formatDateTime(notice.created_at)}</td>
+                  <OrderCell index={index} count={ordered.length} onMove={order.move} />
                 </tr>
               )
             })}
           </tbody>
         </table>
       )}
+      <OrderSaveRow state={order} />
 
       {creating && (
         <NoticeCreateModal

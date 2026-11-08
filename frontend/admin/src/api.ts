@@ -102,8 +102,10 @@ export interface Notice {
   /** 상세 아래 버튼. 외부 주소, 또는 개발자가 넣은 앱 화면(app:…) — 후자는 여기서 못 바꾼다. */
   link_url: string | null
   link_label: string | null
-  /** 앱을 켜자마자 팝업으로 띄운다. */
+  /** 앱을 켜자마자 팝업으로 띄운다. 여럿이면 sort_order 순으로 하나씩 뜬다. */
   show_on_launch: boolean
+  /** 노출 순서(작을수록 앞). 홈 배너·공지 목록·실행 시 팝업이 이 순서를 따른다. */
+  sort_order: number
   starts_at: string | null
   ends_at: string | null
   created_at: string
@@ -522,11 +524,13 @@ export interface CommunityEvent {
   is_active: boolean
   /** 공개 범위. admin이면 운영자 계정에만 보인다(코스와 같다). */
   visibility: CourseVisibility
+  /** 앱 목록 순서(작을수록 위). 순서 저장(reorderEvents)으로만 바뀐다. */
   sort_order: number
   created_at: string
   updated_at: string
 }
 
+/** 등록/수정 페이로드. 순서는 여기서 안 보낸다 — reorderEvents로만. */
 export interface CommunityEventPayload {
   title: string
   body: string
@@ -534,11 +538,33 @@ export interface CommunityEventPayload {
   ends_at: string | null
   is_active: boolean
   visibility: CourseVisibility
-  sort_order: number
+}
+
+/** 이벤트 하나의 상세 조회 수. 조회가 없는 이벤트는 목록에 없다(0). */
+export interface EventViewCount {
+  event_id: string
+  /** 상세를 연 횟수. */
+  views: number
+  /** 상세를 연 사람 수(중복 제외). */
+  viewers: number
 }
 
 export function listEvents(): Promise<CommunityEvent[]> {
   return request('/admin/events')
+}
+
+/** 이벤트별 상세 조회 수(전체 기간). 앱 업데이트 뒤부터 쌓인다. */
+export function listEventViews(): Promise<EventViewCount[]> {
+  return request('/admin/events/views')
+}
+
+/** 이벤트 순서를 통째로 저장한다. 이벤트 전부의 id를 보여줄 순서대로. 그새 목록이 바뀌었으면 409. */
+export function reorderEvents(ids: string[]): Promise<CommunityEvent[]> {
+  return request('/admin/events/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
 }
 
 export function createEvent(payload: CommunityEventPayload): Promise<CommunityEvent> {
@@ -591,6 +617,15 @@ export function updateNotice(id: string, payload: NoticePayload): Promise<Notice
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  })
+}
+
+/** 공지 순서를 통째로 저장한다. 공지 전부의 id를 보여줄 순서대로. 그새 목록이 바뀌었으면 409. */
+export function reorderNotices(ids: string[]): Promise<Notice[]> {
+  return request('/admin/notices/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
   })
 }
 
@@ -1095,6 +1130,8 @@ export interface AdminRun {
   completion: 'completed' | 'pending' | 'incomplete' | 'none'
   /** 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 null. */
   match_rate: number | null
+  /** 러닝 중 앱이 죽어 다음 실행 때 복구된 기록인지. */
+  app_killed: boolean
 }
 
 /** 모든 회원의 러닝 기록. from/to는 KST 날짜(YYYY-MM-DD) 양끝 포함, 시작 시각 기준. */
@@ -1134,6 +1171,8 @@ export interface UserLogRow {
 export interface UserLogFilter {
   log_name?: string
   user_id?: string
+  /** 부분 일치. */
+  nickname?: string
   session_id?: string
   from?: string
   to?: string

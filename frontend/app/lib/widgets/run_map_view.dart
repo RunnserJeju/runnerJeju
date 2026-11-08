@@ -34,6 +34,7 @@ class RunMapView extends StatefulWidget {
     this.restrooms = const [],
     this.partners = const [],
     this.runPath = const [],
+    this.basePath = const [],
     this.currentPosition,
     this.initialCenter,
     this.isRunning = false,
@@ -60,6 +61,10 @@ class RunMapView extends StatefulWidget {
   /// [currentPosition]이 있으면 무시된다 — 그때는 들어오는 위치로 경로를 직접
   /// 만들어 그린다([_GrowingRoute]). 같은 경로를 두 번 그리지 않기 위해서다.
   final List<GeoPoint> runPath;
+
+  /// 이어달리기의 원래 기록 경로. 이미 달린 길이라 흐린 선으로 [runPath] 아래에 깐다.
+  /// 끊긴 자리([GeoPoint.startsNewSegment])에서는 나눠 그린다.
+  final List<GeoPoint> basePath;
 
   /// 지금 위치. 주면 이 위젯이 자체 렌더 루프를 돌려 마커와 경로를 함께 그린다.
   final GeoPoint? currentPosition;
@@ -158,6 +163,10 @@ class _RunMapViewState extends State<RunMapView>
   /// 하나씩 나뉘므로 여러 개가 된다.
   final List<kakao.Route> _staticRunRoutes = [];
   List<GeoPoint>? _drawnStaticRunPath;
+
+  /// [RunMapView.basePath]를 그린 선들.
+  final List<kakao.Route> _baseRunRoutes = [];
+  List<GeoPoint>? _drawnBasePath;
 
   /// 러닝 중 자라는 경로.
   _GrowingRoute? _liveRoute;
@@ -258,6 +267,12 @@ class _RunMapViewState extends State<RunMapView>
 
   late final kakao.RouteStyle _runStyle = kakao.RouteStyle(
     AppColors.ink,
+    _runLineWidth,
+  );
+
+  /// 이어달리기의 이미 달린 구간. 지금 달리는 선(검정)과 구분되게 회색으로 둔다.
+  late final kakao.RouteStyle _baseRunStyle = kakao.RouteStyle(
+    AppColors.muted,
     _runLineWidth,
   );
   kakao.PoiStyle? _currentPositionStyle;
@@ -404,6 +419,7 @@ class _RunMapViewState extends State<RunMapView>
       !identical(_lastSample, widget.currentPosition) ||
       !_isSamePath(old.coursePath, widget.coursePath) ||
       !_isSamePath(old.runPath, widget.runPath) ||
+      !_isSamePath(old.basePath, widget.basePath) ||
       !identical(old.parkings, widget.parkings) ||
       !identical(old.restrooms, widget.restrooms) ||
       !identical(old.partners, widget.partners);
@@ -443,7 +459,8 @@ class _RunMapViewState extends State<RunMapView>
         widget.initialCenter ??
         widget.currentPosition ??
         GeoUtils.centerOf(widget.coursePath) ??
-        GeoUtils.centerOf(widget.runPath);
+        GeoUtils.centerOf(widget.runPath) ??
+        GeoUtils.centerOf(widget.basePath);
     if (center == null) {
       return widget.isAwaitingLocation
           ? const MapLoadingView()
@@ -516,6 +533,7 @@ class _RunMapViewState extends State<RunMapView>
         await _drawCourse(controller);
         await _drawCourseEndpoints(controller);
         await _drawFacilities(controller);
+        await _drawBasePath(controller);
         await _drawStaticRunPath(controller);
       } while (_needsRedraw && !_disposed);
     } finally {
@@ -986,6 +1004,30 @@ class _RunMapViewState extends State<RunMapView>
     }
   }
 
+  /// 이어달리기의 원래 경로. 러닝 내내 그대로라 바뀔 때만 다시 그린다.
+  Future<void> _drawBasePath(kakao.KakaoMapController controller) async {
+    final points = widget.basePath;
+    if (_drawnBasePath != null && _isSamePath(_drawnBasePath!, points)) return;
+    _drawnBasePath = points;
+
+    for (final route in _baseRunRoutes) {
+      await controller.routeLayer.removeRoute(route);
+    }
+    _baseRunRoutes.clear();
+
+    for (final segment in GeoUtils.splitAtBreaks(points)) {
+      if (segment.length < 2) continue;
+      _baseRunRoutes.add(
+        await controller.routeLayer.addRoute(
+          segment.map((p) => p.toLatLng()).toList(),
+          _baseRunStyle,
+          zOrder: _baseRunZOrder,
+        ),
+      );
+      if (_disposed) return;
+    }
+  }
+
   Future<void> _moveCamera(kakao.KakaoMapController controller) async {
     final position = widget.currentPosition;
     if (widget.followCurrentPosition && position != null) {
@@ -1024,7 +1066,11 @@ class _RunMapViewState extends State<RunMapView>
     // 라이브 위치가 있는 동안에는 하지 않는다. 러닝 중에는 현위치를 따라가야
     // 하고, 일시정지했다고 카메라가 갑자기 전체 경로로 물러나면 곤란하다.
     if (!_hasFittedStaticPath && widget.currentPosition == null) {
-      final points = [...widget.coursePath, ...widget.runPath];
+      final points = [
+        ...widget.coursePath,
+        ...widget.basePath,
+        ...widget.runPath,
+      ];
       if (points.length >= 2) {
         _hasFittedStaticPath = true;
         await controller.moveCamera(
@@ -1167,9 +1213,11 @@ class _RunMapViewState extends State<RunMapView>
       a.latitude == b.latitude &&
       a.longitude == b.longitude;
 
-  // 달린 경로가 코스 위에 오도록 쌓는 순서를 고정한다.
+  // 달린 경로가 코스 위에 오도록 쌓는 순서를 고정한다. 이어달리기의 이미 달린
+  // 구간은 그 사이 — 지금 달리는 선이 겹치면 그쪽이 보여야 한다.
   static const int _courseZOrder = 10000;
-  static const int _runZOrder = 10001;
+  static const int _baseRunZOrder = 10001;
+  static const int _runZOrder = 10002;
 }
 
 /// 러닝 중 자라는 경로. 확정 구간과 현위치까지의 꼬리를 나눠 그린다.

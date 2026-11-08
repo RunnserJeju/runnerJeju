@@ -63,6 +63,7 @@ enum LogName {
   couponView('coupon_view'),
   couponUseClick('coupon_use_click'),
   // 커뮤니티
+  eventDetailOpen('event_detail_open'),
   externalLinkOpen('external_link_open'),
   // 계정
   login('login'),
@@ -82,6 +83,8 @@ abstract final class LogKeys {
   static const runId = 'run_id';
   static const noticeId = 'notice_id';
   static const partnerId = 'partner_id';
+  static const eventId = 'event_id';
+  static const url = 'url';
   static const source = 'source';
   static const section = 'section';
   static const position = 'position';
@@ -90,6 +93,9 @@ abstract final class LogKeys {
   static const distanceM = 'distance_m';
   static const error = 'error';
   static const device = 'device';
+
+  /// 앱이 죽었다 복구될 때 직전 종료 사유(reason·importance·at 등, Android만).
+  static const exit = 'exit';
 
   /// 코스 방향 바꾸기를 누른 뒤 역방향인지(true) 원래 방향인지(false).
   static const reversed = 'reversed';

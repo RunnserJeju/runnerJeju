@@ -2,6 +2,7 @@ package com.runnersjeju.runners_jeju
 
 import android.content.ContentValues
 import android.content.Intent
+import android.os.Bundle
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -13,10 +14,18 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // 엔진·플러그인이 뜨는 동안의 크래시도 잡도록 가장 먼저 건다.
+        CrashCollector.installUncaughtHandler(this)
+        super.onCreate(savedInstanceState)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        CrashCollector.register(flutterEngine.dartExecutor.binaryMessenger, this)
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, "runners_jeju/heading")
             .setStreamHandler(HeadingStreamHandler(this))
+        ExitInfoChannel.register(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "runners_jeju/downloads")
             .setMethodCallHandler { call, result ->
                 try {

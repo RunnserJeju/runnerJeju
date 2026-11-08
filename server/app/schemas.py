@@ -416,6 +416,18 @@ class RunCreate(BaseModel):
     path: list[RunPointSchema]
 
 
+class RunContinue(BaseModel):
+    """이어달리기로 붙일 구간 하나. 코스는 원래 기록의 것을 그대로 쓴다."""
+
+    # 앱이 구간마다 만드는 id. 업로드를 재시도해도 같은 구간이 두 번 붙지 않는다.
+    segment_id: uuid.UUID
+    started_at: datetime
+    ended_at: datetime
+    distance_meters: float
+    duration_sec: int
+    path: list[RunPointSchema]
+
+
 class RunOut(BaseModel):
     id: uuid.UUID
     course_id: uuid.UUID | None
@@ -427,6 +439,8 @@ class RunOut(BaseModel):
     path: list[RunPointSchema]
     # 이 러닝으로 코스 완주 인증이 통과했는지.
     completed: bool = False
+    # 코스 경로 일치율 0~1. 이어달리기 목록(GET /runs/continuable)에서만 채운다.
+    match_rate: float | None = None
 
 
 class RunUploadResult(BaseModel):
@@ -770,9 +784,16 @@ class NoticeOut(BaseModel):
     link_url: str | None = None
     link_label: str | None = None
     show_on_launch: bool = False
+    sort_order: int = 0
     starts_at: datetime | None
     ends_at: datetime | None
     created_at: datetime
+
+
+class NoticeOrder(BaseModel):
+    """공지 순서 저장(PUT /admin/notices/order). 공지 전부의 id를 보여줄 순서대로."""
+
+    ids: list[uuid.UUID]
 
 
 # --- 이벤트 ----------------------------------------------------------------
@@ -787,7 +808,8 @@ class EventCreate(BaseModel):
     ends_at: datetime | None = None
     is_active: bool = True
     visibility: Visibility = "admin"
-    sort_order: int = 0
+    # 순서는 여기서 받지 않는다 — PUT /admin/events/order로만 바꾼다. 옛 운영툴이
+    # sort_order를 같이 보내도 무시된다(정의되지 않은 필드).
 
     @model_validator(mode="after")
     def _check_period(self):
@@ -817,6 +839,22 @@ class AdminEventOut(EventOut):
     visibility: Visibility
     sort_order: int
     updated_at: datetime
+
+
+class EventOrder(BaseModel):
+    """이벤트 순서 저장(PUT /admin/events/order). 이벤트 전부의 id를 보여줄 순서대로."""
+
+    ids: list[uuid.UUID]
+
+
+class EventViewCount(BaseModel):
+    """이벤트 하나의 상세 조회 수(GET /admin/events/views). 앱의 event_detail_open 로그를 센다."""
+
+    event_id: uuid.UUID
+    # 상세를 연 횟수(같은 사람이 여러 번 열면 그만큼).
+    views: int
+    # 상세를 연 사람 수(로그인 사용자 기준, 중복 제외).
+    viewers: int
 
 
 # --- 회원 (운영자 조회) ---------------------------------------------------
@@ -893,6 +931,8 @@ class AdminRunOut(BaseModel):
     # completed 완주 / pending 검증 중 / incomplete 미완주 / none 코스 없이 뛴 러닝
     completion: str
     match_rate: float | None  # 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 None
+    # 러닝 중 앱이 죽어 다음 실행 때 복구된 기록인지(run_recover 로그로 판정)
+    app_killed: bool = False
 
 
 class AdminRunListOut(BaseModel):
@@ -1194,3 +1234,25 @@ class UserLogListOut(BaseModel):
 
     items: list[UserLogOut]
     next_cursor: str | None
+
+
+# --- 크래시 리포트 -----------------------------------------------------------
+
+CrashKind = Literal[
+    "android_crash", "android_native", "android_anr", "ios_crash", "ios_hang", "dart_error"
+]
+
+
+class CrashReportIn(BaseModel):
+    """POST /crash-reports의 meta(JSON 문자열). 덤프 파일은 따로 온다(multipart)."""
+
+    # 앱이 만든 id. 재시도해도 같은 값이라 한 건만 남는다.
+    id: uuid.UUID
+    kind: CrashKind
+    occurred_at: datetime
+    # 앱이 아는 한 줄 요약·스택(Kotlin 크래시, Dart 오류). 덤프에서 뽑은 값이 있으면 그쪽이 우선.
+    summary: str | None = None
+    stack: str | None = None
+    device: str | None = None
+    os_version: str | None = None
+    context: dict = Field(default_factory=dict)

@@ -26,7 +26,9 @@ class _CompletedCoursesScreenState extends State<CompletedCoursesScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   @override

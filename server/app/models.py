@@ -332,8 +332,19 @@ class Run(Base):
 
     path: Mapped[list] = mapped_column(JSONB, default=list)
 
+    # 이어달리기로 붙인 구간들(붙인 순). 한 구간은 {segment_id, started_at, ended_at,
+    # distance_meters, duration_sec, point_count, appended_at}. segment_id로 같은 구간이
+    # 두 번 붙는 것(업로드 재시도)을 막고, 나중에 기록을 다시 나눌 근거가 된다.
+    continuations: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+    # 이어달리기로 기록이 바뀐 마지막 시각. 한 번도 안 바뀌었으면 None.
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
     )
 
     course: Mapped[Course | None] = relationship()
@@ -488,10 +499,15 @@ class Notice(Base):
     link_url: Mapped[str | None] = mapped_column(String(500), default=None)
     link_label: Mapped[str | None] = mapped_column(String(40), default=None)
 
-    # 앱을 켜자마자 팝업으로 띄울지. 켜진 공지가 여럿이면 앱이 가장 최근 것 하나만 띄운다.
+    # 앱을 켜자마자 팝업으로 띄울지. 켜진 공지가 여럿이면 앱이 sort_order 순으로 하나씩
+    # 띄운다(하나를 닫으면 다음 것).
     show_on_launch: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=false()
     )
+
+    # 노출 순서(작을수록 앞). 홈 배너·공지 목록·실행 시 팝업이 모두 이 순서를 따른다.
+    # 운영툴에서 통째로 다시 매기고(PUT /admin/notices/order), 새 공지는 맨 앞에 붙는다.
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # 노출 기간. 둘 다 nullable이고 null은 "제한 없음"이다 — starts_at=None은 즉시부터,
     # ends_at=None은 무기한. 앱은 지금 시각이 이 구간 안인 공지만 본다(routers/notices).
@@ -623,7 +639,8 @@ class Event(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # 'public' | 'admin'. 러닝위크와 같다 — admin이면 운영자 계정에만 보인다.
     visibility: Mapped[str] = mapped_column(String(20), default="admin")
-    # 앱 목록 정렬. 작을수록 위, 같으면 최신순.
+    # 앱 목록 순서. 작을수록 위, 같으면 최신순. 운영툴에서 통째로 다시 매기고
+    # (PUT /admin/events/order), 새 이벤트는 맨 앞에 붙는다 — 공지와 같다.
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -903,5 +920,38 @@ class CouponDraw(Base):
         UUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL"), default=None
     )
     drawn_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class CrashReport(Base):
+    """앱 크래시·ANR·iOS 멈춤 한 건. 원본 덤프는 비공개 Storage(dump_path)에, 여기는 요약만.
+
+    id는 앱이 만든다 — 업로드를 재시도해도 같은 건이 두 번 쌓이지 않는다. 크래시 순간에는
+    앱이 아무것도 못 하므로 다음 실행 때 올라온다(occurred_at이 실제 시각).
+    """
+
+    __tablename__ = "crash_reports"
+    __table_args__ = (Index("ix_crash_reports_occurred", "occurred_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String(100), default=None, index=True)
+    session_id: Mapped[str | None] = mapped_column(String(36), default=None)
+    platform: Mapped[str | None] = mapped_column(String(10), default=None)
+    # 올린 앱의 버전. 크래시 난 버전과 다를 수 있다(업데이트 직후) — context에 따로 담기도 한다.
+    app_version: Mapped[str | None] = mapped_column(String(20), default=None)
+    device: Mapped[str | None] = mapped_column(String(100), default=None)
+    os_version: Mapped[str | None] = mapped_column(String(100), default=None)
+    # android_crash | android_native | android_anr | ios_crash | ios_hang | dart_error
+    kind: Mapped[str] = mapped_column(String(20))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    summary: Mapped[str | None] = mapped_column(String(500), default=None)
+    # 죽은 자리의 라이브러리·함수. 같은 원인끼리 묶는 기준.
+    culprit: Mapped[str | None] = mapped_column(String(200), default=None)
+    stack: Mapped[str | None] = mapped_column(Text, default=None)
+    dump_path: Mapped[str | None] = mapped_column(String(200), default=None)
+    # 당시 러닝 상태, Android 종료 정보(importance·메모리) 등 앱이 아는 문맥.
+    context: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

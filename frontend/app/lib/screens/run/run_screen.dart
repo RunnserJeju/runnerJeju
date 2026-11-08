@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/geo_point.dart';
+import '../../models/run_record.dart';
 import '../../models/running_course.dart';
 import '../../models/user_log.dart';
 import '../../services/location_service.dart';
@@ -22,10 +23,21 @@ import 'run_result_screen.dart';
 /// 러닝 화면: 지도에 실시간 경로를 그리고 거리/시간/페이스를 보여준다.
 ///
 /// [course]를 주면 코스를 따라 달리는 러닝이 되고, 코스 경로가 함께 그려진다.
+///
+/// [continuation]을 주면 그 기록에 이어 달린다. 지표는 원래 기록을 더한 누적값이고,
+/// 원래 경로는 지도에 흐리게 깔린다. 저장은 이번 구간만 올려 서버가 합친다.
 class RunScreen extends StatefulWidget {
-  const RunScreen({super.key, this.course, this.initialCenter});
+  const RunScreen({
+    super.key,
+    this.course,
+    this.initialCenter,
+    this.continuation,
+  });
 
   final RunningCourse? course;
+
+  /// 이어 달릴 원래 기록(경로 포함).
+  final RunRecord? continuation;
 
   /// 지도를 처음 놓을 자리. 러닝을 시작한 화면이 방금 잡은 현위치를 넘겨 준다.
   /// 있으면 지도가 곧바로 그 자리에서 열리고, 없으면 여기서 직접 조회할 때까지
@@ -51,9 +63,35 @@ class _RunScreenState extends State<RunScreen> {
   /// 밀면 꺼진다. 꺼진 동안 "내 위치로" 버튼이 뜨고, 누르면 다시 켜진다.
   bool _isFollowing = true;
 
+  /// 이어달리기를 시작하기 전에 보여줄 원래 기록의 코스 진행도. 시작하면 tracker가 잇는다.
+  late final double? _baseProgress = switch ((
+    widget.course,
+    widget.continuation,
+  )) {
+    (final course?, final base?) => RunTracker.progressFor(
+      course,
+      base.path,
+      base.distanceMeters,
+    ),
+    _ => null,
+  };
+
+  /// 시작 전에는 원래 기록 값, 시작한 뒤에는 누적값(tracker가 원래 기록을 더한다).
+  bool get _showsBaseOnly =>
+      widget.continuation != null && _tracker.status == RunStatus.idle;
+
+  double get _displayDistance => _showsBaseOnly
+      ? widget.continuation!.distanceMeters
+      : _tracker.totalDistanceMeters;
+
+  Duration get _displayElapsed =>
+      _showsBaseOnly ? widget.continuation!.duration : _tracker.totalElapsed;
+
   @override
   void initState() {
     super.initState();
+    // 떠 있는 동안 러닝 탭의 지도를 내린다 — 지도 엔진이 둘 뜨지 않게.
+    Services.instance.runFlow.enter();
     _tracker.addListener(_onTrackerChanged);
     Services.instance.heading.start();
     _initialCenter = widget.initialCenter;
@@ -68,13 +106,14 @@ class _RunScreenState extends State<RunScreen> {
     // 화면을 벗어나면 잠금화면 위젯도 걷어낸다 — 유령 위젯이 남지 않게.
     // (정상 종료는 _finish에서 이미 걷지만, 여기서 한 번 더 안전망을 둔다.)
     unawaited(_liveWidget.stop());
+    Services.instance.runFlow.leave();
     super.dispose();
   }
 
   /// tracker의 현재 값으로 위젯에 보낼 한 컷을 만든다.
   RunWidgetData _snapshot() => RunWidgetData(
-    distanceMeters: _tracker.distanceMeters,
-    elapsed: _tracker.elapsed,
+    distanceMeters: _tracker.totalDistanceMeters,
+    elapsed: _tracker.totalElapsed,
     // 잠금화면은 칸이 하나라 화면의 주 지표(최근 1km)를 따른다.
     paceSecondsPerKm:
         _tracker.recentPaceSecondsPerKm ?? _tracker.paceSecondsPerKm,
@@ -136,6 +175,7 @@ class _RunScreenState extends State<RunScreen> {
     final availability = await _tracker.start(
       course: widget.course,
       source: source,
+      continuation: widget.continuation,
     );
     if (availability.isReady) {
       if (mounted) setState(() => _isFollowing = true);
@@ -218,6 +258,7 @@ class _RunScreenState extends State<RunScreen> {
     }
 
     // 시작하자마자 끝낸 러닝은 기록이 아니다. 저장도 검증도 없이 그냥 닫는다.
+    // 이어달리기도 같다 — 원래 기록은 건드리지 않은 채 남는다.
     if (record.isTooShort) {
       unawaited(Services.instance.runJournal.discard());
       _tracker.reset();
@@ -233,8 +274,11 @@ class _RunScreenState extends State<RunScreen> {
     await Services.instance.runJournal.flush();
     if (!mounted) return;
 
+    // 이어달리기면 올리는 것은 이번 구간이지만, 결과 화면은 합친 기록을 보여준다.
+    final base = widget.continuation;
+    final shown = base == null ? record : RunRecord.continued(base, record);
     await Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => RunResultScreen(record: record)),
+      MaterialPageRoute(builder: (_) => RunResultScreen(record: shown)),
     );
   }
 
@@ -277,6 +321,7 @@ class _RunScreenState extends State<RunScreen> {
                 restrooms: widget.course?.restrooms ?? const [],
                 partners: widget.course?.partners ?? const [],
                 runPath: tracker.path,
+                basePath: widget.continuation?.path ?? const [],
                 currentPosition: tracker.currentPosition,
                 initialCenter: _initialCenter,
                 isRunning: tracker.status == RunStatus.running,
@@ -296,7 +341,7 @@ class _RunScreenState extends State<RunScreen> {
                 children: [
                   _TopBar(
                     course: widget.course,
-                    progress: tracker.courseProgress,
+                    progress: tracker.courseProgress ?? _baseProgress,
                     onClose: isActive
                         ? null
                         : () => Navigator.of(context).pop(),
@@ -304,6 +349,9 @@ class _RunScreenState extends State<RunScreen> {
                   const Spacer(),
                   _ControlPanel(
                     tracker: tracker,
+                    distanceMeters: _displayDistance,
+                    elapsed: _displayElapsed,
+                    isContinuation: widget.continuation != null,
                     coursePath: widget.course?.path ?? const [],
                     onStart: _start,
                     onStartSimulation: (source) => _start(source: source),
@@ -439,6 +487,9 @@ class _TopBar extends StatelessWidget {
 class _ControlPanel extends StatelessWidget {
   const _ControlPanel({
     required this.tracker,
+    required this.distanceMeters,
+    required this.elapsed,
+    required this.isContinuation,
     required this.coursePath,
     required this.onStart,
     required this.onStartSimulation,
@@ -448,6 +499,11 @@ class _ControlPanel extends StatelessWidget {
   });
 
   final RunTracker tracker;
+
+  /// 보여줄 거리·시간. 이어달리기면 원래 기록을 더한 누적값이다.
+  final double distanceMeters;
+  final Duration elapsed;
+  final bool isContinuation;
 
   final List<GeoPoint> coursePath;
   final VoidCallback onStart;
@@ -480,8 +536,8 @@ class _ControlPanel extends StatelessWidget {
           ],
           Center(
             child: MetricTile(
-              label: '거리 (KM)',
-              value: Formatters.distanceKm(tracker.distanceMeters),
+              label: isContinuation ? '누적 거리 (KM)' : '거리 (KM)',
+              value: Formatters.distanceKm(distanceMeters),
               emphasized: true,
               alignment: CrossAxisAlignment.center,
             ),
@@ -491,12 +547,13 @@ class _ControlPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               MetricTile(
-                label: '시간',
-                value: Formatters.duration(tracker.elapsed),
+                label: isContinuation ? '누적 시간' : '시간',
+                value: Formatters.duration(elapsed),
                 alignment: CrossAxisAlignment.center,
               ),
               // 주 지표는 최근 1km. 1km 전에는 지금까지 전체가 창이라 평균과
-              // 같은 값이므로 라벨에서 "최근 1km"를 뗀다.
+              // 같은 값이므로 라벨에서 "최근 1km"를 뗀다. 이어달리기면 창은 이번
+              // 구간 안에서만 잡히고, 평균은 원래 기록까지 합친 값이다.
               MetricTile(
                 label: tracker.distanceMeters >= 1000 ? '최근 1km 페이스' : '페이스',
                 value: Formatters.pace(tracker.recentPaceSecondsPerKm),
@@ -508,6 +565,7 @@ class _ControlPanel extends StatelessWidget {
           const SizedBox(height: 24),
           _Controls(
             tracker: tracker,
+            isContinuation: isContinuation,
             coursePath: coursePath,
             onStart: onStart,
             onStartSimulation: onStartSimulation,
@@ -524,6 +582,7 @@ class _ControlPanel extends StatelessWidget {
 class _Controls extends StatelessWidget {
   const _Controls({
     required this.tracker,
+    required this.isContinuation,
     required this.coursePath,
     required this.onStart,
     required this.onStartSimulation,
@@ -533,6 +592,7 @@ class _Controls extends StatelessWidget {
   });
 
   final RunTracker tracker;
+  final bool isContinuation;
   final List<GeoPoint> coursePath;
   final VoidCallback onStart;
   final void Function(LocationService source) onStartSimulation;
@@ -548,7 +608,10 @@ class _Controls extends StatelessWidget {
       RunStatus.idle || RunStatus.finished => Row(
         children: [
           Expanded(
-            child: FilledButton(onPressed: onStart, child: const Text('러닝 시작')),
+            child: FilledButton(
+              onPressed: onStart,
+              child: Text(isContinuation ? '이어 달리기 시작' : '러닝 시작'),
+            ),
           ),
           if (kDebugMode) ...[
             const SizedBox(width: 12),

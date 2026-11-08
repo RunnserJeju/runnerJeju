@@ -6,16 +6,19 @@ import {
   deleteEvent,
   deleteEventImage,
   listEvents,
+  listEventViews,
+  reorderEvents,
   setEventImage,
   updateEvent,
   type CommunityEvent,
   type CourseVisibility,
   type CommunityEventPayload,
+  type EventViewCount,
 } from '../api'
 import { ImageSection, imageChanged, NO_IMAGE_CHANGE, type ImageChange } from '../components/ImageSections'
+import { OrderCell, OrderSaveRow, useListOrder } from '../components/ListOrder'
 import Modal from '../components/Modal'
 import SaveFooter from '../components/SaveFooter'
-import SortTh, { useSort } from '../components/SortTh'
 import { runSteps, snapshot, type SaveStep } from '../utils/saveSteps'
 
 interface Props {
@@ -55,14 +58,23 @@ function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** 커뮤니티 이벤트 관리(#70). 그림 한 장(선택)과 게시글. */
+/**
+ * 커뮤니티 이벤트 관리(#70). 그림 한 장(선택)과 게시글. 위에서부터 앱에 보이는 순서이고
+ * ↑↓로 바꿔 저장한다(공지와 같다). 조회수는 앱이 상세를 열 때 남기는 로그를 센다.
+ */
 export default function EventListPage({ onUnauthorized }: Props) {
   const [events, setEvents] = useState<CommunityEvent[] | null>(null)
+  /** 이벤트 id → 조회 수. 못 불러오면 null(열에 '—'). */
+  const [views, setViews] = useState<Map<string, EventViewCount> | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** 열린 모달. 'new'면 등록, 아니면 그 이벤트 수정. */
   const [editing, setEditing] = useState<'new' | CommunityEvent | null>(null)
 
   const reload = useCallback(() => {
+    // 조회수는 곁가지다. 실패해도 목록은 보여야 하므로 따로 받는다.
+    listEventViews()
+      .then((loaded) => setViews(new Map(loaded.map((count) => [count.event_id, count]))))
+      .catch(() => setViews(null))
     listEvents()
       .then((loaded) => {
         setEvents(loaded)
@@ -82,13 +94,13 @@ export default function EventListPage({ onUnauthorized }: Props) {
   }, [reload])
 
   const now = new Date()
-  const { sort, toggle, sorted } = useSort(events, {
-    title: (e) => e.title,
-    status: (e) => VISIBILITY_LABEL[visibilityOf(e, now)],
-    period: (e) => e.starts_at ?? e.ends_at,
-    order: (e) => e.sort_order,
-    created: (e) => e.created_at,
+  const order = useListOrder({
+    items: events,
+    save: reorderEvents,
+    onSaved: setEvents,
+    onUnauthorized,
   })
+  const { ordered } = order
 
   return (
     <>
@@ -97,7 +109,8 @@ export default function EventListPage({ onUnauthorized }: Props) {
         <button onClick={() => setEditing('new')}>+ 이벤트 추가</button>
       </div>
       <p className="muted page-desc">
-        앱 커뮤니티 탭의 이벤트 목록에 보여요. 본문에 붙여 넣은 링크는 앱에서 눌러 열 수 있어요.
+        앱 커뮤니티 탭의 이벤트 목록에 위에서부터 이 순서로 보여요. 본문에 붙여 넣은 링크는 앱에서
+        눌러 열 수 있어요. 조회수는 앱에서 상세를 연 횟수(본 사람 수)예요.
       </p>
       {error && <div className="error">{error}</div>}
       {events == null && !error && <p className="muted">불러오는 중…</p>}
@@ -106,29 +119,25 @@ export default function EventListPage({ onUnauthorized }: Props) {
         <table>
           <thead>
             <tr>
+              <th style={{ width: 32 }}>#</th>
               <th></th>
-              <SortTh sortKey="title" sort={sort} onToggle={toggle}>
-                제목
-              </SortTh>
-              <SortTh sortKey="status" sort={sort} onToggle={toggle}>
-                상태
-              </SortTh>
-              <SortTh sortKey="period" sort={sort} onToggle={toggle}>
-                노출 기간
-              </SortTh>
-              <SortTh sortKey="order" sort={sort} onToggle={toggle}>
-                정렬
-              </SortTh>
-              <SortTh sortKey="created" sort={sort} onToggle={toggle}>
-                등록일
-              </SortTh>
+              <th>제목</th>
+              <th>상태</th>
+              <th>노출 기간</th>
+              <th>조회수</th>
+              <th>등록일</th>
+              <th>순서</th>
             </tr>
           </thead>
           <tbody>
-            {sorted!.map((event) => {
+            {ordered.map((event, index) => {
               const visibility = visibilityOf(event, now)
+              const count = views?.get(event.id)
               return (
                 <tr key={event.id} onClick={() => setEditing(event)}>
+                  <td>
+                    <strong>{index + 1}</strong>
+                  </td>
                   <td style={{ width: 104 }}>
                     {event.image_url ? (
                       <img className="thumb wide" src={event.image_url} alt="" />
@@ -150,14 +159,25 @@ export default function EventListPage({ onUnauthorized }: Props) {
                       ? `${formatDateTime(event.starts_at)} ~ ${formatDateTime(event.ends_at)}`
                       : '상시'}
                   </td>
-                  <td className="muted">{event.sort_order}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {views == null ? (
+                      <span className="muted">—</span>
+                    ) : (
+                      <>
+                        {(count?.views ?? 0).toLocaleString()}
+                        <span className="muted"> ({(count?.viewers ?? 0).toLocaleString()}명)</span>
+                      </>
+                    )}
+                  </td>
                   <td className="muted">{formatDateTime(event.created_at)}</td>
+                  <OrderCell index={index} count={ordered.length} onMove={order.move} />
                 </tr>
               )
             })}
           </tbody>
         </table>
       )}
+      <OrderSaveRow state={order} />
 
       {editing && (
         <EventModal
@@ -184,7 +204,6 @@ interface EventValues {
   endsAt: string
   isActive: boolean
   visibility: CourseVisibility
-  sortOrder: number
 }
 
 function valuesFromEvent(event: CommunityEvent | null): EventValues {
@@ -195,7 +214,6 @@ function valuesFromEvent(event: CommunityEvent | null): EventValues {
     endsAt: toLocalInput(event?.ends_at ?? null),
     isActive: event?.is_active ?? true,
     visibility: event?.visibility ?? 'admin',
-    sortOrder: event?.sort_order ?? 0,
   }
 }
 
@@ -247,7 +265,6 @@ function EventModal({
         ends_at: end ? end.toISOString() : null,
         is_active: values.isActive,
         visibility: values.visibility,
-        sort_order: values.sortOrder,
       }
     }
 
@@ -354,17 +371,6 @@ function EventModal({
           </div>
         </div>
         <div className="row">
-          <div className="field">
-            <label htmlFor="event-order">
-              정렬 <span className="hint">작을수록 위, 같으면 최신순</span>
-            </label>
-            <input
-              id="event-order"
-              type="number"
-              value={values.sortOrder}
-              onChange={(e) => set({ sortOrder: Number(e.target.value) || 0 })}
-            />
-          </div>
           <div className="field">
             <label>
               <input

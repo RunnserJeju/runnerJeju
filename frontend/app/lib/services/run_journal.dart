@@ -34,7 +34,15 @@ class RunJournal {
   }
 
   /// 새 러닝. 이전 일지가 남아 있으면 버린다(이미 처리된 것).
-  void begin({String? courseId, String? courseName}) {
+  ///
+  /// 이어달리기면 붙일 기록과 구간 id도 적는다. 복구할 때 새 기록이 아니라 그 기록
+  /// 뒤에 붙여야 하고, 같은 구간 id여야 이미 붙었는지 서버가 알아본다.
+  void begin({
+    String? courseId,
+    String? courseName,
+    String? continuesRunId,
+    String? segmentId,
+  }) {
     _active = true;
     _ready = _open();
     write({
@@ -42,6 +50,8 @@ class RunJournal {
       'at': _now(),
       'course_id': ?courseId,
       'course_name': ?courseName,
+      'continues_run_id': ?continuesRunId,
+      'segment_id': ?segmentId,
     });
   }
 
@@ -162,6 +172,8 @@ class RunJournal {
     }
     String? courseId;
     String? courseName;
+    String? continuesRunId;
+    String? segmentId;
     DateTime? startedAt;
     DateTime? endedAt;
     Duration? duration;
@@ -183,6 +195,8 @@ class RunJournal {
         case 'start':
           courseId = e['course_id'] as String?;
           courseName = e['course_name'] as String?;
+          continuesRunId = e['continues_run_id'] as String?;
+          segmentId = e['segment_id'] as String?;
         case 'started':
           startedAt = at;
         case 'p':
@@ -223,6 +237,8 @@ class RunJournal {
       distanceMeters: distance,
       duration: ran.isNegative ? Duration.zero : ran,
       path: points,
+      continuesRunId: continuesRunId,
+      segmentId: segmentId,
     );
   }
 

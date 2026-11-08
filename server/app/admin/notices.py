@@ -11,13 +11,19 @@ GET /admin/courses와 같은 이유).
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import storage
 from app.db import get_db
 from app.models import Notice
-from app.schemas import NOTICE_APP_LINK_PREFIX, NoticeCreate, NoticeOut, NoticeUpdate
+from app.schemas import (
+    NOTICE_APP_LINK_PREFIX,
+    NoticeCreate,
+    NoticeOrder,
+    NoticeOut,
+    NoticeUpdate,
+)
 
 router = APIRouter(tags=["notices"])
 
@@ -56,7 +62,9 @@ def list_all_notices(db: Session = Depends(get_db)):
     보고 고쳐야 하기 때문이다.
     """
     return list(
-        db.execute(select(Notice).order_by(Notice.created_at.desc())).scalars()
+        db.execute(
+            select(Notice).order_by(Notice.sort_order, Notice.created_at.desc())
+        ).scalars()
     )
 
 
@@ -65,9 +73,12 @@ def create_notice(
     payload: NoticeCreate,
     db: Session = Depends(get_db),
 ):
-    """공지를 등록한다. (관리자 전용 — 라우터 레벨에서 강제)"""
+    """공지를 등록한다. 맨 앞에 붙는다. (관리자 전용 — 라우터 레벨에서 강제)"""
     _check_link_editable(payload.link_url, None)
+    # 지금 맨 앞보다 하나 앞. 음수가 돼도 상관없다 — 순서를 저장하면 0부터 다시 매긴다.
+    first = db.execute(select(func.min(Notice.sort_order))).scalar()
     notice = Notice(
+        sort_order=(first if first is not None else 0) - 1,
         title=payload.title,
         body=payload.body,
         link_url=payload.link_url,
@@ -82,6 +93,32 @@ def create_notice(
     db.refresh(notice)
 
     return notice
+
+
+@router.put("/notices/order", response_model=list[NoticeOut])
+def reorder_notices(payload: NoticeOrder, db: Session = Depends(get_db)):
+    """공지 순서를 통째로 다시 매긴다. (관리자 전용 — 라우터 레벨에서 강제)
+
+    목록 전부를 받는다. 운영툴이 목록을 연 뒤 다른 사람이 공지를 추가·삭제했으면
+    빠지거나 남는 id가 생기는데, 그대로 저장하면 그 공지의 순서가 어긋난다. 그때는
+    409로 돌려보내 새로 불러오게 한다.
+    """
+    ids = payload.ids
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail="같은 공지가 두 번 들어 있어요.")
+
+    notices = {notice.id: notice for notice in db.execute(select(Notice)).scalars()}
+    if set(ids) != set(notices):
+        raise HTTPException(
+            status_code=409,
+            detail="그새 공지 목록이 바뀌었어요. 새로고침한 뒤 다시 정해 주세요.",
+        )
+
+    for order, notice_id in enumerate(ids):
+        notices[notice_id].sort_order = order
+    db.commit()
+
+    return [notices[notice_id] for notice_id in ids]
 
 
 @router.patch("/notices/{notice_id}", response_model=NoticeOut)

@@ -13,6 +13,7 @@ import '../../models/running_course.dart';
 import '../../models/user_log.dart';
 import '../../services/course_service.dart';
 import '../../services/current_location.dart';
+import '../../services/run_flow_presence.dart';
 import '../../services/service_locator.dart';
 import '../../services/user_log_service.dart';
 import '../../theme/app_theme.dart';
@@ -175,13 +176,10 @@ class RunningScreenState extends State<RunningScreen> {
   /// 점, 내 위치 버튼, 시작점까지의 거리 판정이 전부 이 값을 쓴다.
   CurrentLocation get _currentLocation => Services.instance.currentLocation;
 
-  /// 러닝 화면이 위에 떠 있는 동안인지.
-  ///
-  /// 그동안에는 이 화면의 지도를 트리에서 뺀다. 라우트를 밀어 올려도 아래 화면은
-  /// 살아 있어서, 가만히 두면 카카오맵 네이티브 뷰가 둘이 된다 — 하나는 달리는
-  /// 사람이 보고 있고, 하나는 아무도 못 보는 채로 메모리만 쓴다. 위젯을 떼면
-  /// 네이티브 쪽이 mapView.finish()까지 확실히 정리한다.
-  bool _isRunningScreenOpen = false;
+  /// 러닝·결과 화면이 위에 떠 있는지. 어디서 열었든(이 탭, 마이페이지 이어 달리기,
+  /// 결과 화면 팝업) 떠 있는 동안에는 이 화면의 지도를 트리에서 뺀다
+  /// ([RunFlowPresence]). 위젯을 떼면 네이티브 쪽이 mapView.finish()까지 정리한다.
+  RunFlowPresence get _runFlow => Services.instance.runFlow;
 
   @override
   void initState() {
@@ -827,8 +825,6 @@ class RunningScreenState extends State<RunningScreen> {
       }
     }
 
-    setState(() => _isRunningScreenOpen = true);
-
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => RunScreen(course: course, initialCenter: origin),
@@ -836,9 +832,9 @@ class RunningScreenState extends State<RunningScreen> {
     );
     if (!mounted) return;
 
-    // 지도는 여기서 새로 만들어진다. 고른 코스·검색어·내 위치는 이 State에
-    // 있어서 그대로 살아 있고, 지도가 다시 잡아야 하는 건 카메라뿐이다.
-    setState(() => _isRunningScreenOpen = false);
+    // 러닝 화면이 결과 화면으로 바뀌면 여기로 온다. 지도는 결과 화면까지 닫혀야
+    // 새로 만들어진다([_runFlow]). 고른 코스·검색어·내 위치는 이 State에 있어서
+    // 그대로 살아 있고, 지도가 다시 잡아야 하는 건 카메라뿐이다.
 
     // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다. 보고 있던
     // 코스의 상세 시트도 같은 값을 보여주므로 다시 받는다.
@@ -978,40 +974,43 @@ class RunningScreenState extends State<RunningScreen> {
           Positioned.fill(
             // 현위치는 매초 바뀐다. 화면 전체가 아니라 위치를 쓰는 지도만
             // 다시 그리도록 여기서만 듣는다.
-            child: _isRunningScreenOpen
-                ? const ColoredBox(color: AppColors.paper)
-                : ListenableBuilder(
-                    listenable: _currentLocation,
-                    builder: (context, _) => CourseMapView(
-                      controller: _mapController,
-                      // 켜진 칩의 레이어만 찍는다([_layer]).
-                      courses: _showsCourses ? _visibleCourses : const [],
-                      selectedCourseId: selected?.id,
-                      selectedPath: detail?.path ?? const [],
-                      // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
-                      // 좌표 포함)을 쓰고, 오면 상세 값으로 바뀐다.
-                      selectedParkings: selected == null
-                          ? const []
-                          : (detail ?? selected).parkings,
-                      selectedRestrooms: selected == null
-                          ? const []
-                          : (detail ?? selected).restrooms,
-                      // 코스를 고르면 레이어가 courses로 돌아가므로 코스만 남는다.
-                      partners: _showsPartners ? _partners : const [],
-                      selectedPartnerId: _selectedPartner?.id,
-                      onPartnerTap: _onPartnerMarkerTap,
-                      myPosition: _currentLocation.latest,
-                      onCourseTap: (course) =>
-                          _selectCourse(course, source: LogSource.map),
-                      onMapTap: _clearSelection,
-                      // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
-                      // 코스가 있으면 그 자리에서 다시 시작한다.
-                      // 디버그 빌드는 현위치와 상관없이 제주시청에서 시작한다.
-                      initialCenter:
-                          (detail ?? selected)?.startPoint ??
-                          (kDebugMode ? _debugStartCenter : null),
+            child: ListenableBuilder(
+              listenable: _runFlow,
+              builder: (context, _) => _runFlow.isOpen
+                  ? const ColoredBox(color: AppColors.paper)
+                  : ListenableBuilder(
+                      listenable: _currentLocation,
+                      builder: (context, _) => CourseMapView(
+                        controller: _mapController,
+                        // 켜진 칩의 레이어만 찍는다([_layer]).
+                        courses: _showsCourses ? _visibleCourses : const [],
+                        selectedCourseId: selected?.id,
+                        selectedPath: detail?.path ?? const [],
+                        // 선택된 코스의 시설만 마커로. 상세가 오기 전엔 목록 값(이미
+                        // 좌표 포함)을 쓰고, 오면 상세 값으로 바뀐다.
+                        selectedParkings: selected == null
+                            ? const []
+                            : (detail ?? selected).parkings,
+                        selectedRestrooms: selected == null
+                            ? const []
+                            : (detail ?? selected).restrooms,
+                        // 코스를 고르면 레이어가 courses로 돌아가므로 코스만 남는다.
+                        partners: _showsPartners ? _partners : const [],
+                        selectedPartnerId: _selectedPartner?.id,
+                        onPartnerTap: _onPartnerMarkerTap,
+                        myPosition: _currentLocation.latest,
+                        onCourseTap: (course) =>
+                            _selectCourse(course, source: LogSource.map),
+                        onMapTap: _clearSelection,
+                        // 러닝을 마치고 돌아오면 지도가 새로 태어난다. 보고 있던
+                        // 코스가 있으면 그 자리에서 다시 시작한다.
+                        // 디버그 빌드는 현위치와 상관없이 제주시청에서 시작한다.
+                        initialCenter:
+                            (detail ?? selected)?.startPoint ??
+                            (kDebugMode ? _debugStartCenter : null),
+                      ),
                     ),
-                  ),
+            ),
           ),
           Positioned(
             top: 0,

@@ -13,6 +13,7 @@ from app.routers import (
     auth,
     coupons,
     courses,
+    crash_reports,
     events,
     favorites,
     home,
@@ -59,6 +60,7 @@ app.include_router(runs.router)
 app.include_router(verifications.router)
 app.include_router(stamps.router)
 app.include_router(user_logs.router)
+app.include_router(crash_reports.router)
 app.include_router(notices.router)
 app.include_router(partners.router)
 app.include_router(home.router)

@@ -30,7 +30,8 @@ def list_notices(
     db: Session = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ):
-    """앱에 노출할 공지 목록. 지금 노출 기간 안인 것만 최신순으로 내린다.
+    """앱에 노출할 공지 목록. 지금 노출 기간 안인 것만 운영자가 정한 순서(sort_order)로
+    내린다. 같은 순서면 최신순.
 
     필터링을 SQL이 아니라 파이썬에서 하는 건 공지가 소량(배너처럼 전량 로드)이라
     비용이 없고, 노출 규칙(_is_visible)을 DB 없이도 그대로 테스트할 수 있어서다.
@@ -38,6 +39,6 @@ def list_notices(
     """
     now = datetime.now(timezone.utc)
     notices = db.execute(
-        select(Notice).order_by(Notice.created_at.desc())
+        select(Notice).order_by(Notice.sort_order, Notice.created_at.desc())
     ).scalars()
     return [notice for notice in notices if _is_visible(notice, now)]

@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/course_partner.dart';
 import '../models/run_record.dart';
 import '../models/user_log.dart';
+import '../services/exit_info.dart';
 import '../services/run_tracker.dart';
 import '../services/service_locator.dart';
 import '../services/user_log_service.dart';
@@ -58,10 +59,12 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
+    final exit = await lastExitInfo();
     final detail = {
       LogKeys.courseId: ?record.courseId,
       LogKeys.distanceM: record.distanceMeters.round(),
       LogKeys.elapsedSec: record.duration.inSeconds,
+      LogKeys.exit: ?exit,
     };
     // 러닝 화면의 종료와 같은 기준: 너무 짧으면 기록이 아니다.
     if (record.isTooShort) {
@@ -74,7 +77,8 @@ class _AppShellState extends State<AppShell> {
       return;
     }
     // 응답만 못 받고 서버엔 들어갔을 수 있어 같은 시작 시각 기록이 있으면 다시 올리지 않는다.
-    final uploaded = await _alreadyUploaded(record);
+    // 이어달리기 구간은 서버가 구간 id로 중복을 걸러 주므로 그냥 다시 올린다.
+    final uploaded = !record.isContinuation && await _alreadyUploaded(record);
     if (uploaded) unawaited(journal.discard());
     if (uploaded || !mounted || !_canRecover) {
       recovery.settle(false);
