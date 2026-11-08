@@ -75,7 +75,9 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
           ? await auth.removeProfileImage()
           : await auth.updateProfileImage(path);
       if (!mounted) return;
-      setState(() => _future = Future.value(updated));
+      setState(() {
+        _future = Future.value(updated);
+      });
     } on AppException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -136,7 +138,9 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
         future: _future,
         builder: (context, snapshot) => AsyncView<User?>(
           snapshot: snapshot,
-          onRetry: () => setState(() => _future = _load()),
+          onRetry: () => setState(() {
+            _future = _load();
+          }),
           builder: (context, user) => ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
             children: [

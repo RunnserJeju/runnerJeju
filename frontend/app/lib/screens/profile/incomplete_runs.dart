@@ -13,7 +13,7 @@ import 'run_record_tile.dart';
 /// 이어 달리기를 고른 기록을 받는다. 확인 시트를 거친 뒤에만 불린다.
 typedef ContinueRun = void Function(RunRecord record);
 
-/// 마이페이지의 "미완주 기록": 최근 7일 안에 시작해 아직 완주하지 못한 코스 러닝.
+/// 마이페이지의 "이어 달리기": 최근 7일 안에 시작해 아직 완주하지 못한 코스 러닝.
 /// 최근 [_previewCount]개만 보이고, 더 있으면 "더보기"로 전체(7일치)를 연다.
 /// 이어 달릴 기록이 없어도 섹션은 두고 "이어 달릴 기록이 없어요"를 보여준다.
 class IncompleteRunsSection extends StatefulWidget {
@@ -26,15 +26,17 @@ class IncompleteRunsSection extends StatefulWidget {
 }
 
 class _IncompleteRunsSectionState extends State<IncompleteRunsSection> {
-  static const int _previewCount = 5;
+  static const int _previewCount = 3;
 
   // 하나 더 받아 "더보기"를 띄울지 정한다. 전체 개수를 따로 묻지 않는다.
   late Future<List<RunRecord>> _future = _load();
 
-  static Future<List<RunRecord>> _load() => Services.instance.run
-      .loadContinuableRecords(limit: _previewCount + 1);
+  static Future<List<RunRecord>> _load() =>
+      Services.instance.run.loadContinuableRecords(limit: _previewCount + 1);
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   // 러닝이 저장되거나 검증이 끝나면 목록이 바뀐다(새 미완주 기록, 이어 달려 완주한 기록).
   // 마이페이지는 탭으로 살아 있어 돌아와도 다시 만들어지지 않으므로 직접 다시 받는다.
@@ -154,10 +156,7 @@ class _NoticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: SizedBox(
-        height: 64,
-        child: Center(child: child),
-      ),
+      child: SizedBox(height: 64, child: Center(child: child)),
     );
   }
 }
@@ -178,7 +177,7 @@ class _Frame extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Expanded(child: SectionTitle('미완주 기록')),
+              const Expanded(child: SectionTitle('이어 달리기')),
               if (onMore != null)
                 TextButton(
                   onPressed: onMore,
@@ -223,7 +222,9 @@ class _IncompleteRunsScreenState extends State<IncompleteRunsScreen> {
       Services.instance.run.loadContinuableRecords(limit: _limit);
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
+    setState(() {
+      _future = _load();
+    });
   }
 
   @override
@@ -319,7 +320,9 @@ class IncompleteRunTile extends StatelessWidget {
                   const SizedBox(width: 8),
                   FilledButton(
                     onPressed: () => _continue(context),
+                    // 테마 기본은 가로 무한이라 Row 안에서는 폭을 정해 줘야 한다.
                     style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 36),
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                       textStyle: const TextStyle(
@@ -379,7 +382,10 @@ class IncompleteRunTile extends StatelessWidget {
 }
 
 /// 이어 달리기 전 확인. 시작을 고르면 true.
-Future<bool> showContinueRunSheet(BuildContext context, RunRecord record) async {
+Future<bool> showContinueRunSheet(
+  BuildContext context,
+  RunRecord record,
+) async {
   final confirmed = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -444,7 +450,9 @@ class _ContinueRunSheet extends StatelessWidget {
             const SizedBox(height: 4),
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              style: TextButton.styleFrom(foregroundColor: AppColors.textSubtle),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textSubtle,
+              ),
               child: const Text('취소'),
             ),
           ],
