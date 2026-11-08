@@ -1171,6 +1171,8 @@ export interface UserLogRow {
 export interface UserLogFilter {
   log_name?: string
   user_id?: string
+  /** 부분 일치. */
+  nickname?: string
   session_id?: string
   from?: string
   to?: string

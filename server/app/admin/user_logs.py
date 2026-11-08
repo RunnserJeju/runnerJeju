@@ -1,7 +1,7 @@
 """운영자용 원본 로그 열람 — GET /admin/user-logs.
 
 대시보드 숫자는 metrics가 맡고, 여기는 행을 그대로 보는 창구다(특정 회원의 흐름,
-새 로그의 detail 확인). 필터는 log_name·user_id·session_id·기간이고 최신순
+새 로그의 detail 확인). 필터는 log_name·user_id·닉네임·session_id·기간이고 최신순
 keyset 페이지네이션이라 로그가 쌓여도 뒤 페이지가 느려지지 않는다. 회원 닉네임은
 users를 조인해 붙인다(탈퇴자는 null).
 """
@@ -54,6 +54,7 @@ def list_log_names():
 def list_user_logs(
     log_name: str | None = Query(default=None),
     user_id: str | None = Query(default=None),
+    nickname: str | None = Query(default=None),
     session_id: str | None = Query(default=None),
     start: date | None = Query(default=None, alias="from"),
     end: date | None = Query(default=None, alias="to"),
@@ -66,6 +67,9 @@ def list_user_logs(
         filters.append(UserLog.log_name == log_name)
     if user_id:
         filters.append(UserLog.user_id == user_id)
+    if nickname:
+        # 부분 일치. 조인된 users 열이라 탈퇴자(null)는 자연히 빠진다.
+        filters.append(User.nickname.ilike(f"%{nickname.strip()}%"))
     if session_id:
         filters.append(UserLog.session_id == session_id)
     if cursor:
