@@ -1130,6 +1130,8 @@ export interface AdminRun {
   completion: 'completed' | 'pending' | 'incomplete' | 'none'
   /** 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 null. */
   match_rate: number | null
+  /** 러닝 중 앱이 죽어 다음 실행 때 복구된 기록인지. */
+  app_killed: boolean
 }
 
 /** 모든 회원의 러닝 기록. from/to는 KST 날짜(YYYY-MM-DD) 양끝 포함, 시작 시각 기준. */

@@ -8,11 +8,11 @@
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import Integer, String, cast, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Course, Run, User, Verification
+from app.models import Course, Run, User, UserLog, Verification
 from app.schemas import AdminRunListOut
 
 router = APIRouter(tags=["runs"])
@@ -33,6 +33,27 @@ def _completion(course_id, status: str | None) -> str:
     if status in ("pending", "inProgress"):
         return "pending"
     return "incomplete"
+
+
+# run_recover가 기록을 올리기 전에 남으므로 기록 생성 뒤 이만큼까지만 본다(전송 지연 여유).
+_RECOVER_LOG_SLACK = timedelta(minutes=5)
+
+
+def _app_killed():
+    """러닝 중 앱이 죽어 다음 실행 때 일지로 복구된 기록인지.
+
+    기록에 표시가 없어 같은 사용자·코스·시간(초)의 run_recover 로그로 짝짓는다.
+    이어달리기 구간이 복구된 경우는 합친 시간과 달라 잡히지 않는다.
+    """
+    return exists().where(
+        UserLog.log_name == "run_recover",
+        UserLog.user_id == Run.user_id,
+        UserLog.created_at >= Run.ended_at,
+        UserLog.created_at <= Run.created_at + _RECOVER_LOG_SLACK,
+        UserLog.detail["elapsed_sec"].astext.cast(Integer) == Run.duration_sec,
+        func.coalesce(UserLog.detail["course_id"].astext, "")
+        == func.coalesce(cast(Run.course_id, String), ""),
+    )
 
 
 @router.get("/runs", response_model=AdminRunListOut)
@@ -75,6 +96,7 @@ def list_runs(
             Run.ended_at,
             Verification.status.label("verification_status"),
             Verification.match_rate,
+            _app_killed().label("app_killed"),
         )
         .outerjoin(User, user_join)
         .outerjoin(Course, Course.id == Run.course_id)
@@ -105,6 +127,7 @@ def list_runs(
                 "ended_at": r.ended_at,
                 "match_rate": r.match_rate,
                 "completion": _completion(r.course_id, r.verification_status),
+                "app_killed": r.app_killed,
             }
             for r in rows
         ],

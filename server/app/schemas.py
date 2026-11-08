@@ -931,6 +931,8 @@ class AdminRunOut(BaseModel):
     # completed 완주 / pending 검증 중 / incomplete 미완주 / none 코스 없이 뛴 러닝
     completion: str
     match_rate: float | None  # 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 None
+    # 러닝 중 앱이 죽어 다음 실행 때 복구된 기록인지(run_recover 로그로 판정)
+    app_killed: bool = False
 
 
 class AdminRunListOut(BaseModel):

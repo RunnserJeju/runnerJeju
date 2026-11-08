@@ -209,7 +209,16 @@ export default function RunHistory({ onUnauthorized }: Props) {
                 <td>{r.course_name ?? <span className="muted">코스 없이 달림</span>}</td>
                 <td className="nowrap">{r.distance_km.toFixed(2)}km</td>
                 <td className="nowrap muted">{formatDuration(r.duration_sec)}</td>
-                <td className="nowrap">{COMPLETION[r.completion]}</td>
+                <td className="nowrap">
+                  {r.completion === 'incomplete' && r.app_killed ? (
+                    <span className="with-corner-tag">
+                      {COMPLETION.incomplete}
+                      <span className="corner-tag">앱 종료</span>
+                    </span>
+                  ) : (
+                    COMPLETION[r.completion]
+                  )}
+                </td>
                 <td className="nowrap">{formatMatch(r.match_rate)}</td>
               </tr>
             ))}

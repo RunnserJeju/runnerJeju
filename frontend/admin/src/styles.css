@@ -383,6 +383,27 @@ tbody tr:hover {
   color: #a12f2f;
 }
 
+/* 값의 오른쪽 위에 붙는 작은 태그. 러닝 기록의 '미완주' 옆 '앱 종료'. */
+.with-corner-tag {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+/* 자리를 차지한 채 위로만 올려 옆 칸과 겹치지 않게 한다. */
+.corner-tag {
+  position: relative;
+  top: -8px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .facility {
   border: 1px solid var(--line);
   border-radius: 8px;
