@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from app import user_log
 from app.admin.metrics import sources
-from app.models import Favorite, Run, User, UserCoupon, Verification
+from app.models import Favorite, Run, User, UserCoupon, UserLog, Verification
 
 ALL_GROUP_BYS = ("none", "day", "course")
 NO_COURSE = ("none", "day")
@@ -156,6 +156,14 @@ _EXPLICIT: list[Metric] = [
         "가입 회원(현재)",
         sources.snapshot_count(User, User.deleted_at.is_(None)),
         ("none",),
+        group="계정",
+    ),
+    # 로그가 한 줄이라도 남은 회원. group_by=day면 DAU, 기간 7일·30일 합계면 WAU·MAU.
+    Metric(
+        "app_active_users",
+        "활성 사용자(앱 사용)",
+        sources.distinct_users(UserLog.user_id, UserLog.created_at),
+        NO_COURSE,
         group="계정",
     ),
     Metric(

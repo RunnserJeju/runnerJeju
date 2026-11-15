@@ -15,9 +15,11 @@ import {
   ApiError,
   getMetric,
   getMetricsBatch,
+  getRetention,
   listMetrics,
   type MetricInfo,
   type MetricPoint,
+  type RetentionCohort,
 } from '../api'
 import { downloadCsv } from '../utils/csv'
 import { kstDaysAgo, kstToday, shortDate } from '../utils/dates'
@@ -36,6 +38,13 @@ const KPI_METRICS = [
   'coupons_issued',
   'coupons_used',
 ] as const
+
+/** 활성 사용자 카드의 기간(일). 1이 DAU, 7이 WAU, 30이 MAU. */
+const ACTIVE_WINDOWS = [1, 7, 30] as const
+const ACTIVE_METRIC = 'app_active_users'
+
+/** 리텐션 표의 열(일). 서버 RETENTION_DAYS와 같다. */
+const RETENTION_DAYS = ['1', '7', '30'] as const
 
 /** 일별 추이 탭. 값은 서버 registry의 group과 같고, 탭마다 처음 보여줄 지표를 정한다. */
 const DAILY_TABS: { group: string; defaultMetric: string }[] = [
@@ -65,6 +74,9 @@ function total(points: MetricPoint[] | undefined): number {
 export default function StatsPage({ onUnauthorized }: Props) {
   const [metrics, setMetrics] = useState<MetricInfo[] | null>(null)
   const [kpi, setKpi] = useState<Record<string, MetricPoint[]> | null>(null)
+  /** ACTIVE_WINDOWS 순서의 활성 사용자 수. */
+  const [active, setActive] = useState<number[] | null>(null)
+  const [retention, setRetention] = useState<RetentionCohort[] | null>(null)
   const [daily, setDaily] = useState<MetricPoint[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -87,10 +99,22 @@ export default function StatsPage({ onUnauthorized }: Props) {
 
   // 기간과 무관한 것들은 최초 1회.
   useEffect(() => {
-    Promise.all([listMetrics(), getMetricsBatch([...KPI_METRICS])])
-      .then(([m, k]) => {
+    const today = kstToday()
+    Promise.all([
+      listMetrics(),
+      getMetricsBatch([...KPI_METRICS]),
+      Promise.all(
+        ACTIVE_WINDOWS.map((days) =>
+          getMetric(ACTIVE_METRIC, { from: kstDaysAgo(days), to: today }).then(total),
+        ),
+      ),
+      getRetention(),
+    ])
+      .then(([m, k, a, r]) => {
         setMetrics(m)
         setKpi(k)
+        setActive(a)
+        setRetention(r)
         setError(null)
       })
       .catch(handleError)
@@ -175,6 +199,7 @@ export default function StatsPage({ onUnauthorized }: Props) {
         </div>
       )}
 
+
       <section className="card">
         <div className="chart-head">
           <h3>일별 추이</h3>
@@ -250,6 +275,63 @@ export default function StatsPage({ onUnauthorized }: Props) {
           <p className="muted">불러오는 중…</p>
         ) : (
           <DailyChart data={daily} type={chartType} label={dailyLabel} />
+        )}
+      </section>
+
+      <section className="card">
+        <div className="chart-head">
+          <h3>활성 사용자</h3>
+        </div>
+        {active && (
+          <div className="kpi-grid in-card">
+            <Kpi label="DAU" value={active[0]} hint="오늘 앱을 쓴 회원" />
+            <Kpi label="WAU" value={active[1]} hint="최근 7일" />
+            <Kpi label="MAU" value={active[2]} hint="최근 30일" />
+          </div>
+        )}
+        <h4 className="section-sub">리텐션</h4>
+        <p className="muted section-desc">
+          가입 주(월요일 시작)별로, 가입 다음 날부터 n일 안에 다시 앱을 쓴 회원 비율이에요.
+        </p>
+        {retention == null ? (
+          <p className="muted">불러오는 중…</p>
+        ) : retention.length === 0 ? (
+          <p className="muted">최근 가입이 없어요.</p>
+        ) : (
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th>가입 주</th>
+                <th>가입</th>
+                {RETENTION_DAYS.map((n) => (
+                  <th key={n}>{n}일</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {retention.map((c) => (
+                <tr key={c.week_start}>
+                  <td>{shortDate(c.week_start)} 주</td>
+                  <td>{c.signups}</td>
+                  {RETENTION_DAYS.map((n) => {
+                    const returned = c.returned[n]
+                    return (
+                      <td key={n}>
+                        {returned == null ? (
+                          <span className="muted">—</span>
+                        ) : (
+                          <>
+                            {percent(returned, c.signups)}{' '}
+                            <span className="muted">({returned})</span>
+                          </>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </section>
 

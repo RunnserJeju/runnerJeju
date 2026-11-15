@@ -578,6 +578,26 @@ tbody tr:hover {
   }
 }
 
+/* 카드 안에 넣는 KPI 줄(대시보드 활성 사용자). 바깥 격자보다 한 톤 가라앉힌다. */
+.kpi-grid.in-card {
+  grid-template-columns: repeat(3, 1fr);
+  margin: 12px 0 20px;
+}
+
+.kpi-grid.in-card .kpi {
+  background: #fafbfc;
+}
+
+/* 카드 안의 소제목과 그 설명. */
+.section-sub {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.section-desc {
+  margin: 0 0 12px;
+}
+
 .kpi {
   background: #fff;
   border: 1px solid var(--line);

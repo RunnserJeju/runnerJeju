@@ -1219,6 +1219,25 @@ class MetricPointOut(BaseModel):
     count: int
 
 
+class RetentionCohortOut(BaseModel):
+    """가입 주 하나의 재방문. returned는 {"1": n, "7": n, "30": n}, 아직 못 재는 칸은 None."""
+
+    week_start: date
+    signups: int
+    returned: dict[str, int | None]
+
+
+class ScreenStatOut(BaseModel):
+    """화면 하나의 조회·체류. 체류시간을 잴 수 있는 조회가 없으면 avg/median은 None."""
+
+    screen: str
+    views: int
+    users: int  # 로그인한 고유 사용자
+    avg_sec: float | None
+    median_sec: float | None
+    total_sec: int
+
+
 class UserLogOut(BaseModel):
     id: uuid.UUID
     log_name: str
