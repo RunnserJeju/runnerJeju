@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.admin import audit
 from app.admin.auth import require_admin_session
 from app.admin.coupons import _effective_status
+from app.completions import completions
 from app.db import get_db
 from app.models import (
     AdminAction,
@@ -31,13 +32,11 @@ from app.models import (
     CouponDraw,
     Course,
     Partner,
-    Run,
     Stamp,
     StampDefinition,
     User,
     UserCoupon,
     UserLog,
-    Verification,
 )
 from app.routers.stamps import course_id_of
 from app.schemas import (
@@ -74,11 +73,11 @@ def _completed_counts(db: Session, user_id_strs: list[str]) -> dict[str, int]:
     if not user_id_strs:
         return {}
 
+    c = completions()
     rows = db.execute(
-        select(Run.user_id, func.count(func.distinct(Verification.course_id)))
-        .join(Verification, Verification.run_id == Run.id)
-        .where(Run.user_id.in_(user_id_strs), Verification.status == "matched")
-        .group_by(Run.user_id)
+        select(c.c.user_id, func.count(func.distinct(c.c.course_id)))
+        .where(c.c.user_id.in_(user_id_strs))
+        .group_by(c.c.user_id)
     ).all()
 
     return {user_id: count for user_id, count in rows}
@@ -124,12 +123,12 @@ def _completed_courses(db: Session, user: User) -> list[dict]:
     """이 유저가 완주한 코스 목록(코스명 포함, 최신순). 같은 코스를 여러 번 완주했으면
     처음 완주한 시각 하나만 — 예전 스탬프 기준 목록과 같은 모양이다.
     """
-    first_completed = func.min(Verification.completed_at)
+    c = completions()
+    first_completed = func.min(c.c.completed_at)
     rows = db.execute(
         select(Course.id, Course.name, first_completed)
-        .join(Verification, Verification.course_id == Course.id)
-        .join(Run, Run.id == Verification.run_id)
-        .where(Run.user_id == str(user.id), Verification.status == "matched")
+        .join(c, c.c.course_id == Course.id)
+        .where(c.c.user_id == str(user.id))
         .group_by(Course.id, Course.name)
         .order_by(first_completed.desc())
     ).all()
@@ -157,11 +156,10 @@ def _to_summary(
 
 
 # 목록 정렬 가능 열. completed_count는 유저별 완주 코스 수 서브쿼리.
+_completions = completions()
 _completed_count_sq = (
-    select(func.count(func.distinct(Verification.course_id)))
-    .select_from(Run)
-    .join(Verification, Verification.run_id == Run.id)
-    .where(Run.user_id == cast(User.id, String), Verification.status == "matched")
+    select(func.count(func.distinct(_completions.c.course_id)))
+    .where(_completions.c.user_id == cast(User.id, String))
     .correlate(User)
     .scalar_subquery()
 )

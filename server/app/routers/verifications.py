@@ -24,30 +24,35 @@ from app.schemas import VerificationCreate, VerificationOut
 router = APIRouter(tags=["verifications"])
 
 
-# 팝업은 이번 러닝으로 새로 받은 것만 띄운다 — 같은 코스를 다시 완주해도 다시 뜨지 않게
-# 발급 기록의 run_id로 찾는다.
+# 팝업은 이번 완주로 새로 받은 것만 띄운다 — 같은 코스를 다시 완주해도 다시 뜨지 않게.
+# 러닝이면 발급 기록의 run_id로, 러닝 없는 완주(링크 인증)면 새로 생긴 id로 찾는다.
+# 아래 조회들의 stamps/coupons/draws 인자는 그 범위를 정하는 SQL 조건이다.
 
 
 def earned_stamp_id(db: Session, run_id: uuid.UUID, course_id: uuid.UUID) -> uuid.UUID | None:
     """이 러닝으로 받은 코스 스탬프. 여러 개면 처음 것."""
+    return _earned_stamp_id(db, Stamp.run_id == run_id, course_id)
+
+
+def _earned_stamp_id(db: Session, stamps, course_id: uuid.UUID) -> uuid.UUID | None:
     definition_ids = [d.id for d in stamp_rules.course_stamp_definitions(db, course_id)]
     if not definition_ids:
         return None
 
     return db.execute(
         select(Stamp.id)
-        .where(Stamp.run_id == run_id, Stamp.stamp_definition_id.in_(definition_ids))
+        .where(stamps, Stamp.stamp_definition_id.in_(definition_ids))
         .order_by(Stamp.acquired_at)
         .limit(1)
     ).scalar_one_or_none()
 
 
-def _earned_coupon_id(db: Session, run_id: uuid.UUID, course_id: uuid.UUID) -> uuid.UUID | None:
-    """이 러닝으로 받은 코스완료 쿠폰."""
+def _earned_coupon_id(db: Session, coupons, course_id: uuid.UUID) -> uuid.UUID | None:
+    """코스완료 쿠폰."""
     return db.execute(
         select(UserCoupon.id)
         .where(
-            UserCoupon.run_id == run_id,
+            coupons,
             UserCoupon.grant_key == coupon_rules.course_grant_key(course_id),
         )
         .order_by(UserCoupon.issued_at)
@@ -55,13 +60,13 @@ def _earned_coupon_id(db: Session, run_id: uuid.UUID, course_id: uuid.UUID) -> u
     ).scalar_one_or_none()
 
 
-def _running_week_stamp_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
-    """이 러닝으로 받은 러닝위크 스탬프. 코스 전용 스탬프 먼저, 빙고 스탬프는 줄 수 순."""
+def _running_week_stamp_ids(db: Session, stamps) -> list[uuid.UUID]:
+    """러닝위크 스탬프. 코스 전용 스탬프 먼저, 빙고 스탬프는 줄 수 순."""
     rows = db.execute(
         select(Stamp.id, StampDefinition.condition_type, StampDefinition.condition_params)
         .join(StampDefinition, Stamp.stamp_definition_id == StampDefinition.id)
         .where(
-            Stamp.run_id == run_id,
+            stamps,
             StampDefinition.condition_type.in_(
                 (stamp_rules.RUNNING_WEEK_COURSE, stamp_rules.BINGO_LINES)
             ),
@@ -75,13 +80,13 @@ def _running_week_stamp_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
     return [row[0] for row in sorted(rows, key=order)]
 
 
-def _running_week_coupon_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
-    """이 러닝으로 받은 러닝위크 쿠폰. 줄 리워드는 줄 수 순, 스페셜 쿠폰이 마지막."""
+def _running_week_coupon_ids(db: Session, coupons) -> list[uuid.UUID]:
+    """러닝위크 쿠폰. 줄 리워드는 줄 수 순, 스페셜 쿠폰이 마지막."""
     rows = db.execute(
         select(UserCoupon.id, Coupon.trigger_type, Coupon.trigger_params)
         .join(Coupon, UserCoupon.coupon_id == Coupon.id)
         .where(
-            UserCoupon.run_id == run_id,
+            coupons,
             Coupon.trigger_type.in_((coupon_rules.BINGO_LINES, coupon_rules.BINGO_COMPLETE)),
         )
     ).all()
@@ -95,8 +100,8 @@ def _running_week_coupon_ids(db: Session, run_id: uuid.UUID) -> list[uuid.UUID]:
     return [row[0] for row in sorted(rows, key=order)]
 
 
-def _coupon_draws(db: Session, run_id: uuid.UUID) -> list[dict]:
-    """이 러닝에서 한 추첨 전부. 코스완주 → 줄 리워드 줄 수 순 → 스페셜."""
+def _coupon_draws(db: Session, draws) -> list[dict]:
+    """추첨 전부. 코스완주 → 줄 리워드 줄 수 순 → 스페셜."""
     rows = db.execute(
         select(
             CouponDraw.coupon_id,
@@ -108,7 +113,7 @@ def _coupon_draws(db: Session, run_id: uuid.UUID) -> list[dict]:
             Coupon.trigger_params,
         )
         .join(Coupon, CouponDraw.coupon_id == Coupon.id)
-        .where(CouponDraw.run_id == run_id)
+        .where(draws)
     ).all()
 
     def order(row) -> int:
@@ -133,13 +138,18 @@ def _coupon_draws(db: Session, run_id: uuid.UUID) -> list[dict]:
 
 
 def _to_out(db: Session, verification: Verification) -> dict:
-    matched = verification.status == "matched"
     run_id = verification.run_id
-    stamp_id = earned_stamp_id(db, run_id, verification.course_id) if matched else None
-    coupon_id = _earned_coupon_id(db, run_id, verification.course_id) if matched else None
-    week_stamp_ids = _running_week_stamp_ids(db, verification.run_id) if matched else []
-    week_coupon_ids = _running_week_coupon_ids(db, verification.run_id) if matched else []
-    draws = _coupon_draws(db, run_id) if matched else []
+    rewards = (
+        rewards_out(
+            db,
+            verification.course_id,
+            stamps=Stamp.run_id == run_id,
+            coupons=UserCoupon.run_id == run_id,
+            draws=CouponDraw.run_id == run_id,
+        )
+        if verification.status == "matched"
+        else NO_REWARDS
+    )
 
     return {
         "id": verification.id,
@@ -149,12 +159,30 @@ def _to_out(db: Session, verification: Verification) -> dict:
         "match_rate": verification.match_rate,
         "detail": verification.detail,
         "completed_at": verification.completed_at,
-        "earned_stamp_id": stamp_id,
-        "earned_coupon_id": coupon_id,
-        "earned_running_week_stamp_ids": week_stamp_ids,
+        **rewards,
+    }
+
+
+NO_REWARDS: dict = {
+    "earned_stamp_id": None,
+    "earned_coupon_id": None,
+    "earned_running_week_stamp_ids": [],
+    "earned_running_week_coupon_ids": [],
+    "earned_bingo_coupon_id": None,
+    "coupon_draws": [],
+}
+
+
+def rewards_out(db: Session, course_id: uuid.UUID, *, stamps, coupons, draws) -> dict:
+    """완주 한 번으로 받은 보상(VerificationOut의 earned_*·coupon_draws 필드)."""
+    week_coupon_ids = _running_week_coupon_ids(db, coupons)
+    return {
+        "earned_stamp_id": _earned_stamp_id(db, stamps, course_id),
+        "earned_coupon_id": _earned_coupon_id(db, coupons, course_id),
+        "earned_running_week_stamp_ids": _running_week_stamp_ids(db, stamps),
         "earned_running_week_coupon_ids": week_coupon_ids,
         "earned_bingo_coupon_id": week_coupon_ids[0] if week_coupon_ids else None,
-        "coupon_draws": draws,
+        "coupon_draws": _coupon_draws(db, draws),
     }
 
 

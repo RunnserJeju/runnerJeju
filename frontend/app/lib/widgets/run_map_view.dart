@@ -191,6 +191,10 @@ class _RunMapViewState extends State<RunMapView>
   final List<GeoPoint> _pendingSettled = [];
   GeoPoint? _pendingPosition;
 
+  /// [_pendingPosition]이 향하는 점과 거기까지 간 비율. 경로 끝이 쓴다.
+  GeoPoint? _pendingNext;
+  double _pendingProgress = 0;
+
   bool _isRendering = false;
 
   /// 마지막으로 돈 [_runFrames]. 라이브 오버레이를 지우기 전에 이걸 기다린다.
@@ -637,6 +641,7 @@ class _RunMapViewState extends State<RunMapView>
     _interpolator.clear();
     _pendingSettled.clear();
     _pendingPosition = null;
+    _pendingNext = null;
     _renderedPosition = null;
 
     await live.breakHere();
@@ -701,6 +706,7 @@ class _RunMapViewState extends State<RunMapView>
     _interpolator.clear();
     _pendingSettled.clear();
     _pendingPosition = null;
+    _pendingNext = null;
     _lastSample = null;
     _renderedPosition = null;
     _wasRunning = false;
@@ -1148,6 +1154,8 @@ class _RunMapViewState extends State<RunMapView>
 
     _pendingSettled.addAll(frame.settled);
     _pendingPosition = frame.position;
+    _pendingNext = frame.next;
+    _pendingProgress = frame.progress;
     _flushFrame();
   }
 
@@ -1178,6 +1186,8 @@ class _RunMapViewState extends State<RunMapView>
 
         final settled = List.of(_pendingSettled);
         _pendingSettled.clear();
+        final next = _pendingNext;
+        final progress = _pendingProgress;
 
         // 마커 → 경로 순서. 마커가 카메라 추적 대상이라 먼저 자리를 잡는 편이
         // 화면 흔들림이 적다.
@@ -1193,7 +1203,7 @@ class _RunMapViewState extends State<RunMapView>
         if (settled.isNotEmpty) await live.append(settled);
         if (!_isLiveCurrent(live, marker)) break;
 
-        await live.moveTip(position);
+        await live.moveTip(next, progress);
         _renderedPosition = position;
       }
     } finally {
@@ -1227,8 +1237,8 @@ class _RunMapViewState extends State<RunMapView>
 /// 프레임마다 하면 러닝이 길어질수록 갱신이 눈에 띄게 밀린다.
 ///
 /// 그래서 확정 구간은 [_chunkSize]개씩 끊어 별도의 선으로 두고, 점이 확정될 때
-/// **마지막 청크만** 다시 보낸다. 프레임마다 움직이는 것은 2점짜리 [_tail]뿐이라
-/// 비용이 경로 길이와 무관하다. 스타일과 zOrder가 같아 화면에서는 한 줄로 보인다.
+/// **마지막 청크만** 다시 보낸다. [_tail]은 다음 점까지 미리 그어 두고 프레임마다
+/// 보이는 범위만 넓힌다. 스타일과 zOrder가 같아 화면에서는 한 줄로 보인다.
 class _GrowingRoute {
   _GrowingRoute(this._layer, this._style, this._zOrder);
 
@@ -1245,9 +1255,13 @@ class _GrowingRoute {
   kakao.Route? _open;
   List<kakao.LatLng> _openPoints = [];
 
-  /// 확정 구간 끝에서 현위치까지를 잇는 2점짜리 선.
+  /// 확정 구간 끝에서 다음 점까지를 잇는 2점짜리 선. 현위치까지만 보이게 한다.
   kakao.Route? _tail;
   bool _isTailVisible = false;
+
+  /// [_tail]이 지금 잇고 있는 두 점. 바뀔 때만 선을 다시 만든다.
+  GeoPoint? _tailFrom;
+  GeoPoint? _tailTo;
 
   /// 확정 구간의 끝점. 꼬리가 여기서 출발한다.
   GeoPoint? _lastPoint;
@@ -1269,14 +1283,20 @@ class _GrowingRoute {
     await _syncOpen();
   }
 
-  /// 확정 구간 끝에서 [position]까지를 잇는다. 프레임마다 불린다.
-  Future<void> moveTip(GeoPoint position) async {
+  /// 확정 구간 끝에서 [next]로 가는 선을 [progress](0~1)만큼 보이게 한다.
+  /// 프레임마다 불린다. 향하는 점이 없으면([next] null) 꼬리를 숨긴다.
+  ///
+  /// 선을 다시 만드는 것은 구간이 바뀔 때 한 번뿐이다. 프레임마다 다시 만들면
+  /// 구형 Adreno 드라이버가 텍스처 업로드 중에 죽는다.
+  Future<void> moveTip(GeoPoint? next, double progress) async {
     final anchor = _lastPoint;
     if (anchor == null) return;
 
-    // 확정 끝점과 현위치가 같은 좌표면 그릴 선이 없다. 출발 직후와 멈춰 있는
-    // 동안에 생기는데, 길이 0짜리 선을 남겨 두면 굵기만큼 점이 찍힌다.
-    if (_RunMapViewState._isSameCoordinate(anchor, position)) {
+    // 그릴 선이 없다. 출발 직후와 멈춰 있는 동안에 생기는데, 길이 0짜리 선을
+    // 남겨 두면 굵기만큼 점이 찍힌다.
+    if (next == null ||
+        progress <= 0 ||
+        _RunMapViewState._isSameCoordinate(anchor, next)) {
       if (_isTailVisible) {
         _isTailVisible = false;
         await _tail?.hide();
@@ -1284,18 +1304,29 @@ class _GrowingRoute {
       return;
     }
 
-    final points = [anchor.toLatLng(), position.toLatLng()];
+    final isSameSpan =
+        _RunMapViewState._isSameCoordinate(_tailFrom, anchor) &&
+        _RunMapViewState._isSameCoordinate(_tailTo, next);
     final tail = _tail;
-    if (tail == null) {
-      _tail = await _layer.addRoute(points, _style, zOrder: _zOrder);
-      _isTailVisible = true;
-      return;
+    if (tail != null && isSameSpan) {
+      await tail.setRevealed(progress);
+    } else {
+      final points = [anchor.toLatLng(), next.toLatLng()];
+      _tailFrom = anchor;
+      _tailTo = next;
+      if (tail == null) {
+        final created = await _layer.addRoute(points, _style, zOrder: _zOrder);
+        _tail = created;
+        _isTailVisible = true;
+        await created.setRevealed(progress);
+        return;
+      }
+      await tail.changePoint(points, revealed: progress);
     }
 
-    await tail.changePoint(points);
     if (!_isTailVisible) {
       _isTailVisible = true;
-      await tail.show();
+      await _tail?.show();
     }
   }
 
@@ -1327,6 +1358,8 @@ class _GrowingRoute {
     if (tail != null) {
       await _layer.removeRoute(tail);
       _tail = null;
+      _tailFrom = null;
+      _tailTo = null;
     }
 
     _open = null;

@@ -3,6 +3,7 @@ import '../api/coupon_api.dart';
 import '../api/course_api.dart';
 import '../api/crash_api.dart';
 import '../api/event_api.dart';
+import '../api/external_cert_api.dart';
 import '../api/favorite_api.dart';
 import '../api/home_api.dart';
 import '../api/notice_api.dart';
@@ -21,6 +22,7 @@ import 'course_service.dart';
 import 'crash_reporter.dart';
 import 'current_location.dart';
 import 'event_service.dart';
+import 'external_cert_service.dart';
 import 'favorite_service.dart';
 import 'heading_service.dart';
 import 'home_service.dart';
@@ -87,6 +89,9 @@ class Services {
 
   /// 코스 찜(서버 저장). 기기를 바꿔도 찜이 유지된다.
   late final FavoriteService favorite = FavoriteService(FavoriteApi(apiClient));
+  late final ExternalCertService externalCert = ExternalCertService(
+    ExternalCertApi(apiClient),
+  );
 
   /// 러닝 프로그램(커뮤니티/마이페이지). 아직 서버 API가 없어 빈 목록만 준다.
   late final ProgramService program = const ProgramService();

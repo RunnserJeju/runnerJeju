@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from app import user_log
 from app.admin.metrics import sources
-from app.models import Favorite, Run, User, UserCoupon, UserLog, Verification
+from app.models import ExternalCompletion, Favorite, Run, User, UserCoupon, UserLog, Verification
 
 ALL_GROUP_BYS = ("none", "day", "course")
 NO_COURSE = ("none", "day")
@@ -197,6 +197,18 @@ _EXPLICIT: list[Metric] = [
         sources.course_stamp_count(),
         ALL_GROUP_BYS,
         # 완주는 러닝의 결과라 러닝 탭에 둔다(스탬프 탭이 아니라).
+        group="러닝",
+    ),
+    Metric(
+        "link_completions",
+        "링크 완주 인증(가민·순토)",
+        sources.table_count(
+            ExternalCompletion.created_at,
+            ExternalCompletion.status == "matched",
+            ExternalCompletion.source != "admin",
+            course_column=ExternalCompletion.course_id,
+        ),
+        ALL_GROUP_BYS,
         group="러닝",
     ),
     Metric(

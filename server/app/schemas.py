@@ -492,6 +492,34 @@ class VerificationOut(BaseModel):
     coupon_draws: list[VerificationCouponDraw] = []
 
 
+class ExternalCompletionCreate(BaseModel):
+    """가민·순토 공개 활동 링크."""
+
+    url: str = Field(min_length=1, max_length=500)
+
+
+class ExternalCompletionOut(BaseModel):
+    """링크 인증 결과. 보상 필드는 VerificationOut과 같은 이름·뜻이다(앱이 같은 팝업을 쓴다)."""
+
+    id: uuid.UUID
+    course_id: uuid.UUID
+    source: str  # garmin | suunto
+    status: VerificationStatusName  # matched | mismatched | failed
+    match_rate: float | None
+    # 실패 사유(사용자에게 그대로 보여준다). matched면 None.
+    detail: str | None
+    # 링크에서 읽은 활동 시작 시각·거리. 못 읽었으면 None.
+    started_at: datetime | None
+    distance_meters: float | None
+
+    earned_stamp_id: uuid.UUID | None = None
+    earned_coupon_id: uuid.UUID | None = None
+    earned_running_week_stamp_ids: list[uuid.UUID] = []
+    earned_running_week_coupon_ids: list[uuid.UUID] = []
+    earned_bingo_coupon_id: uuid.UUID | None = None
+    coupon_draws: list[VerificationCouponDraw] = []
+
+
 # --- 스탬프 --------------------------------------------------------------
 
 

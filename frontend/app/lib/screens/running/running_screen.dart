@@ -25,6 +25,7 @@ import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
 import 'course_preview_sheet.dart';
 import 'course_search_results.dart';
+import 'external_cert_screen.dart';
 import 'partner_list_sheet.dart';
 import 'partner_preview_sheet.dart';
 
@@ -42,10 +43,17 @@ import 'partner_preview_sheet.dart';
 /// 다른 탭(홈 카드·마이페이지 찜한 코스)에서 코스를 열 때는 [RunningScreenState.openCourse]로
 /// 이 화면의 코스 선택을 그대로 탄다 — 코스 상세를 따로 띄우는 전체 화면은 두지 않는다.
 class RunningScreen extends StatefulWidget {
-  const RunningScreen({super.key, this.onReturnToRunningWeek});
+  const RunningScreen({
+    super.key,
+    this.onReturnToRunningWeek,
+    this.onShowStamps,
+  });
 
   /// 빙고판에서 넘어온 코스를 보는 동안 '빙고판으로' 버튼이 누르는 것.
   final VoidCallback? onReturnToRunningWeek;
+
+  /// 스탬프 탭으로 옮긴다(외부 기록 인증 결과의 '스탬프 보기').
+  final VoidCallback? onShowStamps;
 
   @override
   State<RunningScreen> createState() => RunningScreenState();
@@ -512,6 +520,29 @@ class RunningScreenState extends State<RunningScreen> {
       if (!mounted) return;
     }
     await _selectCourse(course, source: source);
+  }
+
+  /// 고른 코스를 가민·순토 링크로 완주 인증한다. 닫히면 결과 화면이 부탁한 곳으로 간다.
+  Future<void> _certifyExternal() async {
+    final course = _selected;
+    if (course == null) return;
+    final exit = await Navigator.of(context).push<ExternalCertExit>(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'external_cert'),
+        builder: (_) => ExternalCertScreen(course: course),
+      ),
+    );
+    if (!mounted) return;
+    // 인증됐으면 완주 표시·완주자 수가 바뀐다.
+    unawaited(_loadCourses());
+    switch (exit) {
+      case ExternalCertExit.stamps:
+        widget.onShowStamps?.call();
+      case ExternalCertExit.courseList:
+        _openExplore();
+      case null:
+        break;
+    }
   }
 
   /// 지도 바닥을 눌렀을 때. 코스 상세는 걷고, 탐색 시트는 접는다.
@@ -1126,6 +1157,7 @@ class RunningScreenState extends State<RunningScreen> {
               onDownloadGpx: _downloadSelectedGpx,
               isReversed: _isReversed,
               onReverse: _toggleReverse,
+              onCertifyExternal: _certifyExternal,
             ),
         ],
       ),

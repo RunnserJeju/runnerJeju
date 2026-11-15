@@ -35,6 +35,7 @@ class _AppShellState extends State<AppShell> {
 
   static const _communityTab = 1;
   static const _runningTab = 2;
+  static const _stampTab = 3;
 
   /// 다른 탭에서 코스를 열 때 러닝 탭의 선택을 바깥에서 움직이려고 둔다.
   /// 러닝 탭은 IndexedStack 안에서 계속 살아 있어 State가 늘 붙어 있다.
@@ -174,6 +175,7 @@ class _AppShellState extends State<AppShell> {
       RunningScreen(
         key: _runningKey,
         onReturnToRunningWeek: _returnToRunningWeek,
+        onShowStamps: () => setState(() => _index = _stampTab),
       ),
       const StampScreen(),
       ProfileScreen(onOpenCourse: _openCourse),

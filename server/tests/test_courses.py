@@ -758,10 +758,10 @@ class TestReplaceCourseGpx:
             db=db,
                     )
 
-        # 경로 교체 + 스탬프/검증 초기화(delete 2건) + 커밋.
+        # 경로 교체 + 스탬프·검증·러닝 없는 완주 초기화(delete 3건) + 커밋.
         assert course.path != original_path
         assert result["path"] == course.path
-        assert db.delete_count == 2
+        assert db.delete_count == 3
         assert db.committed is True
 
     def test_bad_gpx_does_not_reset_records(self):
