@@ -43,7 +43,10 @@ class _CouponListScreenState extends State<CouponListScreen> {
   Future<void> _openDetail(Coupon coupon) async {
     if (coupon.isReward) {
       await Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => RewardClaimScreen(coupon: coupon)),
+        MaterialPageRoute(
+          settings: const RouteSettings(name: 'reward_claim'),
+          builder: (_) => RewardClaimScreen(coupon: coupon),
+        ),
       );
       if (mounted) _refresh();
       return;
@@ -187,7 +190,10 @@ class _CouponDetailSheet extends StatelessWidget {
 
   Future<void> _use(BuildContext context) async {
     final changed = await Navigator.of(context).push<Coupon>(
-      MaterialPageRoute(builder: (_) => CouponUseScreen(coupon: coupon)),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'coupon_use'),
+        builder: (_) => CouponUseScreen(coupon: coupon),
+      ),
     );
     if (changed != null && context.mounted) Navigator.of(context).pop(changed);
   }

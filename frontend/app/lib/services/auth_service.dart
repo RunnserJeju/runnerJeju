@@ -176,6 +176,23 @@ class AuthService {
     }
   }
 
+  /// 회원 정보에서 닉네임을 바꾼다. 붙들고 있는 사용자 정보도 새로 받아 둔다.
+  Future<User> changeNickname(String nickname) async {
+    try {
+      await _authApi.updateNickname(nickname);
+    } catch (e) {
+      throw AppException('닉네임을 저장하지 못했어요.', e);
+    }
+
+    try {
+      return _currentUser = await _authApi.fetchMe();
+    } catch (e) {
+      // 저장은 됐다. 옛 닉네임을 계속 보여 주지 않게 다음 조회 때 다시 받는다.
+      _currentUser = null;
+      throw AppException('닉네임은 바꿨어요. 화면을 다시 열어 주세요.', e);
+    }
+  }
+
   Future<void> logout() async {
     final refreshToken = await _tokenStorage.readRefreshToken();
     if (refreshToken != null) {

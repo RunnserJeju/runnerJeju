@@ -15,6 +15,7 @@ from app.routers import (
     courses,
     crash_reports,
     events,
+    external_completions,
     favorites,
     home,
     notices,
@@ -55,6 +56,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(coupons.router)
 app.include_router(courses.router)
+app.include_router(external_completions.router)
 app.include_router(favorites.router)
 app.include_router(runs.router)
 app.include_router(verifications.router)

@@ -16,6 +16,7 @@ import UsersPage from './pages/UsersPage'
 
 // 차트 라이브러리(recharts)가 커서 대시보드를 열 때만 내려받는다.
 const StatsPage = lazy(() => import('./pages/StatsPage'))
+const UserBehaviorPage = lazy(() => import('./pages/UserBehaviorPage'))
 
 type Auth =
   | { status: 'checking' }
@@ -33,6 +34,7 @@ type Page =
   | 'coupons'
   | 'rewards'
   | 'dashboard'
+  | 'behavior'
   | 'course-stats'
   | 'users'
   | 'logs'
@@ -45,6 +47,7 @@ const MENU: { group: string; items: { key: Page; label: string }[] }[] = [
     group: '지표',
     items: [
       { key: 'dashboard', label: '대시보드' },
+      { key: 'behavior', label: '유저 행동' },
       { key: 'course-stats', label: '러닝' },
       { key: 'users', label: '회원' },
       { key: 'logs', label: '로그' },
@@ -174,6 +177,11 @@ export default function App() {
           {page === 'dashboard' && (
             <Suspense fallback={<p className="muted">불러오는 중…</p>}>
               <StatsPage onUnauthorized={() => setAuth({ status: 'anon' })} />
+            </Suspense>
+          )}
+          {page === 'behavior' && (
+            <Suspense fallback={<p className="muted">불러오는 중…</p>}>
+              <UserBehaviorPage onUnauthorized={() => setAuth({ status: 'anon' })} />
             </Suspense>
           )}
           {page === 'course-stats' && (

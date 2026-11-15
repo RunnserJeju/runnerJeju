@@ -85,6 +85,7 @@ class RunPathInterpolator {
   ///
   /// `settled`는 렌더 시각을 막 지나 확정된 점들 — 경로 본선 뒤에 붙인다.
   /// `position`은 렌더 시각의 보간 좌표 — 마커와 경로 끝이 함께 쓴다.
+  /// `next`는 지금 향하고 있는 점, `progress`는 거기까지 간 비율(0~1)이다.
   /// 샘플이 하나도 없으면 null.
   RunFrame? advanceTo(Duration now) {
     if (_samples.isEmpty) return null;
@@ -112,7 +113,7 @@ class RunPathInterpolator {
     // 지어내는 것보다 멈춰 있는 편이 정직하다.
     if (_samples.length == 1) {
       _stalled = true;
-      return (settled: settled, position: from.point);
+      return (settled: settled, position: from.point, next: null, progress: 0);
     }
 
     final to = _samples[1];
@@ -121,7 +122,12 @@ class RunPathInterpolator {
         ? 1.0
         : ((renderTime - from.at).inMicroseconds / span).clamp(0.0, 1.0);
 
-    return (settled: settled, position: _lerp(from.point, to.point, t));
+    return (
+      settled: settled,
+      position: _lerp(from.point, to.point, t),
+      next: to.point,
+      progress: t,
+    );
   }
 
   /// 남은 샘플을 전부 확정하고 마지막 좌표에서 끝낸다.
@@ -136,7 +142,12 @@ class RunPathInterpolator {
     }
 
     _stalled = false;
-    return (settled: settled, position: _samples.first.point);
+    return (
+      settled: settled,
+      position: _samples.first.point,
+      next: null,
+      progress: 0,
+    );
   }
 
   /// 첫 점은 경로의 시작이라 렌더 시각과 무관하게 바로 확정한다.
@@ -154,7 +165,13 @@ class RunPathInterpolator {
 }
 
 /// 한 프레임에 그릴 것. `position`은 마커와 경로 끝이 공유하는 좌표다.
-typedef RunFrame = ({List<GeoPoint> settled, GeoPoint position});
+/// 멈춰 있어 향하는 점이 없으면 `next`는 null이다.
+typedef RunFrame = ({
+  List<GeoPoint> settled,
+  GeoPoint position,
+  GeoPoint? next,
+  double progress,
+});
 
 class _Sample {
   const _Sample(this.point, this.at);

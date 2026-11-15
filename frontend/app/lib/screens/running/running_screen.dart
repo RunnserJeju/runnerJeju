@@ -25,6 +25,7 @@ import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
 import 'course_preview_sheet.dart';
 import 'course_search_results.dart';
+import 'external_cert_screen.dart';
 import 'partner_list_sheet.dart';
 import 'partner_preview_sheet.dart';
 
@@ -42,10 +43,17 @@ import 'partner_preview_sheet.dart';
 /// 다른 탭(홈 카드·마이페이지 찜한 코스)에서 코스를 열 때는 [RunningScreenState.openCourse]로
 /// 이 화면의 코스 선택을 그대로 탄다 — 코스 상세를 따로 띄우는 전체 화면은 두지 않는다.
 class RunningScreen extends StatefulWidget {
-  const RunningScreen({super.key, this.onReturnToRunningWeek});
+  const RunningScreen({
+    super.key,
+    this.onReturnToRunningWeek,
+    this.onShowStamps,
+  });
 
   /// 빙고판에서 넘어온 코스를 보는 동안 '빙고판으로' 버튼이 누르는 것.
   final VoidCallback? onReturnToRunningWeek;
+
+  /// 스탬프 탭으로 옮긴다(외부 기록 인증 결과의 '스탬프 보기').
+  final VoidCallback? onShowStamps;
 
   @override
   State<RunningScreen> createState() => RunningScreenState();
@@ -514,6 +522,29 @@ class RunningScreenState extends State<RunningScreen> {
     await _selectCourse(course, source: source);
   }
 
+  /// 고른 코스를 가민·순토 링크로 완주 인증한다. 닫히면 결과 화면이 부탁한 곳으로 간다.
+  Future<void> _certifyExternal() async {
+    final course = _selected;
+    if (course == null) return;
+    final exit = await Navigator.of(context).push<ExternalCertExit>(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'external_cert'),
+        builder: (_) => ExternalCertScreen(course: course),
+      ),
+    );
+    if (!mounted) return;
+    // 인증됐으면 완주 표시·완주자 수가 바뀐다.
+    unawaited(_loadCourses());
+    switch (exit) {
+      case ExternalCertExit.stamps:
+        widget.onShowStamps?.call();
+      case ExternalCertExit.courseList:
+        _openExplore();
+      case null:
+        break;
+    }
+  }
+
   /// 지도 바닥을 눌렀을 때. 코스 상세는 걷고, 탐색 시트는 접는다.
   void _clearSelection() {
     _closeSearch();
@@ -827,6 +858,7 @@ class RunningScreenState extends State<RunningScreen> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'run'),
         builder: (_) => RunScreen(course: course, initialCenter: origin),
       ),
     );
@@ -1073,31 +1105,43 @@ class RunningScreenState extends State<RunningScreen> {
                 onTap: _moveToMyLocation,
               ),
             ),
-          if (selected == null && _isPartnerMode)
-            _partnerSheet()
-          else if (selected == null)
-            ListenableBuilder(
-              listenable: _currentLocation,
-              builder: (context, _) => CourseListSheet(
-                controller: _sheetController,
-                courses: _visibleCourses,
-                myPosition: _currentLocation.latest,
-                isLoading: _isLoadingCourses || _isLoadingFavorites,
-                hasError: _coursesError != null || _favoritesError != null,
-                onSelect: (course) =>
-                    _selectCourse(course, source: LogSource.list),
-                onRetry: _favoritesError != null
-                    ? _loadFavoriteIds
-                    : _loadCourses,
-                title: _isFavoriteMode ? '찜한 코스' : null,
-                emptyIcon: _isFavoriteMode
-                    ? Icons.favorite_border_rounded
-                    : null,
-                emptyTitle: _isFavoriteMode ? '찜한 코스가 없어요' : null,
-                emptyMessage: _isFavoriteMode ? '코스 상세의 하트를 눌러 담아 보세요' : null,
-              ),
+          // 목록 시트는 상세가 떠 있는 동안에도 트리에 남겨 가려만 둔다. 상세를 닫으면
+          // 보던 높이와 스크롤 위치 그대로 돌아온다.
+          if (_isPartnerMode)
+            Offstage(
+              key: const ValueKey('partner-list-sheet'),
+              offstage: selected != null || _selectedPartner != null,
+              child: _partnerListSheet(),
             )
           else
+            Offstage(
+              key: const ValueKey('course-list-sheet'),
+              offstage: selected != null,
+              child: ListenableBuilder(
+                listenable: _currentLocation,
+                builder: (context, _) => CourseListSheet(
+                  controller: _sheetController,
+                  courses: _visibleCourses,
+                  myPosition: _currentLocation.latest,
+                  isLoading: _isLoadingCourses || _isLoadingFavorites,
+                  hasError: _coursesError != null || _favoritesError != null,
+                  onSelect: (course) =>
+                      _selectCourse(course, source: LogSource.list),
+                  onRetry: _favoritesError != null
+                      ? _loadFavoriteIds
+                      : _loadCourses,
+                  title: _isFavoriteMode ? '찜한 코스' : null,
+                  emptyIcon: _isFavoriteMode
+                      ? Icons.favorite_border_rounded
+                      : null,
+                  emptyTitle: _isFavoriteMode ? '찜한 코스가 없어요' : null,
+                  emptyMessage: _isFavoriteMode ? '코스 상세의 하트를 눌러 담아 보세요' : null,
+                ),
+              ),
+            ),
+          if (selected == null && _isPartnerMode && _selectedPartner != null)
+            _partnerPreviewSheet(_selectedPartner!),
+          if (selected != null)
             CoursePreviewSheet(
               // 코스를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
               key: ValueKey(selected.id),
@@ -1113,27 +1157,26 @@ class RunningScreenState extends State<RunningScreen> {
               onDownloadGpx: _downloadSelectedGpx,
               isReversed: _isReversed,
               onReverse: _toggleReverse,
+              onCertifyExternal: _certifyExternal,
             ),
         ],
       ),
     );
   }
 
-  /// 협력업체 모드의 아래 시트: 고른 업체가 있으면 상세, 없으면 목록.
-  Widget _partnerSheet() {
-    final partner = _selectedPartner;
-    if (partner != null) {
-      return PartnerPreviewSheet(
-        // 업체를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
-        key: ValueKey(partner.id),
-        partner: partner,
-        onClose: () => setState(() => _selectedPartner = null),
-        onNavigate: () => _navigateToPartner(partner),
-        onOpenInstagram: () => _openInstagram(partner),
-        onSelectCourse: _selectPartnerCourse,
-      );
-    }
+  Widget _partnerPreviewSheet(CoursePartner partner) {
+    return PartnerPreviewSheet(
+      // 업체를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
+      key: ValueKey(partner.id),
+      partner: partner,
+      onClose: () => setState(() => _selectedPartner = null),
+      onNavigate: () => _navigateToPartner(partner),
+      onOpenInstagram: () => _openInstagram(partner),
+      onSelectCourse: _selectPartnerCourse,
+    );
+  }
 
+  Widget _partnerListSheet() {
     return ListenableBuilder(
       listenable: _currentLocation,
       builder: (context, _) => PartnerListSheet(

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import bingo, running_week, stamp_rules, storage
+from app import bingo, completions, running_week, stamp_rules, storage
 from app.admin import audit
 from app.admin.auth import require_admin_session
 from app.db import get_db
@@ -18,6 +18,7 @@ from app.models import (
     AdminUser,
     Course,
     Coupon,
+    ExternalCompletion,
     RunningWeek,
     RunningWeekParticipation,
     Stamp,
@@ -323,6 +324,13 @@ def complete_course(
     stamps_before, coupons_before = stamp_ids(), coupon_ids()
     stamp_rules.on_course_completed(db, user_id, payload.course_id, None)
     running_week.on_course_completed(db, user_id, payload.course_id, None, week=week)
+    # 러닝 없는 완주라 여기 남겨야 완주 코스로 잡힌다(app/completions.py).
+    if not completions.is_completed(db, user_id, course.id):
+        db.add(
+            ExternalCompletion(
+                user_id=user_id, course_id=course.id, source="admin", status=completions.MATCHED
+            )
+        )
     audit.record(
         db, admin, audit.COURSE_COMPLETE,
         target_type="course", target_id=course.id, user_id=user_id,

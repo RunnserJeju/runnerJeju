@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import gpx, user_log
+from app.completions import completions
 from app.db import get_db
 from app.deps import (
     ClientContext,
@@ -15,7 +16,7 @@ from app.deps import (
     current_user_id,
     current_user_is_admin,
 )
-from app.models import Course, CoursePartner, Run, StampDefinition, Verification
+from app.models import Course, CoursePartner, StampDefinition
 from app.stamp_images import category_stamp_url
 from app.stamp_rules import COURSE_COMPLETE
 from app.schemas import CourseListItem, CourseSummary, PartnerSummary
@@ -80,20 +81,17 @@ def _to_summary(
 def _completed_counts(db: Session, course_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     """코스별 완주자 수(완주 인증을 통과한 사람 수)를 한 번에 조회한다(N+1 회피).
 
-    완주는 스탬프가 아니라 달리기의 사실이라 verifications에서 센다 — 스탬프는
-    코스와 분리됐다(#71).
+    완주는 스탬프가 아니라 달리기의 사실이라 완주 기록(app/completions.py)에서 센다 —
+    스탬프는 코스와 분리됐다(#71).
     """
     if not course_ids:
         return {}
 
+    c = completions()
     rows = db.execute(
-        select(Verification.course_id, func.count(func.distinct(Run.user_id)))
-        .join(Run, Run.id == Verification.run_id)
-        .where(
-            Verification.course_id.in_(course_ids),
-            Verification.status == "matched",
-        )
-        .group_by(Verification.course_id)
+        select(c.c.course_id, func.count(func.distinct(c.c.user_id)))
+        .where(c.c.course_id.in_(course_ids))
+        .group_by(c.c.course_id)
     ).all()
 
     return {course_id: count for course_id, count in rows}
@@ -105,14 +103,10 @@ def _my_completed_course_ids(
     if not course_ids:
         return set()
 
+    c = completions()
     rows = db.execute(
-        select(Verification.course_id)
-        .join(Run, Run.id == Verification.run_id)
-        .where(
-            Run.user_id == user_id,
-            Verification.course_id.in_(course_ids),
-            Verification.status == "matched",
-        )
+        select(c.c.course_id)
+        .where(c.c.user_id == user_id, c.c.course_id.in_(course_ids))
         .distinct()
     ).scalars()
 

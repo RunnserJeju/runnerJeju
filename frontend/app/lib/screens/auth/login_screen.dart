@@ -63,6 +63,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
+          settings: RouteSettings(
+            name: needsNickname ? 'nickname_setup' : 'shell',
+          ),
           builder: (_) =>
               needsNickname ? const NicknameSetupScreen() : const AppShell(),
         ),

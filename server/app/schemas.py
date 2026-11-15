@@ -492,6 +492,34 @@ class VerificationOut(BaseModel):
     coupon_draws: list[VerificationCouponDraw] = []
 
 
+class ExternalCompletionCreate(BaseModel):
+    """가민·순토 공개 활동 링크."""
+
+    url: str = Field(min_length=1, max_length=500)
+
+
+class ExternalCompletionOut(BaseModel):
+    """링크 인증 결과. 보상 필드는 VerificationOut과 같은 이름·뜻이다(앱이 같은 팝업을 쓴다)."""
+
+    id: uuid.UUID
+    course_id: uuid.UUID
+    source: str  # garmin | suunto
+    status: VerificationStatusName  # matched | mismatched | failed
+    match_rate: float | None
+    # 실패 사유(사용자에게 그대로 보여준다). matched면 None.
+    detail: str | None
+    # 링크에서 읽은 활동 시작 시각·거리. 못 읽었으면 None.
+    started_at: datetime | None
+    distance_meters: float | None
+
+    earned_stamp_id: uuid.UUID | None = None
+    earned_coupon_id: uuid.UUID | None = None
+    earned_running_week_stamp_ids: list[uuid.UUID] = []
+    earned_running_week_coupon_ids: list[uuid.UUID] = []
+    earned_bingo_coupon_id: uuid.UUID | None = None
+    coupon_draws: list[VerificationCouponDraw] = []
+
+
 # --- 스탬프 --------------------------------------------------------------
 
 
@@ -933,6 +961,14 @@ class AdminRunOut(BaseModel):
     match_rate: float | None  # 코스 경로 일치율 0~1. 검증 전이거나 코스 없이 뛰었으면 None
     # 러닝 중 앱이 죽어 다음 실행 때 복구된 기록인지(run_recover 로그로 판정)
     app_killed: bool = False
+    # 이어달리기로 나눠 뛴 구간(처음 뛴 것부터). 한 번에 뛴 기록이면 빈 리스트.
+    segments: list["AdminRunSegmentOut"] = []
+
+
+class AdminRunSegmentOut(BaseModel):
+    started_at: datetime
+    distance_km: float
+    duration_sec: int
 
 
 class AdminRunListOut(BaseModel):
@@ -1211,6 +1247,25 @@ class MetricPointOut(BaseModel):
     count: int
 
 
+class RetentionCohortOut(BaseModel):
+    """가입 주 하나의 재방문. returned는 {"1": n, "7": n, "30": n}, 아직 못 재는 칸은 None."""
+
+    week_start: date
+    signups: int
+    returned: dict[str, int | None]
+
+
+class ScreenStatOut(BaseModel):
+    """화면 하나의 조회·체류. 체류시간을 잴 수 있는 조회가 없으면 avg/median은 None."""
+
+    screen: str
+    views: int
+    users: int  # 로그인한 고유 사용자
+    avg_sec: float | None
+    median_sec: float | None
+    total_sec: int
+
+
 class UserLogOut(BaseModel):
     id: uuid.UUID
     log_name: str
@@ -1250,6 +1305,9 @@ class CrashReportIn(BaseModel):
     id: uuid.UUID
     kind: CrashKind
     occurred_at: datetime
+    # 크래시 난 프로세스의 버전. 다음 실행(업데이트 후일 수 있음)에 올리므로 헤더 대신 이 값을 쓴다.
+    # 키가 있는데 null이면 '모름'. 키가 없으면 이 필드 이전 앱이라 헤더로 채운다.
+    app_version: str | None = None
     # 앱이 아는 한 줄 요약·스택(Kotlin 크래시, Dart 오류). 덤프에서 뽑은 값이 있으면 그쪽이 우선.
     summary: str | None = None
     stack: str | None = None

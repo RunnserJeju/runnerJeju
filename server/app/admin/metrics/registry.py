@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from app import user_log
 from app.admin.metrics import sources
-from app.models import Favorite, Run, User, UserCoupon, Verification
+from app.models import ExternalCompletion, Favorite, Run, User, UserCoupon, UserLog, Verification
 
 ALL_GROUP_BYS = ("none", "day", "course")
 NO_COURSE = ("none", "day")
@@ -85,6 +85,8 @@ def _group_of(name: str) -> str:
 # 운영 웹에 보여줄 한글 표시명. 없으면 이름을 그대로 쓴다.
 LOG_LABELS = {
     "app_open": "앱 실행",
+    "app_background": "앱 백그라운드",
+    "screen_view": "화면 조회(PV)",
     "home_course_click": "홈 코스 클릭",
     "banner_click": "배너 클릭",
     "notification_open": "알림 열기",
@@ -156,6 +158,14 @@ _EXPLICIT: list[Metric] = [
         ("none",),
         group="계정",
     ),
+    # 로그가 한 줄이라도 남은 회원. group_by=day면 DAU, 기간 7일·30일 합계면 WAU·MAU.
+    Metric(
+        "app_active_users",
+        "활성 사용자(앱 사용)",
+        sources.distinct_users(UserLog.user_id, UserLog.created_at),
+        NO_COURSE,
+        group="계정",
+    ),
     Metric(
         "active_users",
         "실이용자(러닝 1회 이상)",
@@ -187,6 +197,18 @@ _EXPLICIT: list[Metric] = [
         sources.course_stamp_count(),
         ALL_GROUP_BYS,
         # 완주는 러닝의 결과라 러닝 탭에 둔다(스탬프 탭이 아니라).
+        group="러닝",
+    ),
+    Metric(
+        "link_completions",
+        "링크 완주 인증(가민·순토)",
+        sources.table_count(
+            ExternalCompletion.created_at,
+            ExternalCompletion.status == "matched",
+            ExternalCompletion.source != "admin",
+            course_column=ExternalCompletion.course_id,
+        ),
+        ALL_GROUP_BYS,
         group="러닝",
     ),
     Metric(

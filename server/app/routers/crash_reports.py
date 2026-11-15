@@ -76,7 +76,9 @@ def upload_crash_report(
             user_id=user_id,
             session_id=client.session_id,
             platform=client.platform,
-            app_version=client.app_version,
+            app_version=clip(payload.app_version, 20)
+            if "app_version" in payload.model_fields_set
+            else client.app_version,
             device=clip(payload.device, 100),
             os_version=clip(payload.os_version, 100),
             kind=payload.kind,

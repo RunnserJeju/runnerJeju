@@ -84,7 +84,10 @@ void _goToLogin(BuildContext context) {
   // 토큰 정리는 AuthInterceptor.onRefreshFailed가 책임진다. 여기까지 401이 올라왔다는
   // 건 refresh가 이미 실패해 토큰이 지워졌다는 뜻이므로, 화면만 로그인으로 돌린다.
   Navigator.of(context).pushAndRemoveUntil(
-    MaterialPageRoute(builder: (_) => const LoginScreen()),
+    MaterialPageRoute(
+      settings: const RouteSettings(name: 'login'),
+      builder: (_) => const LoginScreen(),
+    ),
     (route) => false,
   );
 }

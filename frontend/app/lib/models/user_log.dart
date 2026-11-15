@@ -31,6 +31,8 @@ class UserLog {
 enum LogName {
   // 세션
   appOpen('app_open'),
+  appBackground('app_background'),
+  screenView('screen_view'),
   // 홈
   homeCourseClick('home_course_click'),
   bannerClick('banner_click'),
@@ -93,6 +95,9 @@ abstract final class LogKeys {
   static const distanceM = 'distance_m';
   static const error = 'error';
   static const device = 'device';
+
+  /// 보고 있는 화면. 탭 이름 또는 라우트 이름(RouteSettings.name).
+  static const screen = 'screen';
 
   /// 앱이 죽었다 복구될 때 직전 종료 사유(reason·importance·at 등, Android만).
   static const exit = 'exit';

@@ -5,10 +5,23 @@ import RunHistory from '../components/RunHistory'
 import { downloadCsv } from '../utils/csv'
 import { kstToday } from '../utils/dates'
 
-/** 표의 열. 순서대로 표시되고, 이름은 서버 registry의 지표 이름이다. */
-const COLUMNS: { key: string; label: string }[] = [
+/** 표의 열. 순서대로 표시되고, 이름은 서버 registry의 지표 이름이다.
+ * derived는 서버에 없고 다른 열로 계산한 값이라 요청하지 않는다. */
+const COLUMNS: {
+  key: string
+  label: string
+  derived?: boolean
+  format?: (row: CourseRow) => string
+}[] = [
   { key: 'course_detail_open_unique', label: '조회' },
   { key: 'runners', label: '이용자' },
+  {
+    key: 'conversion',
+    label: '전환율',
+    derived: true,
+    format: (row) =>
+      row.counts.course_detail_open_unique ? `${row.counts.conversion.toFixed(1)}%` : '—',
+  },
   { key: 'course_runs', label: '러닝' },
   { key: 'incomplete_runs', label: '미완주' },
   { key: 'completions', label: '완주' },
@@ -40,6 +53,11 @@ function mergeByCourse(batch: Record<string, MetricPoint[]>): CourseRow[] {
       rows.set(p.key, row)
     }
   }
+  // 전환율 = 러닝 ÷ 조회(고유). 조회 없이 뛴 러닝(즐겨찾기·이어달리기 진입)이 있으면 100%를 넘을 수 있다.
+  for (const row of rows.values()) {
+    const views = row.counts.course_detail_open_unique ?? 0
+    row.counts.conversion = views ? ((row.counts.course_runs ?? 0) / views) * 100 : 0
+  }
   return [...rows.values()]
 }
 
@@ -63,7 +81,7 @@ export default function CourseStatsPage({ onUnauthorized }: Props) {
 
   useEffect(() => {
     getMetricsBatch(
-      COLUMNS.map((c) => c.key),
+      COLUMNS.filter((c) => !c.derived).map((c) => c.key),
       { group_by: 'course' },
     )
       .then((batch) => {
@@ -84,7 +102,11 @@ export default function CourseStatsPage({ onUnauthorized }: Props) {
     downloadCsv(
       `courses_${kstToday()}.csv`,
       ['course_id', 'course', ...COLUMNS.map((c) => c.key)],
-      sorted.map((c) => [c.id, c.name, ...COLUMNS.map((col) => c.counts[col.key] ?? 0)]),
+      sorted.map((c) => [
+        c.id,
+        c.name,
+        ...COLUMNS.map((col) => (col.derived ? (c.counts[col.key] ?? 0).toFixed(1) : c.counts[col.key] ?? 0)),
+      ]),
     )
   }
 
@@ -110,8 +132,8 @@ export default function CourseStatsPage({ onUnauthorized }: Props) {
       {tab === 'stats' && (
         <>
           <p className="muted page-desc">
-            누적 기준이에요. 열 제목을 누르면 그 기준으로 정렬돼요. 미완주 = 코스 러닝 중 검증
-            미통과.
+            누적 기준이에요. 열 제목을 누르면 그 기준으로 정렬돼요. 전환율 = 러닝 ÷ 조회(고유),
+            미완주 = 코스 러닝 중 검증 미통과.
           </p>
           {error && <div className="error">{error}</div>}
           {sorted == null && !error && <p className="muted">불러오는 중…</p>}
@@ -140,7 +162,7 @@ export default function CourseStatsPage({ onUnauthorized }: Props) {
                     </td>
                     {COLUMNS.map((col) => (
                       <td key={col.key} className={col.key === sort ? 'active' : undefined}>
-                        {c.counts[col.key] ?? 0}
+                        {col.format ? col.format(c) : c.counts[col.key] ?? 0}
                       </td>
                     ))}
                   </tr>

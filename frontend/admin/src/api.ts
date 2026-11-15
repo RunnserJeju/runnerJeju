@@ -973,6 +973,31 @@ export function getMetric(name: string, query: MetricQuery = {}): Promise<Metric
 }
 
 /** 여러 지표를 한 번에. 응답은 {지표 이름: 점 목록}. */
+/** 가입 주 하나의 재방문. returned 키는 '1'·'7'·'30'(일), 아직 못 재는 칸은 null. */
+export interface RetentionCohort {
+  week_start: string
+  signups: number
+  returned: Record<string, number | null>
+}
+
+export function getRetention(weeks = 8): Promise<RetentionCohort[]> {
+  return request(`/admin/metrics/retention?weeks=${weeks}`)
+}
+
+/** 화면 하나의 조회(PV)·체류시간. 잴 수 있는 조회가 없으면 avg/median은 null. */
+export interface ScreenStat {
+  screen: string
+  views: number
+  users: number
+  avg_sec: number | null
+  median_sec: number | null
+  total_sec: number
+}
+
+export function getScreenStats(from: string, to: string): Promise<ScreenStat[]> {
+  return request(`/admin/metrics/screens?from=${from}&to=${to}`)
+}
+
 export function getMetricsBatch(
   names: string[],
   query: MetricQuery = {},
@@ -1132,6 +1157,14 @@ export interface AdminRun {
   match_rate: number | null
   /** 러닝 중 앱이 죽어 다음 실행 때 복구된 기록인지. */
   app_killed: boolean
+  /** 이어달리기로 나눠 뛴 구간(처음 뛴 것부터). 한 번에 뛴 기록이면 빈 배열. */
+  segments: AdminRunSegment[]
+}
+
+export interface AdminRunSegment {
+  started_at: string
+  distance_km: number
+  duration_sec: number
 }
 
 /** 모든 회원의 러닝 기록. from/to는 KST 날짜(YYYY-MM-DD) 양끝 포함, 시작 시각 기준. */

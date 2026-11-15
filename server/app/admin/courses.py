@@ -14,7 +14,15 @@ from sqlalchemy.orm import Session
 from app import storage
 from app.admin.images import MAX_EXTRA_IMAGES, read_image_or_raise
 from app.db import get_db
-from app.models import Course, Partner, Run, Stamp, StampDefinition, Verification
+from app.models import (
+    Course,
+    ExternalCompletion,
+    Partner,
+    Run,
+    Stamp,
+    StampDefinition,
+    Verification,
+)
 from app.stamp_rules import course_condition
 from app.routers.courses import (
     CourseUploadError,
@@ -222,7 +230,7 @@ def _course_has_activity(db: Session, course_id: uuid.UUID) -> bool:
     않는다 — 찜만 된 코스는 경로를 바꿔도 기존 데이터가 어긋날 게 없다.
     """
     # 완주 스탬프는 통과한 검증이 있어야 생기므로 검증만 봐도 된다.
-    for model in (Run, Verification):
+    for model in (Run, Verification, ExternalCompletion):
         row = db.execute(
             select(model.id).where(model.course_id == course_id).limit(1)
         ).first()
@@ -243,6 +251,7 @@ def _reset_course_records(db: Session, course_id: uuid.UUID) -> None:
     커밋은 호출한 엔드포인트가 경로 교체까지 묶어 한 트랜잭션으로 처리한다.
     """
     db.execute(delete(Verification).where(Verification.course_id == course_id))
+    db.execute(delete(ExternalCompletion).where(ExternalCompletion.course_id == course_id))
     course_stamps = select(StampDefinition.id).where(*course_condition(course_id))
     db.execute(delete(Stamp).where(Stamp.stamp_definition_id.in_(course_stamps)))
 

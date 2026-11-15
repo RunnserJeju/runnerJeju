@@ -49,17 +49,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await Services.instance.auth.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'login'),
+        builder: (_) => const LoginScreen(),
+      ),
       (route) => false,
     );
   }
 
-  Future<void> _push(Widget screen) =>
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  Future<void> _push(String name, Widget screen) => Navigator.of(context).push(
+    MaterialPageRoute(
+      settings: RouteSettings(name: name),
+      builder: (_) => screen,
+    ),
+  );
 
   /// 회원 정보에서 사진을 바꾸고 돌아오면 카드에도 반영한다(서비스가 들고 있는 값).
   Future<void> _openMemberInfo() async {
-    await _push(const MemberInfoScreen());
+    await _push('member_info', const MemberInfoScreen());
     if (!mounted) return;
     setState(() => _user = Services.instance.auth.loadCurrentUser());
   }
@@ -106,6 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: Icons.flag_rounded,
               label: '완주 코스',
               onTap: () => _push(
+                'completed_courses',
                 CompletedCoursesScreen(
                   onOpenCourse: (id) =>
                       widget.onOpenCourse(id, LogSource.profile),
@@ -116,6 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: Icons.favorite_rounded,
               label: '찜한 코스',
               onTap: () => _push(
+                'favorite_courses',
                 FavoriteCoursesScreen(
                   onOpenCourse: (id) =>
                       widget.onOpenCourse(id, LogSource.favorite),
@@ -126,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _MenuEntry(
               icon: Icons.confirmation_number_rounded,
               label: '내 쿠폰',
-              onTap: () => _push(const CouponListScreen()),
+              onTap: () => _push('coupon_list', const CouponListScreen()),
             ),
           ],
         ),

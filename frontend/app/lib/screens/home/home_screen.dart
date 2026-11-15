@@ -168,7 +168,10 @@ class _HomeScreenState extends State<HomeScreen> {
             // 아직 알림을 만들어 보내는 곳이 없어 읽지 않은 알림도 없다.
             hasUnread: false,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NotificationScreen()),
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'notification'),
+                builder: (_) => const NotificationScreen(),
+              ),
             ),
           ),
           const SizedBox(width: 10),

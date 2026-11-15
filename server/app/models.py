@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    text,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -952,6 +953,50 @@ class CrashReport(Base):
     dump_path: Mapped[str | None] = mapped_column(String(200), default=None)
     # 당시 러닝 상태, Android 종료 정보(importance·메모리) 등 앱이 아는 문맥.
     context: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ExternalCompletion(Base):
+    """러닝 기록(runs) 없이 판정한 코스 완주 시도 한 건 — 가민·순토 링크 인증, 운영자 수동 인정.
+
+    링크 인증은 실패한 시도도 남긴다(운영에서 추출 실패를 보려고). 완주로 치는 건
+    status가 matched인 행뿐이다(app/completions.py). 좌표는 저장하지 않는다.
+    """
+
+    __tablename__ = "external_completions"
+    __table_args__ = (
+        # 같은 활동으로 두 번(다른 사람·다른 코스) 인정받지 못한다. 실패한 시도는 여러 번 남는다.
+        Index(
+            "uq_external_completion_activity",
+            "source",
+            "activity_id",
+            unique=True,
+            postgresql_where=text("status = 'matched' AND activity_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("courses.id"), index=True
+    )
+    # garmin | suunto | admin
+    source: Mapped[str] = mapped_column(String(20))
+    # 그 서비스의 활동 id. 운영자 인정은 None.
+    activity_id: Mapped[str | None] = mapped_column(String(100), default=None)
+    url: Mapped[str | None] = mapped_column(String(500), default=None)
+    # verifications.status와 같은 값: matched | mismatched | failed
+    status: Mapped[str] = mapped_column(String(20))
+    match_rate: Mapped[float | None] = mapped_column(Float, default=None)
+    detail: Mapped[str | None] = mapped_column(String(500), default=None)
+    # 링크에서 읽은 활동 시작 시각·거리·좌표 수. 못 읽었으면 None.
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    distance_meters: Mapped[float | None] = mapped_column(Float, default=None)
+    point_count: Mapped[int | None] = mapped_column(Integer, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

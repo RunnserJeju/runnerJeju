@@ -48,6 +48,7 @@ class RunnersJejuApp extends StatelessWidget {
       title: 'Runners Jeju',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      navigatorObservers: [Services.instance.screens],
       home: const AuthGate(),
     );
   }

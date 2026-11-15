@@ -2,6 +2,8 @@
 
 GET /admin/metrics                      지표 목록(이름·표시명·지원 group_by)
 GET /admin/metrics/batch?names=a,b      여러 지표를 한 번에 {name: [point]}
+GET /admin/metrics/retention            가입 주별 재방문율
+GET /admin/metrics/screens              화면별 PV·체류시간
 GET /admin/metrics/{name}               지표 하나 [point]
 
 point는 {key, name, count}다. group_by=none이면 key가 null인 한 줄, day면 key가
@@ -10,19 +12,20 @@ point는 {key, name, count}다. group_by=none이면 key가 null인 한 줄, day�
 """
 
 import uuid
-from datetime import date, datetime, timedelta
+from collections import defaultdict
+from datetime import date, datetime, time, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
 from app.admin.metrics import sources
 from app.admin.metrics.registry import METRICS, Metric
 from app.db import get_db
-from app.models import Course
+from app.models import Course, User, UserLog
 from app.routers.courses import KST
-from app.schemas import MetricInfoOut, MetricPointOut
+from app.schemas import MetricInfoOut, MetricPointOut, RetentionCohortOut, ScreenStatOut
 
 router = APIRouter(tags=["metrics"])
 
@@ -110,6 +113,122 @@ def batch_metrics(
     metrics = [get_metric(n, group_by) for n in requested]
     start, end = resolve_period(start, end, group_by)
     return {m.name: evaluate(db, m, start, end, group_by) for m in metrics}
+
+
+# 재방문을 보는 날 수. 'n일 리텐션' = 가입 다음 날부터 n일째까지 사이에 하루라도 앱을 쓴 비율.
+RETENTION_DAYS = (1, 7, 30)
+
+
+@router.get("/metrics/retention", response_model=list[RetentionCohortOut])
+def retention(
+    weeks: int = Query(default=8, ge=1, le=26),
+    db: Session = Depends(get_db),
+):
+    """최근 weeks주의 가입 주(KST 월요일 시작)별 재방문율. 최신 주가 먼저.
+
+    가입 당일 활동은 재방문이 아니다. 코호트의 마지막 가입자에게 아직 n일이 다 지나지
+    않았으면 그 칸은 null — 비율이 낮게 보이는 걸 막는다. 탈퇴자도 가입자 수에 든다.
+    """
+    today = datetime.now(KST).date()
+    first = today - timedelta(days=today.weekday(), weeks=weeks - 1)
+    since = datetime.combine(first, time.min, KST)
+
+    signups = db.execute(
+        select(User.id, sources.kst_date(User.created_at).label("day"))
+        .where(User.created_at >= since)
+    ).all()
+    if not signups:
+        return []
+
+    day = sources.kst_date(UserLog.created_at)
+    visits = db.execute(
+        select(UserLog.user_id, day.label("day"))
+        .where(UserLog.user_id.in_([str(u.id) for u in signups]), UserLog.created_at >= since)
+        .group_by(UserLog.user_id, day)
+    ).all()
+    visited: dict[str, set[date]] = defaultdict(set)
+    for user_id, visit_day in visits:
+        visited[user_id].add(visit_day)
+
+    cohorts: dict[date, dict] = {}
+    for user_id, signup_day in signups:
+        monday = signup_day - timedelta(days=signup_day.weekday())
+        cohort = cohorts.setdefault(
+            monday, {"signups": 0, "last": signup_day, **{n: 0 for n in RETENTION_DAYS}}
+        )
+        cohort["signups"] += 1
+        cohort["last"] = max(cohort["last"], signup_day)
+        gaps = {(d - signup_day).days for d in visited.get(str(user_id), ())}
+        for n in RETENTION_DAYS:
+            if any(1 <= gap <= n for gap in gaps):
+                cohort[n] += 1
+
+    return [
+        {
+            "week_start": monday,
+            "signups": c["signups"],
+            "returned": {
+                str(n): c[n] if (today - c["last"]).days >= n else None for n in RETENTION_DAYS
+            },
+        }
+        for monday, c in sorted(cohorts.items(), reverse=True)
+    ]
+
+
+@router.get("/metrics/screens", response_model=list[ScreenStatOut])
+def screen_stats(
+    start: date | None = Query(default=None, alias="from"),
+    end: date | None = Query(default=None, alias="to"),
+    db: Session = Depends(get_db),
+):
+    """화면별 조회 수(PV)·고유 사용자·체류시간. 기간 생략 시 최근 30일, PV 많은 순.
+
+    체류시간은 screen_view에서 같은 세션의 다음 screen_view·app_background까지다.
+    뒤따르는 로그가 없는 조회(화면을 보다 앱이 죽음)는 PV에만 들고 체류시간에서 빠진다.
+    """
+    start, end = resolve_period(start, end, "day")
+    events = (
+        select(
+            UserLog.log_name,
+            UserLog.user_id,
+            UserLog.detail["screen"].astext.label("screen"),
+            UserLog.created_at,
+            func.lead(UserLog.created_at)
+            .over(partition_by=UserLog.session_id, order_by=(UserLog.created_at, UserLog.id))
+            .label("next_at"),
+        )
+        .where(
+            UserLog.log_name.in_(("screen_view", "app_background")),
+            UserLog.session_id.is_not(None),
+            *sources.Period(start, end).clauses(UserLog.created_at),
+        )
+        .subquery()
+    )
+    dwell = func.extract("epoch", events.c.next_at - events.c.created_at)
+    rows = db.execute(
+        select(
+            events.c.screen,
+            func.count().label("views"),
+            func.count(distinct(events.c.user_id)).label("users"),
+            func.avg(dwell).label("avg_sec"),
+            func.percentile_cont(0.5).within_group(dwell).label("median_sec"),
+            func.coalesce(func.sum(dwell), 0).label("total_sec"),
+        )
+        .where(events.c.log_name == "screen_view", events.c.screen.is_not(None))
+        .group_by(events.c.screen)
+        .order_by(func.count().desc(), events.c.screen)
+    ).all()
+    return [
+        {
+            "screen": r.screen,
+            "views": r.views,
+            "users": r.users,
+            "avg_sec": None if r.avg_sec is None else round(float(r.avg_sec), 1),
+            "median_sec": None if r.median_sec is None else round(float(r.median_sec), 1),
+            "total_sec": round(float(r.total_sec)),
+        }
+        for r in rows
+    ]
 
 
 @router.get("/metrics/{name}", response_model=list[MetricPointOut])

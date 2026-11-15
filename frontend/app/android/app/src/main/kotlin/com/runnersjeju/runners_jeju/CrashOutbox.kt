@@ -25,6 +25,19 @@ object CrashOutbox {
         tmp.renameTo(File(dir, "$id.json"))
     }
 
+    /// 앱이 보내는 X-App-Version과 같은 형식("2.2.0+17").
+    fun appVersion(context: Context): String? = try {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION") info.versionCode.toLong()
+        }
+        "${info.versionName}+$code"
+    } catch (_: Throwable) {
+        null
+    }
+
     val device: String get() = "${Build.MANUFACTURER} ${Build.MODEL}"
     val osVersion: String get() = "Android ${Build.VERSION.RELEASE} (${Build.ID})"
 

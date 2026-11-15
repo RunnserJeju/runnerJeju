@@ -35,6 +35,7 @@ class CoursePreviewSheet extends StatelessWidget {
     required this.onDownloadGpx,
     required this.isReversed,
     required this.onReverse,
+    required this.onCertifyExternal,
   });
 
   /// 목록에서 온 코스. 이름·거리처럼 시트에 바로 보여줄 값은 여기 다 있다.
@@ -61,6 +62,9 @@ class CoursePreviewSheet extends StatelessWidget {
   /// 문구만 바꾼다. 저장하지 않는 값이라 코스를 바꾸거나 시트를 닫으면 풀린다.
   final bool isReversed;
   final VoidCallback onReverse;
+
+  /// 가민·순토 링크로 완주 인증하러 간다.
+  final VoidCallback onCertifyExternal;
 
   /// 접힌 높이. 시작 버튼까지는 끌어올리지 않아도 보여야 한다.
   static const double _collapsedSize = 0.36;
@@ -209,6 +213,12 @@ class CoursePreviewSheet extends StatelessWidget {
         onPressed: (detail?.path.length ?? 0) >= 2 ? onReverse : null,
         icon: const Icon(Icons.swap_vert_rounded),
         label: Text(isReversed ? '원래 방향으로 되돌리기' : '코스 방향 바꾸기'),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        onPressed: onCertifyExternal,
+        icon: const Icon(Icons.link_rounded),
+        label: const Text('외부 기록 인증하기'),
       ),
     ];
   }

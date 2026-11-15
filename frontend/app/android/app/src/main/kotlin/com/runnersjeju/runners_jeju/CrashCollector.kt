@@ -11,6 +11,7 @@ import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 import java.io.InputStream
+import org.json.JSONObject
 import java.util.UUID
 
 /// 크래시 콜스택 수집. 결과는 [CrashOutbox]에 쌓이고 Dart가 서버로 올린다.
@@ -32,6 +33,15 @@ object CrashCollector {
         if (handlerInstalled) return
         handlerInstalled = true
         val app = context.applicationContext
+        val version = CrashOutbox.appVersion(app)
+        // 종료 기록은 다음 실행(업데이트 후일 수 있음) 때 읽으므로, 이 프로세스의 버전을 OS에 맡겨 둔다.
+        if (version != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                app.getSystemService(ActivityManager::class.java)
+                    .setProcessStateSummary(version.toByteArray())
+            } catch (_: Throwable) {
+            }
+        }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {
@@ -41,6 +51,7 @@ object CrashCollector {
                         "id" to UUID.randomUUID().toString(),
                         "kind" to "android_crash",
                         "occurred_at" to CrashOutbox.iso(System.currentTimeMillis()),
+                        "app_version" to (version ?: JSONObject.NULL),
                         "summary" to "${error.javaClass.name}: ${error.message}".take(500),
                         "stack" to Log.getStackTraceString(error).take(STACK_MAX_CHARS),
                         "device" to CrashOutbox.device,
@@ -100,6 +111,8 @@ object CrashCollector {
                     "id" to UUID.nameUUIDFromBytes("${info.pid}:${info.timestamp}".toByteArray()).toString(),
                     "kind" to kind,
                     "occurred_at" to CrashOutbox.iso(info.timestamp),
+                    // 버전을 맡기기 전 빌드에서 죽은 기록은 null(모름) — 올리는 앱 버전으로 채우지 않는다.
+                    "app_version" to (info.processStateSummary?.toString(Charsets.UTF_8) ?: JSONObject.NULL),
                     "summary" to (info.description ?: kind).take(500),
                     "device" to CrashOutbox.device,
                     "os_version" to CrashOutbox.osVersion,

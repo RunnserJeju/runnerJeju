@@ -114,6 +114,7 @@ class _RunResultScreenState extends State<RunResultScreen> {
   void _openShare() {
     Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'run_share'),
         builder: (_) => RunShareScreen(
           record: _submission.uploadResult?.record ?? widget.record,
         ),
