@@ -73,7 +73,7 @@ class AuthApi {
     return User.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// 로그인 직후(닉네임 없을 때) 닉네임 설정 화면에서 호출한다.
+  /// 닉네임 설정 화면과 회원 정보의 닉네임 수정에서 호출한다.
   Future<void> updateNickname(String nickname) {
     return _client.dio.patch('/auth/nickname', data: {'nickname': nickname});
   }

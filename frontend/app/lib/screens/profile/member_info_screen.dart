@@ -10,7 +10,8 @@ import '../../widgets/async_view.dart';
 import '../../widgets/profile_avatar.dart';
 import '../auth/login_screen.dart';
 
-/// 회원 정보: 맨 위 프로필 사진(누르면 바꾸기), 닉네임·이메일·가입일, 맨 아래 작은 회원탈퇴.
+/// 회원 정보: 맨 위 프로필 사진(누르면 바꾸기), 닉네임(누르면 바꾸기)·이메일·가입일,
+/// 맨 아래 작은 회원탈퇴.
 class MemberInfoScreen extends StatefulWidget {
   const MemberInfoScreen({super.key});
 
@@ -88,6 +89,27 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
     }
   }
 
+  Future<void> _editNickname(User? user) async {
+    final nickname = await showDialog<String>(
+      context: context,
+      builder: (_) => _NicknameDialog(initial: user?.nickname ?? ''),
+    );
+    if (nickname == null || nickname == user?.nickname || !mounted) return;
+
+    try {
+      final updated = await Services.instance.auth.changeNickname(nickname);
+      if (!mounted) return;
+      setState(() {
+        _future = Future.value(updated);
+      });
+    } on AppException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _withdraw() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -159,7 +181,11 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
               Card(
                 child: Column(
                   children: [
-                    _InfoRow(label: '닉네임', value: user?.nickname),
+                    _InfoRow(
+                      label: '닉네임',
+                      value: user?.nickname,
+                      onTap: () => _editNickname(user),
+                    ),
                     const Divider(height: 1, color: AppColors.lineSoft),
                     _InfoRow(label: '이메일', value: user?.email),
                     const Divider(height: 1, color: AppColors.lineSoft),
@@ -196,13 +222,27 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+  const _InfoRow({required this.label, required this.value, this.onTap});
 
   final String label;
   final String? value;
 
+  /// 주면 누를 수 있는 줄이 되고 오른쪽에 화살표가 붙는다.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
+    final onTap = this.onTap;
+    if (onTap == null) return _content();
+
+    return Semantics(
+      button: true,
+      label: '$label 바꾸기',
+      child: InkWell(onTap: onTap, child: _content()),
+    );
+  }
+
+  Widget _content() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
@@ -221,8 +261,75 @@ class _InfoRow extends StatelessWidget {
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppColors.textSubtle,
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// 닉네임 입력창. 저장을 누르면 앞뒤 공백을 뗀 값을 돌려준다.
+class _NicknameDialog extends StatefulWidget {
+  const _NicknameDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_NicknameDialog> createState() => _NicknameDialogState();
+}
+
+class _NicknameDialogState extends State<_NicknameDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+  final _formKey = GlobalKey<FormState>();
+
+  // 서버 한도(NicknameUpdate)와 같다.
+  static const int _maxLength = 20;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(_controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('닉네임 바꾸기'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          maxLength: _maxLength,
+          decoration: const InputDecoration(hintText: '예) 제주러너'),
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _submit(),
+          validator: (value) => (value == null || value.trim().isEmpty)
+              ? '닉네임을 입력해 주세요'
+              : null,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('저장')),
+      ],
     );
   }
 }
