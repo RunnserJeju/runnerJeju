@@ -130,6 +130,7 @@ class CrashReporter {
       'id': newUuidV4(),
       'kind': 'dart_error',
       'occurred_at': DateTime.now().toUtc().toIso8601String(),
+      'app_version': _userLog.appVersion.isEmpty ? null : _userLog.appVersion,
       'summary': summary.length > 500 ? summary.substring(0, 500) : summary,
       'stack': trace.length > _stackMaxChars
           ? trace.substring(0, _stackMaxChars)

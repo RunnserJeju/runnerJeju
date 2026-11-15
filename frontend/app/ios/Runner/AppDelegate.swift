@@ -98,8 +98,8 @@ final class CrashDiagnostics: NSObject, MXMetricManagerSubscriber {
       "summary": String(summary.prefix(500)),
       "device": diagnostic.metaData.deviceType,
       "os_version": diagnostic.metaData.osVersion,
-      // 올리는 앱은 그새 업데이트됐을 수 있다. 크래시 난 빌드를 따로 남긴다.
-      "context": ["app_build_at_crash": diagnostic.metaData.applicationBuildVersion],
+      // 올리는 앱은 그새 업데이트됐을 수 있다. 크래시 난 버전을 남긴다(X-App-Version 형식).
+      "app_version": "\(diagnostic.applicationVersion)+\(diagnostic.metaData.applicationBuildVersion)",
     ]
     do {
       try diagnostic.jsonRepresentation().write(to: dir.appendingPathComponent("\(id).dump"))

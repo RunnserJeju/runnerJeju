@@ -1132,6 +1132,14 @@ export interface AdminRun {
   match_rate: number | null
   /** 러닝 중 앱이 죽어 다음 실행 때 복구된 기록인지. */
   app_killed: boolean
+  /** 이어달리기로 나눠 뛴 구간(처음 뛴 것부터). 한 번에 뛴 기록이면 빈 배열. */
+  segments: AdminRunSegment[]
+}
+
+export interface AdminRunSegment {
+  started_at: string
+  distance_km: number
+  duration_sec: number
 }
 
 /** 모든 회원의 러닝 기록. from/to는 KST 날짜(YYYY-MM-DD) 양끝 포함, 시작 시각 기준. */

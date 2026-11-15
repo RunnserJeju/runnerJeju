@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 import { ApiError, listAdminRuns, type AdminRun } from '../api'
 import { kstDaysAgo, kstToday } from '../utils/dates'
+import Modal from './Modal'
 
 const PAGE_SIZE = 50
 
@@ -39,6 +40,55 @@ function formatMatch(rate: number | null): ReactNode {
   return `경로 ${Math.floor(rate * 100 + 1e-6)}% 일치`
 }
 
+/** 기록 한 건을 구간별로. 이어달리기가 없으면 전체가 1회이고, 완주 표시는 마지막 구간에 붙는다. */
+function RunDetail({ run, onClose }: { run: AdminRun; onClose: () => void }) {
+  const segments = run.segments.length
+    ? run.segments
+    : [{ started_at: run.started_at, distance_km: run.distance_km, duration_sec: run.duration_sec }]
+  return (
+    <Modal
+      title={
+        <>
+          {run.nickname ?? '(탈퇴/미설정)'} · {run.course_name ?? '코스 없이 달림'}
+        </>
+      }
+      onClose={onClose}
+    >
+      <p className="muted">
+        총 {segments.length}회 · {run.distance_km.toFixed(2)}km · {formatDuration(run.duration_sec)} ·{' '}
+        {formatMatch(run.match_rate)}
+      </p>
+      <table className="users-table">
+        <thead>
+          <tr>
+            <th>회차</th>
+            <th>시작 시각</th>
+            <th>거리</th>
+            <th>시간</th>
+            <th>결과</th>
+          </tr>
+        </thead>
+        <tbody>
+          {segments.map((s, i) => {
+            const last = i === segments.length - 1
+            return (
+              <tr key={s.started_at}>
+                <td className="nowrap">{i + 1}회</td>
+                <td className="nowrap">{formatDateTime(s.started_at)}</td>
+                <td className="nowrap">{s.distance_km.toFixed(2)}km</td>
+                <td className="nowrap muted">{formatDuration(s.duration_sec)}</td>
+                <td className="nowrap">
+                  {last ? COMPLETION[run.completion] : <span className="muted">미완주</span>}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </Modal>
+  )
+}
+
 interface Props {
   onUnauthorized: () => void
 }
@@ -54,6 +104,8 @@ export default function RunHistory({ onUnauthorized }: Props) {
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
   const [runs, setRuns] = useState<AdminRun[] | null>(null)
+  /** 행을 눌러 구간별로 펼쳐 보는 기록. */
+  const [detail, setDetail] = useState<AdminRun | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleError = useCallback(
@@ -200,7 +252,7 @@ export default function RunHistory({ onUnauthorized }: Props) {
           </thead>
           <tbody>
             {runs.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} onClick={() => setDetail(r)}>
                 <td className="nowrap">{formatDateTime(r.started_at)}</td>
                 <td>
                   <strong>{r.nickname ?? <span className="muted">(탈퇴/미설정)</span>}</strong>
@@ -218,6 +270,9 @@ export default function RunHistory({ onUnauthorized }: Props) {
                   ) : (
                     COMPLETION[r.completion]
                   )}
+                  {r.segments.length > 0 && (
+                    <div className="muted">이어달리기 {r.segments.length - 1}회</div>
+                  )}
                 </td>
                 <td className="nowrap">{formatMatch(r.match_rate)}</td>
               </tr>
@@ -225,6 +280,8 @@ export default function RunHistory({ onUnauthorized }: Props) {
           </tbody>
         </table>
       )}
+
+      {detail && <RunDetail run={detail} onClose={() => setDetail(null)} />}
 
       {pageCount > 1 && (
         <div className="pager">

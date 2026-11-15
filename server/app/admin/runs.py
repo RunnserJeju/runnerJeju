@@ -56,6 +56,33 @@ def _app_killed():
     )
 
 
+def _segments(r) -> list[dict]:
+    """이어달리기로 나눠 뛴 구간들(처음 뛴 것부터). 이어달리기가 없으면 빈 리스트.
+
+    runs에는 합계만 남고 구간 메타는 continuations에 덧붙인 것만 있어, 처음 구간은
+    합계에서 덧붙인 구간을 빼서 되살린다.
+    """
+    appended = r.continuations or []
+    if not appended:
+        return []
+    first = {
+        "started_at": r.started_at,
+        "distance_km": round(
+            (r.distance_meters - sum(c["distance_meters"] for c in appended)) / 1000, 2
+        ),
+        "duration_sec": r.duration_sec - sum(c["duration_sec"] for c in appended),
+    }
+    rest = [
+        {
+            "started_at": c["started_at"],
+            "distance_km": round(c["distance_meters"] / 1000, 2),
+            "duration_sec": c["duration_sec"],
+        }
+        for c in appended
+    ]
+    return [first, *rest]
+
+
 @router.get("/runs", response_model=AdminRunListOut)
 def list_runs(
     date_from: date = Query(alias="from"),
@@ -94,6 +121,7 @@ def list_runs(
             Run.duration_sec,
             Run.started_at,
             Run.ended_at,
+            Run.continuations,
             Verification.status.label("verification_status"),
             Verification.match_rate,
             _app_killed().label("app_killed"),
@@ -128,6 +156,7 @@ def list_runs(
                 "match_rate": r.match_rate,
                 "completion": _completion(r.course_id, r.verification_status),
                 "app_killed": r.app_killed,
+                "segments": _segments(r),
             }
             for r in rows
         ],
