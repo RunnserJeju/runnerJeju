@@ -1073,32 +1073,44 @@ class RunningScreenState extends State<RunningScreen> {
                 onTap: _moveToMyLocation,
               ),
             ),
-          if (selected == null && _isPartnerMode)
-            _partnerSheet()
-          else if (selected == null)
-            ListenableBuilder(
-              listenable: _currentLocation,
-              builder: (context, _) => CourseListSheet(
-                controller: _sheetController,
-                courses: _visibleCourses,
-                myPosition: _currentLocation.latest,
-                isLoading: _isLoadingCourses || _isLoadingFavorites,
-                hasError: _coursesError != null || _favoritesError != null,
-                onSelect: (course) =>
-                    _selectCourse(course, source: LogSource.list),
-                onRetry: _favoritesError != null
-                    ? _loadFavoriteIds
-                    : _loadCourses,
-                title: _isFavoriteMode ? '찜한 코스' : null,
-                emptyIcon: _isFavoriteMode
-                    ? Icons.favorite_border_rounded
-                    : null,
-                emptyTitle: _isFavoriteMode ? '찜한 코스가 없어요' : null,
-                emptyMessage: _isFavoriteMode ? '코스 상세의 하트를 눌러 담아 보세요' : null,
-              ),
+          // 목록 시트는 상세가 떠 있는 동안에도 트리에 남겨 가려만 둔다. 상세를 닫으면
+          // 보던 높이와 스크롤 위치 그대로 돌아온다.
+          if (_isPartnerMode)
+            Offstage(
+              key: const ValueKey('partner-list-sheet'),
+              offstage: selected != null || _selectedPartner != null,
+              child: _partnerListSheet(),
             )
           else
             CoursePreviewSheet(
+            Offstage(
+              key: const ValueKey('course-list-sheet'),
+              offstage: selected != null,
+              child: ListenableBuilder(
+                listenable: _currentLocation,
+                builder: (context, _) => CourseListSheet(
+                  controller: _sheetController,
+                  courses: _visibleCourses,
+                  myPosition: _currentLocation.latest,
+                  isLoading: _isLoadingCourses || _isLoadingFavorites,
+                  hasError: _coursesError != null || _favoritesError != null,
+                  onSelect: (course) =>
+                      _selectCourse(course, source: LogSource.list),
+                  onRetry: _favoritesError != null
+                      ? _loadFavoriteIds
+                      : _loadCourses,
+                  title: _isFavoriteMode ? '찜한 코스' : null,
+                  emptyIcon: _isFavoriteMode
+                      ? Icons.favorite_border_rounded
+                      : null,
+                  emptyTitle: _isFavoriteMode ? '찜한 코스가 없어요' : null,
+                  emptyMessage: _isFavoriteMode ? '코스 상세의 하트를 눌러 담아 보세요' : null,
+                ),
+              ),
+            ),
+          if (selected == null && _isPartnerMode && _selectedPartner != null)
+            _partnerPreviewSheet(_selectedPartner!),
+          if (selected != null)
               // 코스를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
               key: ValueKey(selected.id),
               course: selected,
@@ -1119,22 +1131,20 @@ class RunningScreenState extends State<RunningScreen> {
     );
   }
 
-  /// 협력업체 모드의 아래 시트: 고른 업체가 있으면 상세, 없으면 목록.
-  Widget _partnerSheet() {
-    final partner = _selectedPartner;
-    if (partner != null) {
-      return PartnerPreviewSheet(
-        // 업체를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
-        key: ValueKey(partner.id),
-        partner: partner,
-        onClose: () => setState(() => _selectedPartner = null),
-        onNavigate: () => _navigateToPartner(partner),
-        onOpenInstagram: () => _openInstagram(partner),
-        onSelectCourse: _selectPartnerCourse,
-      );
-    }
+  Widget _partnerPreviewSheet(CoursePartner partner) {
+    return PartnerPreviewSheet(
+      // 업체를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
+      key: ValueKey(partner.id),
+      partner: partner,
+      onClose: () => setState(() => _selectedPartner = null),
+      onNavigate: () => _navigateToPartner(partner),
+      onOpenInstagram: () => _openInstagram(partner),
+      onSelectCourse: _selectPartnerCourse,
+    );
+  }
 
     return ListenableBuilder(
+  Widget _partnerListSheet() {
       listenable: _currentLocation,
       builder: (context, _) => PartnerListSheet(
         controller: _partnerSheetController,
