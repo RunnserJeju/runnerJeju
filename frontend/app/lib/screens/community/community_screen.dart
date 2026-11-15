@@ -63,9 +63,12 @@ class CommunityScreenState extends State<CommunityScreen> {
       LogName.eventDetailOpen,
       detail: {LogKeys.eventId: event.id, LogKeys.position: position},
     );
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => EventDetailScreen(event: event)));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'event_detail'),
+        builder: (_) => EventDetailScreen(event: event),
+      ),
+    );
   }
 
   /// 공개 중인 러닝위크. 실패하거나 없으면 배너를 숨긴다 — 커뮤니티 전체를 막을 일은 아니다.
@@ -92,6 +95,7 @@ class CommunityScreenState extends State<CommunityScreen> {
   Future<void> _openRunningWeek(RunningWeek week) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'running_week'),
         builder: (_) =>
             RunningWeekScreen(week: week, onOpenCourse: widget.onOpenCourse),
       ),

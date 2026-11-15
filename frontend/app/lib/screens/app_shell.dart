@@ -89,7 +89,10 @@ class _AppShellState extends State<AppShell> {
     recovery.settle(true);
     unawaited(Services.instance.runSubmission.submit(record));
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => RunResultScreen(record: record)),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'run_result'),
+        builder: (_) => RunResultScreen(record: record),
+      ),
     );
   }
 
@@ -135,6 +138,15 @@ class _AppShellState extends State<AppShell> {
     _runningKey.currentState?.openPartner(partner, source: source);
   }
 
+  /// screen_view 로그의 탭 이름. [_items]와 같은 순서.
+  static const _tabNames = ['home', 'community', 'running', 'stamp', 'profile'];
+
+  @override
+  void dispose() {
+    Services.instance.screens.tab = null;
+    super.dispose();
+  }
+
   static const _items = <({IconData? icon, String? asset, String label})>[
     (icon: Icons.home, asset: null, label: '홈'),
     (icon: Icons.groups, asset: null, label: '커뮤니티'),
@@ -145,6 +157,8 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // 탭을 바꾸는 곳이 여럿이라 여기서 한 번에 알린다(같은 탭이면 무시된다).
+    Services.instance.screens.tab = _tabNames[_index];
     final tabs = <Widget>[
       HomeScreen(
         onShowMap: () => setState(() => _index = _runningTab),

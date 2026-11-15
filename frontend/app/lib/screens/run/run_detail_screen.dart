@@ -20,7 +20,10 @@ class RunDetailScreen extends StatelessWidget {
         actions: [
           IconButton(
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => RunShareScreen(record: record)),
+              MaterialPageRoute(
+                settings: const RouteSettings(name: 'run_share'),
+                builder: (_) => RunShareScreen(record: record),
+              ),
             ),
             icon: const Icon(Icons.ios_share_rounded),
             tooltip: '공유하기',

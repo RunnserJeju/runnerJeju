@@ -827,6 +827,7 @@ class RunningScreenState extends State<RunningScreen> {
 
     await Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'run'),
         builder: (_) => RunScreen(course: course, initialCenter: origin),
       ),
     );
@@ -1082,7 +1083,6 @@ class RunningScreenState extends State<RunningScreen> {
               child: _partnerListSheet(),
             )
           else
-            CoursePreviewSheet(
             Offstage(
               key: const ValueKey('course-list-sheet'),
               offstage: selected != null,
@@ -1111,6 +1111,7 @@ class RunningScreenState extends State<RunningScreen> {
           if (selected == null && _isPartnerMode && _selectedPartner != null)
             _partnerPreviewSheet(_selectedPartner!),
           if (selected != null)
+            CoursePreviewSheet(
               // 코스를 바꾸면 시트를 접힌 상태에서 다시 시작한다.
               key: ValueKey(selected.id),
               course: selected,
@@ -1143,8 +1144,8 @@ class RunningScreenState extends State<RunningScreen> {
     );
   }
 
-    return ListenableBuilder(
   Widget _partnerListSheet() {
+    return ListenableBuilder(
       listenable: _currentLocation,
       builder: (context, _) => PartnerListSheet(
         controller: _partnerSheetController,

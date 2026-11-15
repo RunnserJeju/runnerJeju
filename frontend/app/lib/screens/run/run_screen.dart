@@ -278,7 +278,10 @@ class _RunScreenState extends State<RunScreen> {
     final base = widget.continuation;
     final shown = base == null ? record : RunRecord.continued(base, record);
     await Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => RunResultScreen(record: shown)),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'run_result'),
+        builder: (_) => RunResultScreen(record: shown),
+      ),
     );
   }
 

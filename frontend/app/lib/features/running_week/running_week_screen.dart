@@ -49,7 +49,10 @@ class _RunningWeekScreenState extends State<RunningWeekScreen> {
 
   Future<void> _start() async {
     final joined = await Navigator.of(context).push<RunningWeek>(
-      MaterialPageRoute(builder: (_) => ParticipationFormScreen(week: _week)),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'participation_form'),
+        builder: (_) => ParticipationFormScreen(week: _week),
+      ),
     );
     if (joined != null && mounted) setState(() => _week = joined);
   }

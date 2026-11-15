@@ -66,6 +66,9 @@ LOG_NAMES: frozenset[str] = frozenset(
         "withdraw",
         # 세션
         "app_open",
+        "app_background",
+        # 화면 전환 (detail: screen). 체류시간 = 같은 세션의 다음 screen_view·app_background까지.
+        "screen_view",
     }
 )
 

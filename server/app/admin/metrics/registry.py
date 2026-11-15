@@ -85,6 +85,8 @@ def _group_of(name: str) -> str:
 # 운영 웹에 보여줄 한글 표시명. 없으면 이름을 그대로 쓴다.
 LOG_LABELS = {
     "app_open": "앱 실행",
+    "app_background": "앱 백그라운드",
+    "screen_view": "화면 조회(PV)",
     "home_course_click": "홈 코스 클릭",
     "banner_click": "배너 클릭",
     "notification_open": "알림 열기",

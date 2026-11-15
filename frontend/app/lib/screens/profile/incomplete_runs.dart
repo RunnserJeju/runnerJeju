@@ -73,6 +73,7 @@ class _IncompleteRunsSectionState extends State<IncompleteRunsSection> {
   Future<void> _openAll() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
+        settings: const RouteSettings(name: 'incomplete_runs'),
         builder: (_) => IncompleteRunsScreen(onContinue: widget.onContinue),
       ),
     );

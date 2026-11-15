@@ -22,9 +22,12 @@ Future<void> openRunDetail(BuildContext context, RunRecord record) async {
     }
   }
   if (!context.mounted) return;
-  Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => RunDetailScreen(record: full)));
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      settings: const RouteSettings(name: 'run_detail'),
+      builder: (_) => RunDetailScreen(record: full),
+    ),
+  );
 }
 
 /// 러닝 기록 한 줄. 누르면 상세.

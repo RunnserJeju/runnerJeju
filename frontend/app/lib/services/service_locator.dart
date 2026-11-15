@@ -40,6 +40,7 @@ import 'run_tracker.dart';
 import 'share_card_renderer.dart';
 import 'stamp_service.dart';
 import 'token_storage.dart';
+import 'screen_observer.dart';
 import 'user_log_service.dart';
 import 'verification_service.dart';
 
@@ -79,6 +80,7 @@ class Services {
 
   /// 행동 로그(user_log). 화면은 전역 [writeLog]로 남긴다.
   late final UserLogService userLog = UserLogService(UserLogApi(apiClient));
+  late final ScreenObserver screens = ScreenObserver(userLog);
 
   late final AuthService auth = AuthService(AuthApi(apiClient), tokenStorage);
   late final CourseService course = CourseService(CourseApi(apiClient));

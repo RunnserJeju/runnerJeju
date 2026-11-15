@@ -55,6 +55,9 @@ class UserLogService with WidgetsBindingObserver {
   /// 러닝 중인지. 세션을 끊을지 판단할 때 본다(러닝 화면이 시작/종료 때 알려 준다).
   bool _runActive = false;
 
+  /// 지금 보고 있는 화면([viewScreen]).
+  String? _screen;
+
   String get sessionId => _sessionId;
   String get appVersion => _appVersion;
   String get device => _device;
@@ -145,6 +148,18 @@ class UserLogService with WidgetsBindingObserver {
   /// 러닝 화면이 정상 종료 직후 부른다.
   void markRunEnded() => _runActive = false;
 
+  // --- 화면 ----------------------------------------------------------------
+
+  /// 보는 화면이 [screen]으로 바뀌었다(ScreenObserver). 같은 화면이면 남기지 않는다.
+  /// 체류시간은 같은 세션의 다음 screen_view·app_background까지의 간격이다.
+  void viewScreen(String? screen) {
+    if (screen == _screen) return;
+    _screen = screen;
+    if (screen != null) {
+      writeLog(LogName.screenView, detail: {LogKeys.screen: screen});
+    }
+  }
+
   // --- 세션 ----------------------------------------------------------------
 
   @override
@@ -152,6 +167,7 @@ class UserLogService with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.paused:
         _backgroundedAt = DateTime.now();
+        writeLog(LogName.appBackground, detail: {LogKeys.screen: ?_screen});
         // 백그라운드에서 죽을 수 있으니 지금 보낸다.
         unawaited(flush());
       case AppLifecycleState.resumed:
@@ -162,6 +178,14 @@ class UserLogService with WidgetsBindingObserver {
             DateTime.now().difference(away) > _sessionGap) {
           _sessionId = _newSessionId();
           writeLog(LogName.appOpen, detail: {'resumed': true});
+        }
+        // 자리를 비운 시간이 체류시간에 섞이지 않게 돌아온 화면을 다시 찍는다.
+        final screen = _screen;
+        if (away != null && screen != null) {
+          writeLog(
+            LogName.screenView,
+            detail: {LogKeys.screen: screen, 'resumed': true},
+          );
         }
       default:
         break;

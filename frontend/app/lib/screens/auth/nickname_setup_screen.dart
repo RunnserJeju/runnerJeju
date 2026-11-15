@@ -33,9 +33,12 @@ class _NicknameSetupScreenState extends State<NicknameSetupScreen> {
     try {
       await Services.instance.auth.setNickname(_nicknameController.text.trim());
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const AppShell()));
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          settings: const RouteSettings(name: 'shell'),
+          builder: (_) => const AppShell(),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));

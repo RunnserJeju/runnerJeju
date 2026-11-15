@@ -48,6 +48,7 @@ Future<void> openContinuationRun(
   navigator.pop();
 
   final route = MaterialPageRoute<void>(
+    settings: const RouteSettings(name: 'run'),
     builder: (_) => RunScreen(course: course, continuation: base),
   );
   if (replace) {

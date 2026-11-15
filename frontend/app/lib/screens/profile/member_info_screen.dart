@@ -124,7 +124,10 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
     }
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: 'login'),
+        builder: (_) => const LoginScreen(),
+      ),
       (route) => false,
     );
   }
