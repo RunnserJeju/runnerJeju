@@ -227,6 +227,27 @@ class _RunScreenState extends State<RunScreen> {
     );
   }
 
+  /// 일시정지·재개 버튼. 버튼을 누른 것만 남긴다 — 위치가 끊겨 저절로 멈춘 것은
+  /// tracker 안에서 일어나 여기를 지나지 않는다.
+  void _pause() {
+    if (_tracker.status != RunStatus.running) return;
+    _tracker.pause();
+    writeLog(LogName.runPause, detail: _runLogDetail());
+  }
+
+  void _resume() {
+    if (_tracker.status != RunStatus.paused) return;
+    _tracker.resume();
+    writeLog(LogName.runResume, detail: _runLogDetail());
+  }
+
+  /// 이번 러닝(이어달리기면 이번 구간)이 어디까지 왔는지. run_finish와 같은 값이다.
+  Map<String, dynamic> _runLogDetail() => {
+    LogKeys.courseId: ?widget.course?.id,
+    LogKeys.distanceM: _tracker.distanceMeters.round(),
+    LogKeys.elapsedSec: _tracker.elapsed.inSeconds,
+  };
+
   /// 러닝을 끝내고 결과 화면으로 넘어간다.
   ///
   /// 되묻지 않는다. 종료 버튼은 일시정지 상태에서만 나오므로 여기까지 오려면
@@ -241,15 +262,7 @@ class _RunScreenState extends State<RunScreen> {
     _tracker.finish();
     // 러닝이 끝났으니 잠금화면 위젯을 걷는다.
     unawaited(_liveWidget.stop());
-    final courseId = widget.course?.id;
-    writeLog(
-      LogName.runFinish,
-      detail: {
-        LogKeys.courseId: ?courseId,
-        LogKeys.distanceM: _tracker.distanceMeters.round(),
-        LogKeys.elapsedSec: _tracker.elapsed.inSeconds,
-      },
-    );
+    writeLog(LogName.runFinish, detail: _runLogDetail());
     Services.instance.userLog.markRunEnded();
     final record = _tracker.buildRecord();
     if (record == null) {
@@ -358,8 +371,8 @@ class _RunScreenState extends State<RunScreen> {
                     coursePath: widget.course?.path ?? const [],
                     onStart: _start,
                     onStartSimulation: (source) => _start(source: source),
-                    onPause: tracker.pause,
-                    onResume: tracker.resume,
+                    onPause: _pause,
+                    onResume: _resume,
                     onFinish: _finish,
                   ),
                 ],
