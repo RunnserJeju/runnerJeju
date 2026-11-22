@@ -1,5 +1,7 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/app_notification.dart';
 import '../../models/run_record.dart';
 import '../../models/user.dart';
 import '../../models/user_log.dart';
@@ -46,6 +48,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
+    // 토큰이 살아 있을 때 기기 등록부터 푼다.
+    await Services.instance.push.stop();
     await Services.instance.auth.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
@@ -98,6 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               builder: (context, snapshot) =>
                   _ProfileCard(user: snapshot.data, onTap: _openMemberInfo),
             ),
+            const _PushOffNotice(),
             const SizedBox(height: 24),
             const SectionTitle('캘린더'),
             const SizedBox(height: 12),
@@ -256,6 +261,43 @@ class _MenuEntry extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// OS 알림 권한을 꺼 둔 사람에게만 보인다. 한 번 거부하면 권한 창이 다시 안 떠서
+/// 설정 앱으로 보낸다. 켜고 돌아오면 [PushService]가 다시 읽어 저절로 사라진다.
+class _PushOffNotice extends StatelessWidget {
+  const _PushOffNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final push = Services.instance.push;
+    return ValueListenableBuilder<PushPermission>(
+      valueListenable: push.permission,
+      builder: (context, permission, _) {
+        if (permission != PushPermission.denied) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Text.rich(
+            TextSpan(
+              text: '알림이 꺼져있습니다. ',
+              children: [
+                TextSpan(
+                  text: '설정에서 켜기',
+                  style: const TextStyle(
+                    color: AppColors.ink,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
+                  ),
+                  recognizer: TapGestureRecognizer()..onTap = push.openSettings,
+                ),
+              ],
+            ),
+            style: const TextStyle(fontSize: 13, color: AppColors.textSubtle),
+          ),
+        );
+      },
     );
   }
 }

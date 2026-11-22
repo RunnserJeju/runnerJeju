@@ -164,13 +164,15 @@ class _HomeScreenState extends State<HomeScreen> {
           bottom: BorderSide(color: AppColors.line, width: 0.5),
         ),
         actions: [
-          _BellButton(
-            // 아직 알림을 만들어 보내는 곳이 없어 읽지 않은 알림도 없다.
-            hasUnread: false,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                settings: const RouteSettings(name: 'notification'),
-                builder: (_) => const NotificationScreen(),
+          ValueListenableBuilder<int>(
+            valueListenable: Services.instance.notification.unreadCount,
+            builder: (context, unread, _) => _BellButton(
+              hasUnread: unread > 0,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  settings: const RouteSettings(name: 'notification'),
+                  builder: (_) => const NotificationScreen(),
+                ),
               ),
             ),
           ),
@@ -377,7 +379,7 @@ class _BellButton extends StatelessWidget {
                   width: 7,
                   height: 7,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFD92E16),
+                    color: const Color(0xFFF2403D),
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 1.2),
                   ),

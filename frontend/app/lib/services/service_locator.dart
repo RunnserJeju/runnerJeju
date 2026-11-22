@@ -7,6 +7,7 @@ import '../api/external_cert_api.dart';
 import '../api/favorite_api.dart';
 import '../api/home_api.dart';
 import '../api/notice_api.dart';
+import '../api/notification_api.dart';
 import '../api/partner_api.dart';
 import '../api/run_api.dart';
 import '../api/stamp_api.dart';
@@ -30,8 +31,10 @@ import 'kakao_map_launcher.dart';
 import 'location_service.dart';
 import 'motion_service.dart';
 import 'notice_service.dart';
+import 'notification_service.dart';
 import 'partner_service.dart';
 import 'program_service.dart';
+import 'push_service.dart';
 import 'run_flow_presence.dart';
 import 'run_live_widget.dart';
 import 'run_journal.dart';
@@ -110,6 +113,17 @@ class Services {
     VerificationApi(apiClient),
   );
   late final NoticeService notice = NoticeService(NoticeApi(apiClient));
+
+  /// 알림함(목록·읽음·안 읽은 수)과 푸시 연결(권한·토큰·수신).
+  late final NotificationApi _notificationApi = NotificationApi(apiClient);
+  late final NotificationService notification = NotificationService(
+    _notificationApi,
+  );
+  late final PushService push = PushService(
+    _notificationApi,
+    notification,
+    userLog,
+  );
 
   /// 완료된 러닝의 업로드·검증·보상 조회. 화면이 닫혀도 끝까지 돈다(#104).
   late final RunSubmission runSubmission = RunSubmission(

@@ -16,8 +16,15 @@ from app.schemas import DeviceRegister, DeviceUnregister, NotificationOut, Unrea
 
 router = APIRouter(tags=["notifications"])
 
-# 알림함에 보이는 기간. 행은 지우지 않는다(운영툴 기록).
-INBOX_WINDOW = timedelta(days=90)
+KST = timezone(timedelta(hours=9))
+# 알림함에 보이는 날 수(오늘 포함, 한국 날짜). 행은 지우지 않는다(운영툴 기록).
+INBOX_DAYS = 7
+
+
+def _inbox_since() -> datetime:
+    """알림함이 보여주는 가장 이른 시각 — 오늘을 포함한 최근 INBOX_DAYS일의 첫날 0시(KST)."""
+    today = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0)
+    return today - timedelta(days=INBOX_DAYS - 1)
 
 
 @router.put("/devices", status_code=204)
@@ -80,7 +87,7 @@ def list_notifications(
     """내 알림함, 최신순. 다음 쪽은 마지막 항목의 created_at을 before로 넘긴다."""
     query = select(Notification).where(
         Notification.user_id == user_id,
-        Notification.created_at >= datetime.now(timezone.utc) - INBOX_WINDOW,
+        Notification.created_at >= _inbox_since(),
     )
     if before is not None:
         query = query.where(Notification.created_at < before)
@@ -100,7 +107,7 @@ def unread_count(
         .where(
             Notification.user_id == user_id,
             Notification.read_at.is_(None),
-            Notification.created_at >= datetime.now(timezone.utc) - INBOX_WINDOW,
+            Notification.created_at >= _inbox_since(),
         )
     )
     return UnreadCountOut(count=count or 0)
