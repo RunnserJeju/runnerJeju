@@ -13,7 +13,7 @@ from app import apple_auth, storage
 from app.admin.images import read_image_or_raise
 from app.db import get_db
 from app.deps import current_user_id
-from app.models import RefreshToken, Run, User
+from app.models import DeviceToken, RefreshToken, Run, User
 from app.schemas import (
     AccessTokenOut,
     AppleLoginRequest,
@@ -390,6 +390,7 @@ def withdraw(
 
     # ② 세션 폐기 — refresh 토큰 전부 삭제(모든 기기 로그아웃 + users FK 해소).
     db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
+    db.execute(delete(DeviceToken).where(DeviceToken.user_id == str(user.id)))
 
     # ③ 러닝 GPS 경로 제거(위치정보=개인정보). 거리·시간·course_id 메타는 익명
     #    활동으로 남겨 통계에 쓴다. 완주(stamps)·찜(favorites)은 그대로 둔다.

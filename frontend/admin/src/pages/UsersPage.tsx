@@ -21,6 +21,14 @@ const PLATFORM_LABEL: Record<string, string> = {
 }
 
 /** 기기 칸 표기: 'Android · samsung SM-S918N'. 모델이 없으면 종류만. */
+/** 회원 목록의 알림 열. 허용만 진하게 보인다. */
+const NOTIFICATION_LABEL: Record<string, string> = {
+  authorized: '허용',
+  denied: '거부',
+  not_determined: '미응답',
+  none: '—',
+}
+
 function deviceLabel(u: { platform: string | null; device: string | null }): string | null {
   const platform = u.platform ? (PLATFORM_LABEL[u.platform] ?? u.platform) : null
   return [platform, u.device].filter(Boolean).join(' · ') || null
@@ -140,6 +148,7 @@ export default function UsersPage({ onUnauthorized }: Props) {
               </SortTh>
               <th>가입 경로</th>
               <th>기기</th>
+              <th>알림</th>
               <SortTh sortKey="created_at" sort={sort} onToggle={toggleSort}>
                 가입일
               </SortTh>
@@ -160,6 +169,9 @@ export default function UsersPage({ onUnauthorized }: Props) {
                 <td className="muted">{u.email ?? '—'}</td>
                 <td>{u.providers.map((p) => PROVIDER_LABEL[p] ?? p).join(', ') || '—'}</td>
                 <td>{deviceLabel(u) ?? <span className="muted">—</span>}</td>
+                <td className="nowrap">
+                  {u.notification === 'authorized' ? '허용' : <span className="muted">{NOTIFICATION_LABEL[u.notification]}</span>}
+                </td>
                 <td className="nowrap">{formatDate(u.created_at)}</td>
                 <td className="nowrap muted">{u.last_login_at ? formatDate(u.last_login_at) : '—'}</td>
                 <td>{u.completed_count}</td>

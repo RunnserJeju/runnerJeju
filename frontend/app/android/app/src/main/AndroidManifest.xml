@@ -22,6 +22,10 @@
         android:label="러너스 제주"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- 앱이 꺼져 있을 때 FCM이 직접 띄우는 알림의 채널. 서버(app/fcm.py)와 앱이 같은 id를 쓴다. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="default" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

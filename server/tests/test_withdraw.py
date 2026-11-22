@@ -85,7 +85,7 @@ class TestWithdraw:
 
         auth_router.withdraw(user_id=str(u.id), db=db)
 
-        assert db.delete_count == 1  # refresh 토큰 삭제
+        assert db.delete_count == 2  # refresh 토큰·기기 토큰 삭제
         assert db.update_count == 1  # 러닝 GPS 경로 비움
 
     def test_idempotent_when_already_withdrawn(self):

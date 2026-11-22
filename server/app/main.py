@@ -19,6 +19,7 @@ from app.routers import (
     favorites,
     home,
     notices,
+    notifications,
     partners,
     running_weeks,
     runs,
@@ -64,6 +65,7 @@ app.include_router(stamps.router)
 app.include_router(user_logs.router)
 app.include_router(crash_reports.router)
 app.include_router(notices.router)
+app.include_router(notifications.router)
 app.include_router(partners.router)
 app.include_router(home.router)
 app.include_router(events.router)

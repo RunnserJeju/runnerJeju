@@ -915,6 +915,8 @@ class UserSummaryOut(BaseModel):
     last_login_at: datetime | None
     # 완주 코스 수 = 획득 스탬프 수.
     completed_count: int
+    # 알림 수신 상태: authorized | denied | not_determined | none(등록된 기기 없음).
+    notification: str = "none"
 
 
 class UserDetailOut(BaseModel):
@@ -1314,3 +1316,192 @@ class CrashReportIn(BaseModel):
     device: str | None = None
     os_version: str | None = None
     context: dict = Field(default_factory=dict)
+
+
+# --- 알림 ----------------------------------------------------------------
+
+
+class DeviceRegister(BaseModel):
+    """앱이 로그인 뒤·토큰 갱신·권한 변경 때마다 보낸다."""
+
+    token: str = Field(min_length=1, max_length=500)
+    platform: Literal["android", "ios"]
+    # OS 알림 권한. iOS provisional은 앱이 authorized로 보낸다.
+    permission: Literal["authorized", "denied", "not_determined"]
+    app_version: str | None = Field(default=None, max_length=20)
+
+
+class DeviceUnregister(BaseModel):
+    token: str = Field(min_length=1, max_length=500)
+
+
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    type: str
+    title: str
+    body: str
+    link_url: str | None
+    read_at: datetime | None
+    created_at: datetime
+
+
+class UnreadCountOut(BaseModel):
+    count: int
+
+
+class NotificationAudience(BaseModel):
+    """발송 대상. all=탈퇴 안 한 전체, authorized=알림 권한을 허용한 기기가 있는 회원, users=고른 회원."""
+
+    kind: Literal["all", "authorized", "users"]
+    user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=1000)
+
+    @model_validator(mode="after")
+    def _users_need_ids(self):
+        if self.kind == "users" and not self.user_ids:
+            raise ValueError("받을 회원을 한 명 이상 골라 주세요.")
+        if self.kind != "users":
+            self.user_ids = []
+        return self
+
+    def stored(self) -> dict:
+        if self.kind == "users":
+            return {"kind": "users", "user_ids": [str(u) for u in self.user_ids]}
+        return {"kind": self.kind}
+
+
+class AdminNotificationSendCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    body: str = Field(min_length=1, max_length=1000)
+    # `app:<화면 키>`(app/notification_types.py SCREENS). 없으면 홈.
+    link_url: str | None = Field(default=None, max_length=500, validate_default=True)
+    audience: NotificationAudience
+    # null이면 즉시. 틱이 30분마다라 예약은 그 간격으로 나간다.
+    scheduled_at: datetime | None = None
+
+    @field_validator("title", "body")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("내용을 입력해 주세요.")
+        return value
+
+    @field_validator("link_url", mode="before")
+    @classmethod
+    def _blank_link(cls, value):
+        return (value or "").strip() or None
+
+    @field_validator("link_url")
+    @classmethod
+    def _known_screen(cls, value: str | None) -> str:
+        """운영툴은 앱 화면만 고른다. 비우면 홈."""
+        from app.notification_types import APP_LINK_PREFIX, HOME_SCREEN, SCREENS
+
+        if value is None:
+            return APP_LINK_PREFIX + HOME_SCREEN
+        if value.removeprefix(APP_LINK_PREFIX) in SCREENS and value.startswith(APP_LINK_PREFIX):
+            return value
+        raise ValueError("이동할 화면을 목록에서 골라 주세요.")
+
+
+class AdminNotificationSendOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    type: str
+    title: str
+    body: str
+    link_url: str | None
+    audience: dict
+    # scheduled | sending | done | canceled
+    status: str
+    scheduled_at: datetime | None
+    target_count: int
+    sent_count: int
+    failed_count: int
+    no_device_count: int
+    # 기기는 있는데 알림 권한을 안 켠 회원 수.
+    no_permission_count: int
+    # 아직 안 보낸 수(대기+발송 중). done이면 0.
+    pending_count: int = 0
+    # 상세 조회에서만 센다. 목록에서는 None.
+    read_count: int | None = None
+    admin_username: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class AdminNotificationSendListOut(BaseModel):
+    total: int
+    items: list[AdminNotificationSendOut]
+
+
+class AdminNotificationDispatchOut(BaseModel):
+    """한 묶음을 보낸 결과. processed가 0이면 지금 보낼 게 없다(재시도 대기 중이거나 끝)."""
+
+    processed: int
+    send: AdminNotificationSendOut
+
+
+class AdminNotificationOut(BaseModel):
+    """회원 한 명이 받은 알림 — 발송 명단의 한 행이자 전체 기록의 한 행."""
+
+    id: uuid.UUID
+    send_id: uuid.UUID | None
+    user_id: str
+    nickname: str | None
+    email: str | None
+    type: str
+    title: str
+    body: str
+    # pending | sending | sent | failed | no_permission | no_device | skipped
+    push_status: str
+    push_error: str | None
+    pushed_at: datetime | None
+    read_at: datetime | None
+    created_at: datetime
+
+
+class AdminNotificationListOut(BaseModel):
+    total: int
+    items: list[AdminNotificationOut]
+
+
+class AdminNotificationDeviceOut(BaseModel):
+    """회원 한 명의 수신 상태. 기기가 여러 대면 한 대라도 허용이면 authorized."""
+
+    user_id: uuid.UUID
+    nickname: str | None
+    email: str | None
+    # authorized | denied | not_determined | none(등록된 기기 없음)
+    permission: str
+    platforms: list[str]
+    app_version: str | None
+    device_count: int
+    # 지금 허용 상태인 기기 중 가장 먼저 허용한 시각. 허용이 아니면 None.
+    authorized_at: datetime | None
+    updated_at: datetime | None
+
+
+class AdminNotificationDeviceListOut(BaseModel):
+    total: int
+    # 탈퇴 안 한 전체 회원을 상태별로 센 수.
+    summary: dict[str, int]
+    items: list[AdminNotificationDeviceOut]
+
+
+class AdminNotificationTypeOut(BaseModel):
+    key: str
+    label: str
+    automatic: bool
+    # 지금까지 만든 알림 수.
+    count: int
+
+
+class AdminNotificationScreenOut(BaseModel):
+    """알림을 눌렀을 때 열 화면. link가 발송 요청의 link_url 값이다."""
+
+    link: str
+    label: str

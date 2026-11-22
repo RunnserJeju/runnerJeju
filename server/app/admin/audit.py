@@ -15,6 +15,8 @@ COUPON_ISSUE = "coupon_issue"
 COUPON_REVOKE = "coupon_revoke"
 COURSE_COMPLETE = "course_complete"
 REWARD_FULFILL = "reward_fulfill"
+NOTIFICATION_SEND = "notification_send"
+NOTIFICATION_CANCEL = "notification_cancel"
 
 
 def record(

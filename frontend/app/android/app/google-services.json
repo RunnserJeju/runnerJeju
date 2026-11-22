@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1090471391353",
+    "project_id": "runners-jeju-505808",
+    "storage_bucket": "runners-jeju-505808.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1090471391353:android:5de25bcce5ecade64fa4a8",
+        "android_client_info": {
+          "package_name": "com.runnersjeju.runners_jeju"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGNXjVo4MCvPMM8qTUa4UakCdjdDS9jP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.admin import audit
 from app.admin.auth import require_admin_session
 from app.admin.coupons import _effective_status
+from app.admin.notifications import permissions_by_user
 from app.completions import completions
 from app.db import get_db
 from app.models import (
@@ -140,7 +141,11 @@ def _completed_courses(db: Session, user: User) -> list[dict]:
 
 
 def _to_summary(
-    user: User, completed_count: int, platform: str | None, device: str | None
+    user: User,
+    completed_count: int,
+    platform: str | None,
+    device: str | None,
+    notification: str = "none",
 ) -> dict:
     return {
         "id": user.id,
@@ -152,6 +157,7 @@ def _to_summary(
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
         "completed_count": completed_count,
+        "notification": notification,
     }
 
 
@@ -213,6 +219,7 @@ def list_users(
     counts = _completed_counts(db, ids)
     platforms = _latest_platforms(db, ids)
     devices = _latest_devices(db, ids)
+    notification_states = permissions_by_user(db, ids)
 
     return {
         "total": total,
@@ -222,6 +229,7 @@ def list_users(
                 counts.get(str(u.id), 0),
                 platforms.get(str(u.id)),
                 devices.get(str(u.id)),
+                notification_states.get(str(u.id), "none"),
             )
             for u in users
         ],
