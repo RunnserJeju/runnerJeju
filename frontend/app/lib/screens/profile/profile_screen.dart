@@ -72,7 +72,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _openMemberInfo() async {
     await _push('member_info', const MemberInfoScreen());
     if (!mounted) return;
-    setState(() => _user = Services.instance.auth.loadCurrentUser());
+    // 화살표로 쓰면 대입한 Future가 반환돼 setState가 오류를 낸다.
+    setState(() {
+      _user = Services.instance.auth.loadCurrentUser();
+    });
   }
 
   void _startContinuation(RunRecord record) =>
