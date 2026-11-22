@@ -24,6 +24,7 @@ def _no_platform_lookup(monkeypatch):
     기본은 빈 결과로 막고, 필요한 테스트만 다시 patch한다."""
     monkeypatch.setattr(users_router, "_latest_platforms", lambda db, ids: {})
     monkeypatch.setattr(users_router, "_latest_devices", lambda db, ids: {})
+    monkeypatch.setattr(users_router, "permissions_by_user", lambda db, ids: {})
 
 
 def _user(**over) -> User:

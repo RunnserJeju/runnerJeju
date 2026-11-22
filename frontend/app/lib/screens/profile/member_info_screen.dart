@@ -137,6 +137,8 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
 
     try {
       await Services.instance.auth.withdraw();
+      // 기기 토큰은 서버가 탈퇴 때 지운다. 여기서는 수신만 멈춘다.
+      await Services.instance.push.stop();
     } on AppException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

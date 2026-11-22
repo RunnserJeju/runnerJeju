@@ -7,12 +7,15 @@ import '../models/course_partner.dart';
 import '../models/run_record.dart';
 import '../models/user_log.dart';
 import '../services/exit_info.dart';
+import '../services/push_service.dart';
 import '../services/run_tracker.dart';
 import '../services/service_locator.dart';
 import '../services/user_log_service.dart';
 import '../theme/app_theme.dart';
 import 'community/community_screen.dart';
 import 'home/home_screen.dart';
+import 'notification/notification_screen.dart';
+import 'profile/coupon_list_screen.dart';
 import 'profile/profile_screen.dart';
 import 'run/run_result_screen.dart';
 import 'running/running_screen.dart';
@@ -47,6 +50,50 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     Services.instance.runRecovery.begin();
     WidgetsBinding.instance.addPostFrameCallback((_) => _recoverPendingRun());
+    Services.instance.push.onTap = _openPush;
+    unawaited(Services.instance.push.start());
+  }
+
+  static const _homeTab = 0;
+  static const _profileTab = 4;
+
+  /// 눌린 알림이 가리키는 화면을 연다. 키는 서버 app/notification_types.py SCREENS와 같다.
+  /// 모르는 키(새 화면을 모르는 옛 앱)와 링크 없는 알림은 홈으로 간다.
+  void _openPush(PushTap tap) {
+    if (!mounted) return;
+    final id = tap.id;
+    if (id != null) {
+      unawaited(Services.instance.notification.markRead(id).catchError((_) {}));
+    }
+    // 러닝·결과 화면이 떠 있으면 옮기지 않는다 — 화면을 걷으면 달리던 러닝 화면이 닫힌다.
+    if (Services.instance.runFlow.isOpen) return;
+    final navigator = Navigator.of(context)..popUntil((route) => route.isFirst);
+    void push(String name, Widget screen) => navigator.push(
+      MaterialPageRoute(
+        settings: RouteSettings(name: name),
+        builder: (_) => screen,
+      ),
+    );
+    switch (tap.link) {
+      case 'app:notifications':
+        setState(() => _index = _homeTab);
+        push('notification', const NotificationScreen());
+      case 'app:community':
+        setState(() => _index = _communityTab);
+      case 'app:running-week':
+        _returnToRunningWeek();
+      case 'app:running':
+        setState(() => _index = _runningTab);
+      case 'app:stamps':
+        setState(() => _index = _stampTab);
+      case 'app:coupons':
+        setState(() => _index = _profileTab);
+        push('coupon_list', const CouponListScreen());
+      case 'app:profile':
+        setState(() => _index = _profileTab);
+      default:
+        setState(() => _index = _homeTab);
+    }
   }
 
   /// 지난 실행이 러닝 중이거나 업로드 전에 죽었으면 일지가 남아 있다. 묻지 않고
@@ -144,6 +191,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
+    Services.instance.push.onTap = null;
     Services.instance.screens.tab = null;
     super.dispose();
   }

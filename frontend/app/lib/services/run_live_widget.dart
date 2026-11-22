@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../utils/formatters.dart';
+import 'local_notifications.dart';
 
 /// 잠금화면 위젯에 미러링할 러닝 한 컷.
 ///
@@ -50,8 +51,7 @@ class RunLiveWidget {
   static const Duration _minInterval = Duration(seconds: 1);
 
   // ── Android: flutter_local_notifications ─────────────────────────
-  final FlutterLocalNotificationsPlugin _plugin =
-      FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin get _plugin => localNotifications;
 
   /// 하나의 알림을 계속 갱신한다 — 매 틱 새 알림을 쌓지 않도록 id를 고정한다.
   static const int _notificationId = 7001;
@@ -122,18 +122,9 @@ class RunLiveWidget {
   Future<void> _androidEnsureInit() async {
     if (_androidInitialized) return;
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await _plugin.initialize(
-      settings: const InitializationSettings(android: androidInit),
-    );
-
-    final android = _plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-    // Android 13(API 33)+ 는 알림 표시에 런타임 권한이 필요하다. 거부돼도
-    // 러닝 자체는 정상 동작하므로 결과를 강제하지 않는다.
-    await android?.requestNotificationsPermission();
+    // 알림 권한은 앱 시작 때 PushService가 묻는다. 꺼져 있어도 러닝은 기록되고
+    // 이 상시 알림만 안 보인다.
+    await ensureLocalNotifications();
 
     _androidInitialized = true;
   }

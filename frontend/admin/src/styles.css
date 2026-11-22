@@ -1164,3 +1164,67 @@ tbody tr.selected {
   cursor: default;
   opacity: 1;
 }
+
+/* 알림 페이지. */
+.notif-form {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.notif-radios {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.notif-radios label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  margin: 0;
+}
+
+.notif-radios input[type='radio'] {
+  width: auto;
+}
+
+.notif-picker {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.notif-picker input[type='checkbox'] {
+  width: auto;
+}
+
+.notif-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+/* 목록의 본문 미리 보기: 한 줄로 자른다. */
+.notif-clip {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 수신 현황의 요약 칸은 눌러서 목록을 거른다. */
+button.notif-kpi {
+  text-align: left;
+  color: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+button.notif-kpi.active {
+  border-color: var(--ink);
+}

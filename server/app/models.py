@@ -1000,3 +1000,140 @@ class ExternalCompletion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class DeviceToken(Base):
+    """푸시를 받을 기기 한 대(FCM 토큰). 토큰은 기기·설치 단위라 한 회원이 여러 개를 가진다.
+
+    로그아웃하거나 FCM이 없는 토큰이라고 답하면 지운다. permission은 앱이 보고한 OS 알림 권한의
+    현재 값이다(이력은 남기지 않는다).
+    """
+
+    __tablename__ = "device_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[str] = mapped_column(String(100), index=True)
+    token: Mapped[str] = mapped_column(String(500), unique=True)
+    # android | ios
+    platform: Mapped[str] = mapped_column(String(10))
+    # authorized | denied | not_determined
+    permission: Mapped[str] = mapped_column(String(20))
+    app_version: Mapped[str | None] = mapped_column(String(20), default=None)
+    # permission이 authorized로 바뀐 시각. 허용이 아니면 null, 다시 허용하면 그때로 새로 찍는다.
+    authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # 앱이 마지막으로 등록(갱신)한 시각.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class NotificationSend(Base):
+    """운영자가 만든 발송 한 건. 받는 사람별 행은 notifications에 있다.
+
+    자동 발송은 회원마다 문구가 달라 여기에 묶지 않는다(notifications.send_id가 null).
+    """
+
+    __tablename__ = "notification_sends"
+    __table_args__ = (
+        # 틱이 시각이 된 예약 건을 찾는다.
+        Index(
+            "ix_notification_sends_due",
+            "scheduled_at",
+            postgresql_where=text("status = 'scheduled'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # app/notification_types.py의 키.
+    type: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column(Text)
+    # 눌렀을 때 갈 곳. 공지와 같은 형식(`app:...` 또는 http/https).
+    link_url: Mapped[str | None] = mapped_column(String(500), default=None)
+    # {"kind": "all" | "authorized"} 또는 {"kind": "users", "user_ids": [...]}
+    audience: Mapped[dict] = mapped_column(JSONB)
+    # scheduled(예약, 아직 명단 없음) | sending | done | canceled
+    status: Mapped[str] = mapped_column(String(20))
+    # null이면 즉시 발송.
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # 명단을 만든 뒤 채운다. 건수는 done이 될 때 한 번 센다(목록에서 매번 세지 않게).
+    target_count: Mapped[int] = mapped_column(Integer, default=0)
+    sent_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    no_device_count: Mapped[int] = mapped_column(Integer, default=0)
+    no_permission_count: Mapped[int] = mapped_column(Integer, default=0)
+    admin_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), default=None)
+    admin_username: Mapped[str | None] = mapped_column(String(100), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class Notification(Base):
+    """회원 한 명이 받은 알림 한 건. 발송 명단이자 앱 알림함이고, 푸시 대기열이기도 하다.
+
+    push_status: pending(대기) → sending(발송기가 가져감) → sent | failed | no_permission(기기는
+    있는데 알림 권한을 안 켬) | no_device(등록된 기기 없음) | skipped(FCM이 꺼진 로컬).
+    일시 오류는 pending으로 되돌려 next_attempt_at에 다시 보낸다(app/notifications.py).
+    """
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index("ix_notifications_type_created", "type", "created_at"),
+        # 발송기가 보낼 차례인 행을 찾는다.
+        Index(
+            "ix_notifications_pending",
+            "next_attempt_at",
+            postgresql_where=text("push_status = 'pending'"),
+        ),
+        # 발송기가 죽어 sending에 남은 행을 틱이 찾는다.
+        Index(
+            "ix_notifications_sending",
+            "claimed_at",
+            postgresql_where=text("push_status = 'sending'"),
+        ),
+        # 앱을 열 때마다 세는 안 읽은 수.
+        Index(
+            "ix_notifications_unread",
+            "user_id",
+            postgresql_where=text("read_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    send_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("notification_sends.id", ondelete="CASCADE"),
+        index=True,
+        default=None,
+    )
+    user_id: Mapped[str] = mapped_column(String(100))
+    type: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column(Text)
+    link_url: Mapped[str | None] = mapped_column(String(500), default=None)
+
+    push_status: Mapped[str] = mapped_column(String(20), server_default="pending")
+    push_error: Mapped[str | None] = mapped_column(String(200), default=None)
+    attempts: Mapped[int] = mapped_column(SmallInteger, server_default="0")
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # sending으로 바꾼 시각. 발송기가 죽어 sending에 남은 행을 되돌리는 기준.
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    pushed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' show KakaoMapSdk;
 
 import 'config/app_config.dart';
+import 'firebase_options.dart';
 import 'screens/auth/auth_gate.dart';
 import 'services/service_locator.dart';
 import 'theme/app_theme.dart';
@@ -25,6 +27,9 @@ Future<void> main() async {
     clientId: Platform.isIOS ? AppConfig.googleIosClientId : null,
     serverClientId: AppConfig.googleServerClientId,
   );
+
+  // 푸시(FCM)용. 설정 파일 없이 Dart 값으로만 초기화한다(firebase_options.dart).
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // 현위치 스트림. 권한이 이미 있으면 여기서 바로 열리고, 아니면 지도 탭에서
   // 권한을 물은 뒤 열린다. 기다리지 않는다 — 첫 화면은 위치 없이도 뜬다.

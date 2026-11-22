@@ -1022,6 +1022,8 @@ export interface UserSummary {
   created_at: string
   last_login_at: string | null
   completed_count: number
+  /** 알림 수신 상태. none = 등록된 기기 없음. */
+  notification: 'authorized' | 'denied' | 'not_determined' | 'none'
 }
 
 export interface UserDetail extends UserSummary {
@@ -1235,4 +1237,174 @@ export function listUserLogs(
   params.set('limit', String(limit))
   if (cursor) params.set('cursor', cursor)
   return request(`/admin/user-logs?${params}`)
+}
+
+// --- 알림 --------------------------------------------------------------
+
+export type NotificationAudience =
+  | { kind: 'all' }
+  | { kind: 'authorized' }
+  | { kind: 'users'; user_ids: string[] }
+
+export type NotificationSendStatus = 'scheduled' | 'sending' | 'done' | 'canceled'
+export type PushStatus =
+  | 'pending'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  | 'no_permission'
+  | 'no_device'
+  | 'skipped'
+/** none = 등록된 기기 없음. */
+export type NotificationPermission = 'authorized' | 'denied' | 'not_determined' | 'none'
+
+export interface NotificationSend {
+  id: string
+  type: string
+  title: string
+  body: string
+  link_url: string | null
+  audience: { kind: 'all' | 'authorized' | 'users'; user_ids?: string[] }
+  status: NotificationSendStatus
+  scheduled_at: string | null
+  target_count: number
+  sent_count: number
+  failed_count: number
+  no_device_count: number
+  /** 기기는 있는데 알림 권한을 안 켠 회원 수. */
+  no_permission_count: number
+  /** 아직 안 보낸 수. */
+  pending_count: number
+  /** 상세에서만 온다. */
+  read_count: number | null
+  admin_username: string | null
+  created_at: string
+  finished_at: string | null
+}
+
+export interface NotificationRecord {
+  id: string
+  send_id: string | null
+  user_id: string
+  nickname: string | null
+  email: string | null
+  type: string
+  title: string
+  body: string
+  push_status: PushStatus
+  push_error: string | null
+  pushed_at: string | null
+  read_at: string | null
+  created_at: string
+}
+
+export interface NotificationDevice {
+  user_id: string
+  nickname: string | null
+  email: string | null
+  permission: NotificationPermission
+  platforms: string[]
+  app_version: string | null
+  device_count: number
+  /** 지금 허용 상태인 기기 중 가장 먼저 허용한 시각. */
+  authorized_at: string | null
+  updated_at: string | null
+}
+
+export interface NotificationType {
+  key: string
+  label: string
+  automatic: boolean
+  count: number
+}
+
+const JSON_POST = { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+
+/** 알림을 눌렀을 때 열 앱 화면. link가 link_url 값이고 첫 항목(홈)이 기본값이다. */
+export interface NotificationScreen {
+  link: string
+  label: string
+}
+
+export function listNotificationScreens(): Promise<NotificationScreen[]> {
+  return request('/admin/notification-screens')
+}
+
+export function listNotificationTypes(): Promise<NotificationType[]> {
+  return request('/admin/notification-types')
+}
+
+export function previewNotificationAudience(audience: NotificationAudience): Promise<{ count: number }> {
+  return request('/admin/notification-sends/preview', { ...JSON_POST, body: JSON.stringify(audience) })
+}
+
+export function createNotificationSend(payload: {
+  title: string
+  body: string
+  link_url: string | null
+  audience: NotificationAudience
+  scheduled_at: string | null
+}): Promise<NotificationSend> {
+  return request('/admin/notification-sends', { ...JSON_POST, body: JSON.stringify(payload) })
+}
+
+/** 남은 대기 건을 한 묶음 보낸다. processed가 0이면 지금 보낼 게 없다. */
+export function dispatchNotificationSend(id: string): Promise<{ processed: number; send: NotificationSend }> {
+  return request(`/admin/notification-sends/${id}/dispatch`, { method: 'POST' })
+}
+
+export function cancelNotificationSend(id: string): Promise<NotificationSend> {
+  return request(`/admin/notification-sends/${id}/cancel`, { method: 'POST' })
+}
+
+export function listNotificationSends(
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: NotificationSend[] }> {
+  return request(`/admin/notification-sends?limit=${limit}&offset=${offset}`)
+}
+
+export function getNotificationSend(id: string): Promise<NotificationSend> {
+  return request(`/admin/notification-sends/${id}`)
+}
+
+export function listNotificationRecipients(
+  id: string,
+  status: PushStatus | '',
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: NotificationRecord[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (status) params.set('status', status)
+  return request(`/admin/notification-sends/${id}/recipients?${params}`)
+}
+
+export function listNotificationRecords(
+  from: string,
+  to: string,
+  type: string,
+  q: string,
+  limit: number,
+  offset: number,
+): Promise<{ total: number; items: NotificationRecord[] }> {
+  const params = new URLSearchParams({ from, to, limit: String(limit), offset: String(offset) })
+  if (type) params.set('type', type)
+  if (q.trim()) params.set('q', q.trim())
+  return request(`/admin/notifications?${params}`)
+}
+
+export function listNotificationDevices(
+  permission: NotificationPermission | '',
+  q: string,
+  limit: number,
+  offset: number,
+): Promise<{
+  total: number
+  summary: Record<NotificationPermission, number>
+  items: NotificationDevice[]
+}> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (permission) params.set('permission', permission)
+  if (q.trim()) params.set('q', q.trim())
+  return request(`/admin/notification-devices?${params}`)
 }
