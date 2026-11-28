@@ -10,6 +10,7 @@ import 'package:kakao_map_sdk/kakao_map_sdk.dart' show KakaoMapSdk;
 import 'config/app_config.dart';
 import 'firebase_options.dart';
 import 'screens/auth/auth_gate.dart';
+import 'screens/update_gate.dart';
 import 'services/service_locator.dart';
 import 'theme/app_theme.dart';
 
@@ -57,6 +58,8 @@ class RunnersJejuApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       navigatorObservers: [Services.instance.screens],
+      // 내비게이터 위에 둔다 — 어느 화면이 떠 있든 통째로 가린다.
+      builder: (context, child) => UpdateGate(child: child!),
       home: const AuthGate(),
     );
   }

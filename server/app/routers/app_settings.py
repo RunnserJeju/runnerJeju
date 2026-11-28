@@ -16,6 +16,10 @@ router = APIRouter(tags=["app-settings"])
 DEFAULTS: dict[str, object] = {
     # 안드로이드 카카오맵을 가상 디스플레이 대신 하이브리드 방식(HC)으로 띄운다.
     "android_map_hybrid_composition": True,
+    # 이 버전(예: "2.3.0") 미만인 앱은 시작 화면에서 업데이트 안내만 본다. 빈 값이면 막지 않는다.
+    # 스토어에 다 풀린 버전까지만 넣는다 — 받을 수 없는 버전을 넣으면 전원이 갇힌다.
+    "min_version_android": "",
+    "min_version_ios": "",
 }
 
 

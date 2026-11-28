@@ -21,6 +21,16 @@ class AppSettingsService {
   bool get androidMapHybridComposition =>
       _values['android_map_hybrid_composition'] != false;
 
+  /// 이 플랫폼의 최소 필수 버전("2.3.0"). 없으면 null — 막지 않는다.
+  String? get minVersion {
+    final value =
+        _values[Platform.isIOS ? 'min_version_ios' : 'min_version_android'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
+  /// 서버에서 새 값을 받을 때마다 올라간다([UpdateGate]가 듣는다).
+  final ValueNotifier<int> revision = ValueNotifier(0);
+
   /// 저장해 둔 값을 읽고, 새 값은 기다리지 않고 받아 둔다.
   Future<void> start() async {
     final file = await _file();
@@ -40,6 +50,7 @@ class AppSettingsService {
     try {
       final values = await _api.fetch();
       _values = values;
+      revision.value++;
       await file?.writeAsString(jsonEncode(values));
     } catch (e) {
       debugPrint('[app_settings] 받기 실패: $e');
