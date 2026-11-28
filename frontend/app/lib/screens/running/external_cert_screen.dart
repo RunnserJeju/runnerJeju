@@ -8,6 +8,7 @@ import '../../models/external_cert.dart';
 import '../../models/running_course.dart';
 import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/confirm_popup.dart';
 import '../../widgets/course_thumbnail.dart';
 import '../../widgets/linked_text.dart';
 import '../profile/reward_claim_screen.dart';
@@ -86,45 +87,11 @@ class _ExternalCertScreenState extends State<ExternalCertScreen> {
     }
   }
 
-  Future<void> _showEmptyAlert() => showDialog<void>(
-    context: context,
-    builder: (context) => Dialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '링크를 입력해 주세요',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: _ink,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              '운동 기록의 공유 링크를 입력한 뒤\n다시 인증해 주세요.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, height: 1.6, color: _sub),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text('확인'),
-            ),
-          ],
-        ),
-      ),
-    ),
+  Future<void> _showEmptyAlert() => showConfirmPopup(
+    context,
+    title: '링크를 입력해 주세요',
+    message: '운동 기록의 공유 링크를 입력한 뒤\n다시 인증해 주세요.',
+    confirmLabel: '확인',
   );
 
   void _retry() => setState(() => _result = null);

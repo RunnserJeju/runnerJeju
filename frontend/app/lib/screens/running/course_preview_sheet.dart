@@ -6,6 +6,7 @@ import '../../models/running_course.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/course_thumbnail.dart';
 import '../../widgets/elevation_chart.dart';
+import '../../widgets/fit_label.dart';
 import '../../widgets/image_gallery.dart';
 import '../../widgets/sheet_handle.dart';
 import '../../widgets/section_title.dart';
@@ -433,7 +434,7 @@ class _StartButton extends StatelessWidget {
       return OutlinedButton.icon(
         onPressed: onRetry,
         icon: const Icon(Icons.refresh_rounded),
-        label: const Text('불러오기 실패 · 다시 시도', maxLines: 1),
+        label: const FitLabel('불러오기 실패 · 다시 시도'),
       );
     }
 
@@ -451,7 +452,7 @@ class _StartButton extends StatelessWidget {
     return FilledButton.icon(
       onPressed: onStart,
       icon: const Icon(Icons.directions_run_rounded),
-      label: const Text('이 코스로 달리기'),
+      label: const FitLabel('이 코스로 달리기'),
     );
   }
 }

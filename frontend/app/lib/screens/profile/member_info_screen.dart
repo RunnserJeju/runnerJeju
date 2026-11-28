@@ -7,6 +7,7 @@ import '../../services/service_locator.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/async_view.dart';
+import '../../widgets/confirm_popup.dart';
 import '../../widgets/profile_avatar.dart';
 import '../auth/login_screen.dart';
 
@@ -36,23 +37,29 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
     final hasImage = user?.profileImageUrl != null;
     final action = await showDialog<_ImageAction>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: const Text('프로필 사진'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(dialogContext).pop(_ImageAction.pick),
-            child: const Text('앨범에서 선택'),
-          ),
-          if (hasImage)
-            SimpleDialogOption(
+      builder: (dialogContext) => PopupFrame(
+        title: '프로필 사진',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PopupButton(
+              label: '앨범에서 선택',
+              primary: true,
               onPressed: () =>
-                  Navigator.of(dialogContext).pop(_ImageAction.remove),
-              child: const Text(
-                '기본 이미지로 변경',
-                style: TextStyle(color: AppColors.danger),
-              ),
+                  Navigator.of(dialogContext).pop(_ImageAction.pick),
             ),
-        ],
+            if (hasImage) ...[
+              const SizedBox(height: 8),
+              PopupButton(
+                label: '기본 이미지로 변경',
+                danger: true,
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(_ImageAction.remove),
+              ),
+            ],
+          ],
+        ),
       ),
     );
     if (action == null || !mounted) return;
@@ -111,27 +118,16 @@ class _MemberInfoScreenState extends State<MemberInfoScreen> {
   }
 
   Future<void> _withdraw() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('정말 탈퇴할까요?'),
-        content: const Text(
+    final confirmed = await showConfirmPopup(
+      context,
+      title: '정말 탈퇴할까요?',
+      message:
           '계정 정보(이메일·닉네임·프로필)와 러닝 경로가 삭제되고, '
           '완주 스탬프와 찜 목록은 복구할 수 없어요.\n'
           '같은 계정으로 다시 로그인하면 새 계정으로 시작해요.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('탈퇴하기'),
-          ),
-        ],
-      ),
+      cancelLabel: '취소',
+      confirmLabel: '탈퇴하기',
+      danger: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -309,9 +305,13 @@ class _NicknameDialogState extends State<_NicknameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('닉네임 바꾸기'),
-      content: Form(
+    return PopupFrame(
+      title: '닉네임 바꾸기',
+      cancelLabel: '취소',
+      confirmLabel: '저장',
+      onCancel: () => Navigator.of(context).pop(),
+      onConfirm: _submit,
+      child: Form(
         key: _formKey,
         child: TextFormField(
           controller: _controller,
@@ -325,13 +325,6 @@ class _NicknameDialogState extends State<_NicknameDialog> {
               : null,
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
-        ),
-        TextButton(onPressed: _submit, child: const Text('저장')),
-      ],
     );
   }
 }

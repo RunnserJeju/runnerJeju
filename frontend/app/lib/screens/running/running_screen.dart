@@ -20,6 +20,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/geo_utils.dart';
 import '../../utils/transient_messenger.dart';
+import '../../widgets/confirm_popup.dart';
 import '../../widgets/course_map_view.dart';
 import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
@@ -893,93 +894,28 @@ class RunningScreenState extends State<RunningScreen> {
     unawaited(_selectCourse(fresh ?? selected));
   }
 
-  static const _dialogButtonText = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w700,
-  );
-  static const _dialogButtonPadding = EdgeInsets.symmetric(horizontal: 8);
-
   /// 협력업체 길찾기 전에 묻는다. '아니오'나 바깥 탭이면 아무 일도 안 한다.
   Future<bool?> _confirmPartnerRoute(CoursePartner partner) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('길찾기'),
-        content: Text('${partner.name}까지\n카카오맵에서 길찾기를 실행할게요.'),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  style: OutlinedButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('아니오', maxLines: 1),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  style: FilledButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('예', maxLines: 1),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return showConfirmPopup(
+      context,
+      title: '길찾기',
+      message: '${partner.name}까지\n카카오맵에서 길찾기를 실행할게요.',
+      cancelLabel: '아니오',
+      confirmLabel: '예',
     );
   }
 
   /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
   /// 러닝도 길찾기도 시작하지 않는다.
   Future<bool?> _confirmRouteGuide(RunningCourse course, double meters) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('시작점까지 길찾기'),
-        content: Text(
+    return showConfirmPopup(
+      context,
+      title: '시작점까지 길찾기',
+      message:
           '${course.name} 시작점이 ${Formatters.awayDistance(meters)} 떨어져 있어요.\n'
           '카카오맵으로 길찾기를 시작할까요?',
-        ),
-        actions: [
-          // 버튼 공통 스타일이 가로를 꽉 채우므로(app_theme.dart의 minimumSize)
-          // 그대로 두면 상하로 쌓인다. Row+Expanded로 좌우 반반 배치.
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  // 다이얼로그 폭에선 기본 16px+좌우 24px 패딩이 '여기서 시작'을
-                  // 두 줄로 꺾는다. 글자와 패딩을 줄여 한 줄로.
-                  style: OutlinedButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('여기서 시작', maxLines: 1),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  style: FilledButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('길찾기', maxLines: 1),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      cancelLabel: '여기서 시작',
+      confirmLabel: '길찾기',
     );
   }
 

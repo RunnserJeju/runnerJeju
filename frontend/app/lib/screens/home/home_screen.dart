@@ -14,6 +14,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/banner_carousel.dart';
 import '../../widgets/course_recommend_card.dart';
+import '../../widgets/fit_label.dart';
 import '../../widgets/partner_card.dart';
 import '../notification/notification_screen.dart';
 import '../../widgets/section_title.dart';
@@ -643,7 +644,7 @@ Future<bool> showNoticeDetail(
                           onDismissForever();
                           Navigator.of(context).pop();
                         },
-                        child: const Text('다시 보지 않기'),
+                        child: const FitLabel('다시 보지 않기'),
                       ),
                     ),
                     Container(width: 1, height: 14, color: Colors.white54),
@@ -653,7 +654,7 @@ Future<bool> showNoticeDetail(
                           foregroundColor: Colors.white,
                         ),
                         onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('닫기'),
+                        child: const FitLabel('닫기'),
                       ),
                     ),
                   ],
