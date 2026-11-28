@@ -9,6 +9,7 @@ import '../models/course_facility.dart';
 import '../models/course_partner.dart';
 import '../models/geo_point.dart';
 import '../models/running_course.dart';
+import '../services/service_locator.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
 import 'image_coding/course_endpoint_marker.dart';
@@ -145,6 +146,10 @@ class CourseMapController {
 }
 
 class _CourseMapViewState extends State<CourseMapView> {
+  /// 원격 설정(HC로 띄울지). 지도는 만들 때만 방식을 정하므로 처음 값으로 고정한다.
+  final bool _hybridComposition =
+      Services.instance.appSettings.androidMapHybridComposition;
+
   kakao.KakaoMapController? _controller;
 
   /// 지도에 올라가 있는 라벨. 코스 id로 찾는다.
@@ -292,6 +297,7 @@ class _CourseMapViewState extends State<CourseMapView> {
     }
 
     return kakao.KakaoMap(
+      forceHybridComposition: _hybridComposition,
       option: kakao.KakaoMapOption(
         position: (_startCenter ?? CourseMapView.jejuCenter).toLatLng(),
         zoomLevel: widget.initialCenter != null

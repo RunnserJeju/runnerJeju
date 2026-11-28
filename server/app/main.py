@@ -12,6 +12,7 @@ from app import config_guard, schema_guard
 from app.admin import admin_auth_router, admin_router
 from app.db import engine
 from app.routers import (
+    app_settings,
     auth,
     coupons,
     courses,
@@ -64,6 +65,7 @@ app.add_middleware(
     ),
 )
 
+app.include_router(app_settings.router)
 app.include_router(auth.router)
 app.include_router(coupons.router)
 app.include_router(courses.router)

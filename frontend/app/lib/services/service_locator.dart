@@ -1,3 +1,4 @@
+import '../api/app_settings_api.dart';
 import '../api/auth_api.dart';
 import '../api/coupon_api.dart';
 import '../api/course_api.dart';
@@ -17,6 +18,7 @@ import '../config/app_config.dart';
 import '../features/running_week/running_week_service.dart';
 import '../network/api_client.dart';
 import '../network/client_context_interceptor.dart';
+import 'app_settings_service.dart';
 import 'auth_service.dart';
 import 'coupon_service.dart';
 import 'course_service.dart';
@@ -85,6 +87,9 @@ class Services {
 
   /// 행동 로그(user_log). 화면은 전역 [writeLog]로 남긴다.
   late final UserLogService userLog = UserLogService(UserLogApi(apiClient));
+  late final AppSettingsService appSettings = AppSettingsService(
+    AppSettingsApi(apiClient),
+  );
   late final ScreenObserver screens = ScreenObserver(userLog);
 
   late final AuthService auth = AuthService(AuthApi(apiClient), tokenStorage);

@@ -11,6 +11,7 @@ import '../config/app_config.dart';
 import '../models/course_facility.dart';
 import '../models/course_partner.dart';
 import '../models/geo_point.dart';
+import '../services/service_locator.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
 import '../utils/run_path_interpolator.dart';
@@ -125,6 +126,10 @@ class RunMapView extends StatefulWidget {
 /// 구조적으로 불가능하다.
 class _RunMapViewState extends State<RunMapView>
     with SingleTickerProviderStateMixin {
+  /// 원격 설정(HC로 띄울지). 지도는 만들 때만 방식을 정하므로 처음 값으로 고정한다.
+  final bool _hybridComposition =
+      Services.instance.appSettings.androidMapHybridComposition;
+
   kakao.KakaoMapController? _controller;
 
   // 오버레이는 ID가 아니라 객체 참조로 다룬다. 매번 지우고 다시 그리는 대신
@@ -472,6 +477,7 @@ class _RunMapViewState extends State<RunMapView>
     }
 
     return kakao.KakaoMap(
+      forceHybridComposition: _hybridComposition,
       option: kakao.KakaoMapOption(
         position: center.toLatLng(),
         zoomLevel: _initialZoomLevel,
