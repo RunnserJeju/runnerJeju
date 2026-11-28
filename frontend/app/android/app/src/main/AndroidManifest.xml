@@ -18,6 +18,8 @@
     <!-- 러닝 상태(거리·시간·페이스)를 잠금화면 상시 알림으로 띄우기 위한 권한.
          Android 13(API 33)+ 는 런타임 요청도 필요하다(RunLiveWidget에서 요청). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 세로 고정이 필수 하드웨어로 잡혀 설치 가능 기기가 줄어드는 것 방지 -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false"/>
     <application
         android:label="러너스 제주"
         android:name="${applicationName}"

@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 import { ApiError, listAdminRuns, type AdminRun } from '../api'
+import { downloadCsv } from '../utils/csv'
 import { kstDaysAgo, kstToday } from '../utils/dates'
 import Modal from './Modal'
 
 const PAGE_SIZE = 50
+/** CSV는 서버 상한(200)씩 끝까지 받아 모은다. */
+const CSV_BATCH = 200
+
+/** CSV용 KST 'YYYY-MM-DD HH:mm:ss'. */
+function kstStamp(iso: string): string {
+  return new Date(iso).toLocaleString('sv-SE', { timeZone: 'Asia/Seoul', hour12: false })
+}
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('ko-KR', {
@@ -107,6 +115,7 @@ export default function RunHistory({ onUnauthorized }: Props) {
   /** 행을 눌러 구간별로 펼쳐 보는 기록. */
   const [detail, setDetail] = useState<AdminRun | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const handleError = useCallback(
     (err: unknown) => {
@@ -142,6 +151,47 @@ export default function RunHistory({ onUnauthorized }: Props) {
     setDraft(range)
     setApplied(range)
     setPage(0)
+  }
+
+  /** 화면의 페이지가 아니라 조회 조건 전체를 받는다. */
+  const download = async () => {
+    setExporting(true)
+    try {
+      const all: AdminRun[] = []
+      for (let offset = 0; ; offset += CSV_BATCH) {
+        const result = await listAdminRuns(applied.from, applied.to, order, CSV_BATCH, offset, search)
+        all.push(...result.items)
+        if (result.items.length < CSV_BATCH || all.length >= result.total) break
+      }
+      downloadCsv(
+        `runs_${applied.from}_${applied.to}.csv`,
+        [
+          'run_id', 'started_at_kst', 'ended_at_kst', 'user_id', 'nickname', 'email',
+          'course_id', 'course', 'distance_km', 'duration_sec', 'completion', 'match_rate',
+          'app_killed', 'segments',
+        ],
+        all.map((r) => [
+          r.id,
+          kstStamp(r.started_at),
+          kstStamp(r.ended_at),
+          r.user_id,
+          r.nickname,
+          r.email,
+          r.course_id,
+          r.course_name,
+          r.distance_km,
+          r.duration_sec,
+          r.completion,
+          r.match_rate,
+          r.app_killed ? 1 : 0,
+          Math.max(1, r.segments.length),
+        ]),
+      )
+    } catch (err) {
+      handleError(err)
+    } finally {
+      setExporting(false)
+    }
   }
 
   const invalid = !draft.from || !draft.to || draft.from > draft.to
@@ -215,6 +265,14 @@ export default function RunHistory({ onUnauthorized }: Props) {
             검색
           </button>
         </span>
+        <button
+          type="button"
+          className="secondary small"
+          onClick={download}
+          disabled={exporting || !runs?.length}
+        >
+          {exporting ? '내려받는 중…' : 'CSV 다운로드'}
+        </button>
       </form>
       {draft.from > draft.to && draft.to && (
         <div className="error">시작일이 종료일보다 늦을 수 없어요.</div>
