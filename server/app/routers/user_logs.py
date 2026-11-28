@@ -1,7 +1,7 @@
 """앱 행동 로그 수신 — POST /user-logs (배치). 앱의 UserLogApi.writeUserLog가 부른다.
 
 앱은 이벤트를 몇 초 모았다가 배열로 보낸다. 로그인 전 이벤트도 받아야 하므로 토큰은
-선택(optional_user_id)이고, 있으면 user_id를 채운다. 응답은 204 — 앱은 결과를 기다리지
+선택(optional_user_id)이고, 있으면 user_id를 채운다(만료된 토큰은 401). 응답은 204 — 앱은 결과를 기다리지
 않고(fire-and-forget) 실패해도 조용히 버린다.
 
 검증은 두 가지다. log_name은 허용 목록 안이어야 하고(오타·임의 문자열 차단), detail은

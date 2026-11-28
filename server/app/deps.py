@@ -48,17 +48,11 @@ def current_user_id(
 def optional_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> str | None:
-    """토큰이 있으면 사용자 id, 없거나 유효하지 않으면 None. 행동 로그(POST /user-logs)처럼
-    로그인 전에도 받아야 하는 요청용 — 401을 내지 않는다."""
+    """토큰이 없으면 None(로그인 전 요청). 있는데 유효하지 않으면(만료 등) 401 —
+    앱이 refresh 후 재전송해 user_id가 빠지지 않게 한다."""
     if credentials is None:
         return None
-    try:
-        payload = decode_token(credentials.credentials)
-    except jwt.PyJWTError:
-        return None
-    if payload.get("type") != "access":
-        return None
-    return payload["sub"]
+    return current_user_id(credentials)
 
 
 def current_user_is_admin(
