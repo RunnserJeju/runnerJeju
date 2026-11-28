@@ -45,9 +45,13 @@ import 'partner_preview_sheet.dart';
 class RunningScreen extends StatefulWidget {
   const RunningScreen({
     super.key,
+    this.isVisible = false,
     this.onReturnToRunningWeek,
     this.onShowStamps,
   });
+
+  /// 지금 보이는 탭인지. 처음 보일 때 지도를 만든다.
+  final bool isVisible;
 
   /// 빙고판에서 넘어온 코스를 보는 동안 '빙고판으로' 버튼이 누르는 것.
   final VoidCallback? onReturnToRunningWeek;
@@ -188,6 +192,16 @@ class RunningScreenState extends State<RunningScreen> {
   /// 결과 화면 팝업) 떠 있는 동안에는 이 화면의 지도를 트리에서 뺀다
   /// ([RunFlowPresence]). 위젯을 떼면 네이티브 쪽이 mapView.finish()까지 정리한다.
   RunFlowPresence get _runFlow => Services.instance.runFlow;
+
+  /// 지도를 만들어도 되는지. 탭에 처음 들어올 때 켜지고 계속 켜져 있다.
+  /// 보이지도 않는 탭의 지도(플랫폼 뷰)를 앱이 켜질 때부터 띄워 두지 않으려는 것.
+  late bool _mapActivated = widget.isVisible;
+
+  @override
+  void didUpdateWidget(covariant RunningScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isVisible) _mapActivated = true;
+  }
 
   @override
   void initState() {
@@ -1010,7 +1024,7 @@ class RunningScreenState extends State<RunningScreen> {
             // 다시 그리도록 여기서만 듣는다.
             child: ListenableBuilder(
               listenable: _runFlow,
-              builder: (context, _) => _runFlow.isOpen
+              builder: (context, _) => _runFlow.isOpen || !_mapActivated
                   ? const ColoredBox(color: AppColors.paper)
                   : ListenableBuilder(
                       listenable: _currentLocation,
