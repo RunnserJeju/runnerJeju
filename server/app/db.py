@@ -11,7 +11,10 @@ DATABASE_URL = os.environ.get(
 # pool_pre_ping: 커넥션을 꺼내 쓰기 전에 살아있는지 가볍게 확인한다.
 # Supabase pooler(AWS 로드밸런서 뒤)가 오래 idle인 커넥션을 조용히 끊는 경우가 있는데,
 # 이게 없으면 죽은 커넥션을 그대로 재사용하다 "could not receive data from server" 로 죽는다.
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
+# 인스턴스당 최대 10개(5+5) × Cloud Run 4개 = 40 — Supabase pooler 풀 크기(40)와 맞춘 값.
+engine = create_engine(
+    DATABASE_URL, pool_pre_ping=True, pool_recycle=300, pool_size=5, max_overflow=5
+)
 # SQLAlchemy 세션 생성
 SessionLocal = sessionmaker(bind=engine)
 
