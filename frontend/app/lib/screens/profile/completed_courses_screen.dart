@@ -20,14 +20,16 @@ class CompletedCoursesScreen extends StatefulWidget {
 class _CompletedCoursesScreenState extends State<CompletedCoursesScreen> {
   late Future<List<RunningCourse>> _future = _load();
 
-  static Future<List<RunningCourse>> _load() async {
-    final courses = await Services.instance.course.loadCourses();
+  static Future<List<RunningCourse>> _load({bool refresh = false}) async {
+    final courses = await Services.instance.course.loadCourses(
+      refresh: refresh,
+    );
     return courses.where((c) => c.isCompletedByMe).toList();
   }
 
   Future<void> _refresh() async {
     setState(() {
-      _future = _load();
+      _future = _load(refresh: true);
     });
   }
 

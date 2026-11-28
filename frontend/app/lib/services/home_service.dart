@@ -1,6 +1,7 @@
 import '../api/home_api.dart';
 import '../exceptions/app_exception.dart';
 import '../models/home_curation.dart';
+import 'cached_resource.dart';
 
 /// 비즈니스 로직 계층: 홈 구성 조회.
 class HomeService {
@@ -8,9 +9,13 @@ class HomeService {
 
   final HomeApi _homeApi;
 
-  Future<HomeCuration> loadCuration() async {
+  late final _curation = CachedResource<HomeCuration>(
+    (etag) => _homeApi.fetchCuration(etag: etag),
+  );
+
+  Future<HomeCuration> loadCuration({bool refresh = false}) async {
     try {
-      return await _homeApi.fetchCuration();
+      return await _curation.get(refresh: refresh);
     } catch (e) {
       throw AppException('홈 구성을 불러오지 못했어요.', e);
     }

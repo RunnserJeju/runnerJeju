@@ -213,14 +213,16 @@ class RunningScreenState extends State<RunningScreen> {
   // 데이터
   // ---------------------------------------------------------------------------
 
-  Future<void> _loadCourses() async {
+  Future<void> _loadCourses({bool refresh = false}) async {
     setState(() {
       _isLoadingCourses = true;
       _coursesError = null;
     });
 
     try {
-      final courses = await Services.instance.course.loadCourses();
+      final courses = await Services.instance.course.loadCourses(
+        refresh: refresh,
+      );
       if (!mounted) return;
       setState(() {
         _courses = courses;
@@ -534,7 +536,7 @@ class RunningScreenState extends State<RunningScreen> {
     );
     if (!mounted) return;
     // 인증됐으면 완주 표시·완주자 수가 바뀐다.
-    unawaited(_loadCourses());
+    unawaited(_loadCourses(refresh: true));
     switch (exit) {
       case ExternalCertExit.stamps:
         widget.onShowStamps?.call();
@@ -870,7 +872,7 @@ class RunningScreenState extends State<RunningScreen> {
 
     // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다. 보고 있던
     // 코스의 상세 시트도 같은 값을 보여주므로 다시 받는다.
-    await _loadCourses();
+    await _loadCourses(refresh: true);
     final selected = _selected;
     if (!mounted || selected == null) return;
     final fresh = _courses.where((c) => c.id == selected.id).firstOrNull;

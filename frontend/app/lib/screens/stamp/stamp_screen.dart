@@ -28,16 +28,20 @@ class _StampScreenState extends State<StampScreen> {
     _load();
   }
 
-  void _load() {
-    _future = _buildSlots();
+  void _load({bool refresh = false}) {
+    _future = _buildSlots(refresh: refresh);
   }
 
   /// 스탬프 종류·내 스탬프·코스를 함께 불러 슬롯 목록으로 합친다.
   /// 순서는 스탬프 종류 순(서버 정렬), 목록에 없는 스탬프(숨긴 종류 등)는 뒤에.
-  Future<List<_StampSlot>> _buildSlots() async {
-    final definitionsFuture = Services.instance.stamp.loadDefinitions();
+  Future<List<_StampSlot>> _buildSlots({bool refresh = false}) async {
+    final definitionsFuture = Services.instance.stamp.loadDefinitions(
+      refresh: refresh,
+    );
     final stampsFuture = Services.instance.stamp.loadMyStamps();
-    final coursesFuture = Services.instance.course.loadCourses();
+    final coursesFuture = Services.instance.course.loadCourses(
+      refresh: refresh,
+    );
     final definitions = await definitionsFuture;
     final stamps = await stampsFuture;
     final courses = await coursesFuture;
@@ -59,7 +63,7 @@ class _StampScreenState extends State<StampScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(_load);
+    setState(() => _load(refresh: true));
     await _future.catchError((_) => <_StampSlot>[]);
   }
 

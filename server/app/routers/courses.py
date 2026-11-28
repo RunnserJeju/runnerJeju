@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app import gpx, user_log
 from app.completions import completions
@@ -41,9 +41,16 @@ def _to_summary(
     *,
     is_admin: bool = False,
     all_partners: bool = False,
+    start_point: dict | None = None,
+    without_path: bool = False,
 ) -> dict:
-    """연결 업체는 partner_visible로 거른다. 운영 웹은 all_partners=True로 전부 싣는다."""
-    path = course.path or []
+    """연결 업체는 partner_visible로 거른다. 운영 웹은 all_partners=True로 전부 싣는다.
+
+    without_path: 목록용. course.path를 읽지 않고(defer된 열을 코스마다 다시 읽게 된다)
+    따로 뽑아 온 start_point만 싣는다."""
+    path = [] if without_path else (course.path or [])
+    if not without_path:
+        start_point = path[0] if path else None
 
     return {
         "id": course.id,
@@ -71,7 +78,7 @@ def _to_summary(
         # 목록 응답(CourseListItem)에는 path가 빠지므로, 지도에 라벨을 찍을 점은
         # 여기서 따로 뽑아 준다. 상세 응답에도 같이 들어가지만 값은 path[0]과
         # 같아서 클라이언트가 둘 중 무엇을 봐도 결과가 다르지 않다.
-        "start_point": path[0] if path else None,
+        "start_point": start_point,
         "completed_count": completed_count,
         "is_completed_by_me": is_completed_by_me,
         "visibility": course.visibility,
@@ -180,7 +187,12 @@ def list_courses(
     user_id: str = Depends(current_user_id),
     is_admin: bool = Depends(current_user_is_admin),
 ):
-    stmt = visible_courses(select(Course), is_admin).order_by(Course.created_at.desc())
+    # 경로 좌표는 목록에 안 실린다. 코스마다 수백 점이라 읽기만 해도 느려서 시작점만 뽑는다.
+    stmt = (
+        visible_courses(select(Course, Course.path[0].label("start_point")), is_admin)
+        .options(defer(Course.path))
+        .order_by(Course.created_at.desc())
+    )
 
     keyword = (keyword or "").strip()
     if keyword:
@@ -188,7 +200,8 @@ def list_courses(
     if limit is not None:
         stmt = stmt.limit(limit)
 
-    courses = list(db.execute(stmt).scalars())
+    rows = db.execute(stmt).all()
+    courses = [course for course, _ in rows]
     course_ids = [course.id for course in courses]
 
     counts = _completed_counts(db, course_ids)
@@ -202,8 +215,10 @@ def list_courses(
             course.id in mine,
             images.get(course.id),
             is_admin=is_admin,
+            start_point=start_point,
+            without_path=True,
         )
-        for course in courses
+        for course, start_point in rows
     ]
 
 

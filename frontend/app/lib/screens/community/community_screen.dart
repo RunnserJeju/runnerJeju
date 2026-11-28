@@ -37,14 +37,16 @@ class CommunityScreenState extends State<CommunityScreen> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    _loadRunningWeek();
+    _loadEvents();
   }
 
-  Future<void> _refresh() => Future.wait([_loadRunningWeek(), _loadEvents()]);
+  Future<void> _refresh() =>
+      Future.wait([_loadRunningWeek(), _loadEvents(refresh: true)]);
 
-  Future<void> _loadEvents() async {
+  Future<void> _loadEvents({bool refresh = false}) async {
     try {
-      final events = await Services.instance.event.loadEvents();
+      final events = await Services.instance.event.loadEvents(refresh: refresh);
       if (mounted) {
         setState(() {
           _events = events;

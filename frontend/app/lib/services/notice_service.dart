@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../api/notice_api.dart';
 import '../exceptions/app_exception.dart';
 import '../models/notice.dart';
+import 'cached_resource.dart';
 
 /// 비즈니스 로직 계층: 공지사항 조회.
 class NoticeService {
@@ -30,9 +31,13 @@ class NoticeService {
     } catch (_) {}
   }
 
-  Future<List<Notice>> loadNotices() async {
+  late final _notices = CachedResource<List<Notice>>(
+    (etag) => _noticeApi.fetchNotices(etag: etag),
+  );
+
+  Future<List<Notice>> loadNotices({bool refresh = false}) async {
     try {
-      return await _noticeApi.fetchNotices();
+      return List.of(await _notices.get(refresh: refresh));
     } catch (e) {
       throw AppException('공지사항을 불러오지 못했어요.', e);
     }

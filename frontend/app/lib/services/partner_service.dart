@@ -1,6 +1,7 @@
 import '../api/partner_api.dart';
 import '../exceptions/app_exception.dart';
 import '../models/course_partner.dart';
+import 'cached_resource.dart';
 
 /// 비즈니스 로직 계층: 협력업체 조회. UI가 이해할 수 있는 형태로 오류를 바꿔준다.
 class PartnerService {
@@ -8,9 +9,13 @@ class PartnerService {
 
   final PartnerApi _partnerApi;
 
-  Future<List<CoursePartner>> loadPartners() async {
+  late final _partners = CachedResource<List<CoursePartner>>(
+    (etag) => _partnerApi.fetchPartners(etag: etag),
+  );
+
+  Future<List<CoursePartner>> loadPartners({bool refresh = false}) async {
     try {
-      return await _partnerApi.fetchPartners();
+      return List.of(await _partners.get(refresh: refresh));
     } catch (e) {
       throw AppException('협력업체를 불러오지 못했어요.', e);
     }

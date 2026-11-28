@@ -1,5 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'cached_resource.dart';
+
 /// 로그인으로 발급받은 JWT를 기기에 보관한다.
 class TokenStorage {
   TokenStorage([FlutterSecureStorage? storage])
@@ -27,6 +29,8 @@ class TokenStorage {
   Future<String?> readRefreshToken() => _storage.read(key: _refreshTokenKey);
 
   Future<void> clear() async {
+    // 로그아웃·탈퇴·갱신 실패. 기억해 둔 응답은 계정마다 달라서 같이 버린다.
+    CachedResource.clearAll();
     await _storage.delete(key: _accessTokenKey);
     await _storage.delete(key: _refreshTokenKey);
   }

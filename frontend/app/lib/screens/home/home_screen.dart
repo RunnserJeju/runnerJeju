@@ -64,17 +64,18 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
-  void _load() {
-    _noticesFuture = Services.instance.notice.loadNotices();
+  /// [refresh]는 당겨서 새로고침 — 기억해 둔 응답을 건너뛰고 서버에 다시 묻는다.
+  void _load({bool refresh = false}) {
+    _noticesFuture = Services.instance.notice.loadNotices(refresh: refresh);
     _showLaunchNotice();
-    final curation = Services.instance.home.loadCuration();
+    final curation = Services.instance.home.loadCuration(refresh: refresh);
     _curatedCoursesFuture = _pick(
-      Services.instance.course.loadCourses(),
+      Services.instance.course.loadCourses(refresh: refresh),
       curation.then((c) => [for (final item in c.courses) item.id]),
       (course) => course.id,
     );
     _featuredPartnersFuture = _pick(
-      Services.instance.partner.loadPartners(),
+      Services.instance.partner.loadPartners(refresh: refresh),
       curation.then((c) => [for (final item in c.partners) item.id]),
       (partner) => partner.id,
     );
@@ -128,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(_load);
+    setState(() => _load(refresh: true));
     await _noticesFuture.catchError((_) => <Notice>[]);
     await _curatedCoursesFuture.catchError((_) => <RunningCourse>[]);
     await _featuredPartnersFuture.catchError((_) => <CoursePartner>[]);
