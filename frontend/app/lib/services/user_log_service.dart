@@ -96,6 +96,7 @@ class UserLogService with WidgetsBindingObserver {
         sessionId: _sessionId,
         platform: platform,
         appVersion: _appVersion,
+        userTime: DateTime.now(),
       ),
     );
     if (_queue.length > _queueCap) {

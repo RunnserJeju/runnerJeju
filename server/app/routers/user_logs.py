@@ -46,6 +46,7 @@ def validate_batch(payload: UserLogBatchIn) -> list[dict]:
                 "session_id": event.session_id,
                 "platform": event.platform,
                 "app_version": event.app_version,
+                "user_time": event.user_time,
             }
         )
     return rows

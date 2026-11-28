@@ -765,6 +765,10 @@ class UserLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # 앱에서 발생한 시각(기기 시계). 옛 앱·서버가 직접 쓰는 로그는 null.
+    user_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
 
 class Coupon(Base):

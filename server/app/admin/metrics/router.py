@@ -187,14 +187,16 @@ def screen_stats(
     뒤따르는 로그가 없는 조회(화면을 보다 앱이 죽음)는 PV에만 들고 체류시간에서 빠진다.
     """
     start, end = resolve_period(start, end, "day")
+    # 발생 시각 우선. 서버 수신 시각은 한 묶음이 같아 체류시간이 뭉개진다.
+    at = func.coalesce(UserLog.user_time, UserLog.created_at)
     events = (
         select(
             UserLog.log_name,
             UserLog.user_id,
             UserLog.detail["screen"].astext.label("screen"),
-            UserLog.created_at,
-            func.lead(UserLog.created_at)
-            .over(partition_by=UserLog.session_id, order_by=(UserLog.created_at, UserLog.id))
+            at.label("created_at"),
+            func.lead(at)
+            .over(partition_by=UserLog.session_id, order_by=(at, UserLog.id))
             .label("next_at"),
         )
         .where(
