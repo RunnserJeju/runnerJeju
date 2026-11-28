@@ -3,6 +3,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.etag import ETagMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -10,6 +12,7 @@ from app import config_guard, schema_guard
 from app.admin import admin_auth_router, admin_router
 from app.db import engine
 from app.routers import (
+    app_settings,
     auth,
     coupons,
     courses,
@@ -54,6 +57,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 앱이 몇 분씩 기억해 두는 공용 목록. 바뀐 게 없으면 304로 답한다(app/etag.py).
+app.add_middleware(
+    ETagMiddleware,
+    paths=frozenset(
+        {"/courses", "/partners", "/notices", "/events", "/home/curation", "/stamp-definitions"}
+    ),
+)
+
+app.include_router(app_settings.router)
 app.include_router(auth.router)
 app.include_router(coupons.router)
 app.include_router(courses.router)

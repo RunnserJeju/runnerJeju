@@ -7,6 +7,7 @@ import '../models/run_record.dart';
 import '../models/run_stamp.dart';
 import '../models/run_verification.dart';
 import '../models/user_log.dart';
+import 'cached_resource.dart';
 import 'coupon_service.dart';
 import 'run_journal.dart';
 import 'run_service.dart';
@@ -179,6 +180,8 @@ class RunSubmission extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // 완주 여부·완주자 수가 바뀌었을 수 있다(늦게 온 응답이어도 마찬가지).
+    CachedResource.invalidateAll();
     if (gen != _generation) return;
 
     verification = result;

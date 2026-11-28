@@ -1200,7 +1200,10 @@ export interface UserLogRow {
   detail: Record<string, unknown>
   platform: string | null
   app_version: string | null
+  /** 서버 수신 시각. */
   created_at: string
+  /** 앱 발생 시각. 옛 앱·서버 기록 로그는 null. */
+  user_time: string | null
 }
 
 export interface UserLogFilter {

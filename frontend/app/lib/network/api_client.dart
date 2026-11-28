@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import 'auth_interceptor.dart';
+import 'conditional.dart';
 
 /// Transport 계층: HTTP 통신 자체만 담당한다. 엔드포인트나 응답 파싱은 모른다.
 class ApiClient {
@@ -40,4 +41,23 @@ class ApiClient {
   }
 
   final Dio dio;
+
+  /// 변경 확인 GET. [etag]를 보내고, 서버가 304면 본문 없이 notModified를 돌려준다.
+  Future<Conditional<T>> getConditional<T>(
+    String path, {
+    required String? etag,
+    required T Function(dynamic data) parse,
+  }) async {
+    final response = await dio.get(
+      path,
+      options: Options(
+        headers: {'If-None-Match': ?etag},
+        validateStatus: (status) =>
+            status != null &&
+            (status == 304 || (status >= 200 && status < 300)),
+      ),
+    );
+    if (response.statusCode == 304) return const Conditional.notModified();
+    return Conditional(parse(response.data), response.headers.value('etag'));
+  }
 }

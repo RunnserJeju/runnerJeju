@@ -9,6 +9,7 @@ class UserLog {
     required this.sessionId,
     required this.platform,
     required this.appVersion,
+    required this.userTime,
   });
 
   final LogName name;
@@ -17,12 +18,16 @@ class UserLog {
   final String platform;
   final String appVersion;
 
+  /// 발생 시각(기기 시계). 서버 수신 시각은 한 묶음이 같아서 따로 싣는다.
+  final DateTime userTime;
+
   Map<String, dynamic> toJson() => {
     'log_name': name.wire,
     'detail': detail,
     'session_id': sessionId,
     'platform': platform,
     'app_version': appVersion,
+    'user_time': userTime.toUtc().toIso8601String(),
   };
 }
 

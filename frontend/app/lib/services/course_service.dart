@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../api/course_api.dart';
 import '../exceptions/app_exception.dart';
 import '../models/running_course.dart';
+import 'cached_resource.dart';
 
 /// 비즈니스 로직 계층: 코스 조회. UI가 이해할 수 있는 형태로 오류를 바꿔준다.
 class CourseService {
@@ -22,8 +23,20 @@ class CourseService {
   /// 서버의 다운로드 파일명 규칙(routers/courses.py `_gpx_filename`)과 같다.
   static final RegExp _unsafeFilename = RegExp(r'[\\/:*?"<>|\x00-\x1f]+');
 
-  Future<List<RunningCourse>> loadCourses({String? keyword, int? limit}) async {
+  late final _all = CachedResource<List<RunningCourse>>(
+    (etag) => _courseApi.fetchAllCourses(etag: etag),
+  );
+
+  /// 조건 없는 전체 목록은 잠깐 기억한다. [refresh]면 서버에 다시 묻는다.
+  Future<List<RunningCourse>> loadCourses({
+    String? keyword,
+    int? limit,
+    bool refresh = false,
+  }) async {
     try {
+      if ((keyword == null || keyword.isEmpty) && limit == null) {
+        return List.of(await _all.get(refresh: refresh));
+      }
       return await _courseApi.fetchCourses(keyword: keyword, limit: limit);
     } catch (e) {
       throw AppException('코스 목록을 불러오지 못했어요.', e);

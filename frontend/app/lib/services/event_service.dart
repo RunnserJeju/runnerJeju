@@ -1,6 +1,7 @@
 import '../api/event_api.dart';
 import '../exceptions/app_exception.dart';
 import '../models/community_event.dart';
+import 'cached_resource.dart';
 
 /// 비즈니스 로직 계층: 커뮤니티 이벤트 조회.
 class EventService {
@@ -8,9 +9,13 @@ class EventService {
 
   final EventApi _eventApi;
 
-  Future<List<CommunityEvent>> loadEvents() async {
+  late final _events = CachedResource<List<CommunityEvent>>(
+    (etag) => _eventApi.fetchEvents(etag: etag),
+  );
+
+  Future<List<CommunityEvent>> loadEvents({bool refresh = false}) async {
     try {
-      return await _eventApi.fetchEvents();
+      return List.of(await _events.get(refresh: refresh));
     } catch (e) {
       throw AppException('이벤트를 불러오지 못했어요.', e);
     }

@@ -765,6 +765,10 @@ class UserLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # 앱에서 발생한 시각(기기 시계). 옛 앱·서버가 직접 쓰는 로그는 null.
+    user_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
 
 class Coupon(Base):
@@ -1136,4 +1140,20 @@ class Notification(Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AppSetting(Base):
+    """앱이 받아 가는 원격 설정(GET /app-settings). 재배포 없이 DB에서 값을 바꾼다.
+
+    앱에 내려가는 키는 routers/app_settings.py의 DEFAULTS에 있는 것뿐이다. 행이 없으면
+    거기 기본값을 쓴다.
+    """
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[object] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

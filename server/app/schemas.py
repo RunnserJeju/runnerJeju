@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # 필드 이름은 Flutter 클라이언트의 fromJson/toJson과 1:1로 맞춘다.
 # 이름을 바꾸면 앱이 조용히 깨지므로 양쪽을 같이 수정해야 한다.
@@ -1224,6 +1224,8 @@ class UserLogIn(BaseModel):
     session_id: Annotated[str, Field(max_length=36)] | None = None
     platform: Literal["android", "ios"] | None = None
     app_version: Annotated[str, Field(max_length=20)] | None = None
+    # 발생 시각(기기 시계, UTC 오프셋 포함). 옛 앱은 보내지 않는다.
+    user_time: AwareDatetime | None = None
 
 
 class UserLogBatchIn(BaseModel):
@@ -1278,6 +1280,7 @@ class UserLogOut(BaseModel):
     platform: str | None
     app_version: str | None
     created_at: datetime
+    user_time: datetime | None
 
 
 class LogNameOut(BaseModel):

@@ -57,6 +57,13 @@ class AppConfig {
     return 'http://127.0.0.1:8000';
   }
 
+  /// 스토어 앱 페이지(필수 업데이트 안내). 안드로이드는 스토어 앱으로 바로 열고 안 되면 웹.
+  static const String appStoreUrl = 'https://apps.apple.com/kr/app/id6799607366';
+  static const String playStoreAppUrl =
+      'market://details?id=com.runnersjeju.runners_jeju';
+  static const String playStoreWebUrl =
+      'https://play.google.com/store/apps/details?id=com.runnersjeju.runners_jeju';
+
   static bool get hasKakaoNativeAppKey => kakaoNativeAppKey.isNotEmpty;
 
   /// 스토어 심사용 공개 문서(server/legal). 디버그에서도 운영 주소를 본다 —

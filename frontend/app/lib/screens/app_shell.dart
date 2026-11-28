@@ -222,6 +222,7 @@ class _AppShellState extends State<AppShell> {
       ),
       RunningScreen(
         key: _runningKey,
+        isVisible: _index == _runningTab,
         onReturnToRunningWeek: _returnToRunningWeek,
         onShowStamps: () => setState(() => _index = _stampTab),
       ),

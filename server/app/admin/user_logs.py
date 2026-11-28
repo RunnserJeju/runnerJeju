@@ -98,6 +98,7 @@ def list_user_logs(
             "platform": log.platform,
             "app_version": log.app_version,
             "created_at": log.created_at,
+            "user_time": log.user_time,
         }
         for log, nickname in rows
     ]

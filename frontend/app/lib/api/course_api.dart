@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../models/running_course.dart';
 import '../network/api_client.dart';
+import '../network/conditional.dart';
 import '../network/json.dart';
 
 /// API 계층: 코스 관련 서버 엔드포인트 1개당 메서드 1개.
@@ -27,6 +28,14 @@ class CourseApi {
 
     return parseList(response.data, RunningCourse.fromJson);
   }
+
+  /// 조건 없는 전체 목록. 서비스가 기억해 두고 [etag]로 바뀌었는지만 묻는다.
+  Future<Conditional<List<RunningCourse>>> fetchAllCourses({String? etag}) =>
+      _client.getConditional(
+        '/courses',
+        etag: etag,
+        parse: (data) => parseList(data, RunningCourse.fromJson),
+      );
 
   /// 코스 상세 (경로 좌표 포함).
   Future<RunningCourse> fetchCourse(String courseId) async {

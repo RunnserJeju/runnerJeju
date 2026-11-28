@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 // 카카오맵 SDK는 Route, Polygon 등 머티리얼과 겹치는 이름을 내보내므로 접두사를 붙인다.
 import 'package:kakao_map_sdk/kakao_map_sdk.dart' as kakao;
@@ -7,6 +9,7 @@ import '../models/course_facility.dart';
 import '../models/course_partner.dart';
 import '../models/geo_point.dart';
 import '../models/running_course.dart';
+import '../services/service_locator.dart';
 import '../theme/app_theme.dart';
 import '../utils/geo_utils.dart';
 import 'image_coding/course_endpoint_marker.dart';
@@ -96,19 +99,57 @@ class CourseMapView extends StatefulWidget {
 /// 지도가 "무엇을 그릴지"는 프로퍼티로 내려가지만, "지금 여기를 비춰라"는 한 번
 /// 일어나고 마는 사건이라 프로퍼티로 표현하면 같은 값이 다시 들어왔을 때
 /// 움직여야 하는지 알 수 없다. 그래서 명령만 이쪽으로 뺀다.
+///
+/// 지도가 아직 없거나 준비 전에 온 명령은 준비될 때까지 기다렸다가 실행한다.
+/// 러닝 탭 지도는 탭에 처음 들어올 때 만들어져서, 다른 탭에서 코스를 열면
+/// 명령이 지도보다 먼저 온다.
 class CourseMapController {
   _CourseMapViewState? _state;
 
+  /// 지도가 준비되면 완료된다. 지도가 사라지면 새것으로 바꾼다.
+  Completer<void> _ready = Completer<void>();
+
+  /// 준비를 기다리는 명령 수. 있으면 지도가 첫 화면 위치를 스스로 잡지 않는다.
+  int _waiting = 0;
+
   /// [point]가 화면 중앙에 오도록 옮긴다.
-  Future<void> moveTo(GeoPoint point, {int? zoomLevel}) async =>
-      _state?.moveTo(point, zoomLevel: zoomLevel);
+  Future<void> moveTo(GeoPoint point, {int? zoomLevel}) async {
+    final state = await _readyState();
+    await state?.moveTo(point, zoomLevel: zoomLevel);
+  }
 
   /// [points]가 모두 들어오도록 카메라를 맞춘다(협력업체 전체 보기 등).
-  Future<void> fitPoints(List<GeoPoint> points) async =>
-      _state?.fitPoints(points);
+  Future<void> fitPoints(List<GeoPoint> points) async {
+    final state = await _readyState();
+    await state?.fitPoints(points);
+  }
+
+  Future<_CourseMapViewState?> _readyState() async {
+    if (!_ready.isCompleted) {
+      _waiting++;
+      try {
+        await _ready.future;
+      } finally {
+        _waiting--;
+      }
+    }
+    return _state;
+  }
+
+  void _markReady() {
+    if (!_ready.isCompleted) _ready.complete();
+  }
+
+  void _markGone() {
+    if (_ready.isCompleted) _ready = Completer<void>();
+  }
 }
 
 class _CourseMapViewState extends State<CourseMapView> {
+  /// 원격 설정(HC로 띄울지). 지도는 만들 때만 방식을 정하므로 처음 값으로 고정한다.
+  final bool _hybridComposition =
+      Services.instance.appSettings.androidMapHybridComposition;
+
   kakao.KakaoMapController? _controller;
 
   /// 지도에 올라가 있는 라벨. 코스 id로 찾는다.
@@ -206,8 +247,10 @@ class _CourseMapViewState extends State<CourseMapView> {
     if (!identical(oldWidget.controller, widget.controller)) {
       if (oldWidget.controller?._state == this) {
         oldWidget.controller?._state = null;
+        oldWidget.controller?._markGone();
       }
       widget.controller?._state = this;
+      if (_controller != null) widget.controller?._markReady();
     }
 
     if (_hasMapInputChanged(oldWidget)) _redraw();
@@ -235,7 +278,10 @@ class _CourseMapViewState extends State<CourseMapView> {
   @override
   void dispose() {
     _disposed = true;
-    if (widget.controller?._state == this) widget.controller?._state = null;
+    if (widget.controller?._state == this) {
+      widget.controller?._state = null;
+      widget.controller?._markGone();
+    }
     super.dispose();
   }
 
@@ -251,6 +297,7 @@ class _CourseMapViewState extends State<CourseMapView> {
     }
 
     return kakao.KakaoMap(
+      forceHybridComposition: _hybridComposition,
       option: kakao.KakaoMapOption(
         position: (_startCenter ?? CourseMapView.jejuCenter).toLatLng(),
         zoomLevel: widget.initialCenter != null
@@ -260,7 +307,13 @@ class _CourseMapViewState extends State<CourseMapView> {
             : _islandZoomLevel,
       ),
       onMapReady: (controller) {
+        final mapController = widget.controller;
+        // 밖에서 기다리던 카메라 명령이 있으면 그 자리가 첫 화면이다.
+        if (mapController != null && mapController._waiting > 0) {
+          _isStartSettled = true;
+        }
         _controller = controller;
+        mapController?._markReady();
         _redraw();
       },
       // 우리가 옮긴 이동은 unknown으로 온다.

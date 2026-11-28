@@ -10,6 +10,7 @@ import 'package:kakao_map_sdk/kakao_map_sdk.dart' show KakaoMapSdk;
 import 'config/app_config.dart';
 import 'firebase_options.dart';
 import 'screens/auth/auth_gate.dart';
+import 'screens/update_gate.dart';
 import 'services/service_locator.dart';
 import 'theme/app_theme.dart';
 
@@ -35,6 +36,9 @@ Future<void> main() async {
   // 권한을 물은 뒤 열린다. 기다리지 않는다 — 첫 화면은 위치 없이도 뜬다.
   unawaited(Services.instance.currentLocation.start());
 
+  // 원격 설정. 지난번 받은 값만 읽고(파일 하나) 새 값은 기다리지 않는다 — 지도가 쓴다.
+  await Services.instance.appSettings.start();
+
   // 행동 로그 시작(app_open, 지난 러닝 이탈 감지). 기다리지 않는다.
   unawaited(Services.instance.userLog.start());
 
@@ -54,6 +58,8 @@ class RunnersJejuApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       navigatorObservers: [Services.instance.screens],
+      // 내비게이터 위에 둔다 — 어느 화면이 떠 있든 통째로 가린다.
+      builder: (context, child) => UpdateGate(child: child!),
       home: const AuthGate(),
     );
   }

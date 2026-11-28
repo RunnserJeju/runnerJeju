@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../api/external_cert_api.dart';
 import '../exceptions/app_exception.dart';
 import '../models/external_cert.dart';
+import 'cached_resource.dart';
 
 /// 비즈니스 로직 계층: 가민·순토 링크로 코스 완주 인증.
 class ExternalCertService {
@@ -18,6 +19,7 @@ class ExternalCertService {
   }) async {
     try {
       final json = await _api.submit(courseId: courseId, url: url);
+      CachedResource.invalidateAll();
       final outcome = switch (json['status']) {
         'matched' => ExternalCertOutcome.granted,
         'mismatched' => ExternalCertOutcome.mismatched,

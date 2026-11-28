@@ -202,7 +202,7 @@ export default function LogsPage({ onUnauthorized }: Props) {
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td className="nowrap">{formatTime(row.created_at)}</td>
+                <td className="nowrap">{formatTime(row.user_time ?? row.created_at)}</td>
                 <td>
                   <code title={labelOf(row.log_name)}>{row.log_name}</code>
                 </td>
@@ -258,7 +258,7 @@ export default function LogsPage({ onUnauthorized }: Props) {
       )}
       {detailRow && (
         <Modal
-          title={`${labelOf(detailRow.log_name) ?? detailRow.log_name} · ${formatTime(detailRow.created_at)}`}
+          title={`${labelOf(detailRow.log_name) ?? detailRow.log_name} · ${formatTime(detailRow.user_time ?? detailRow.created_at)}`}
           onClose={() => setDetailRow(null)}
         >
           <table className="kv-table">
@@ -281,6 +281,14 @@ export default function LogsPage({ onUnauthorized }: Props) {
               <tr>
                 <th>세션</th>
                 <td>{detailRow.session_id ?? '—'}</td>
+              </tr>
+              <tr>
+                <th>발생 시각</th>
+                <td>{detailRow.user_time ? formatTime(detailRow.user_time) : '—'}</td>
+              </tr>
+              <tr>
+                <th>수신 시각</th>
+                <td>{formatTime(detailRow.created_at)}</td>
               </tr>
               <tr>
                 <th>기기</th>

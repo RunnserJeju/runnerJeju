@@ -20,6 +20,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../utils/geo_utils.dart';
 import '../../utils/transient_messenger.dart';
+import '../../widgets/confirm_popup.dart';
 import '../../widgets/course_map_view.dart';
 import '../run/run_screen.dart';
 import 'course_list_sheet.dart';
@@ -45,9 +46,13 @@ import 'partner_preview_sheet.dart';
 class RunningScreen extends StatefulWidget {
   const RunningScreen({
     super.key,
+    this.isVisible = false,
     this.onReturnToRunningWeek,
     this.onShowStamps,
   });
+
+  /// 지금 보이는 탭인지. 처음 보일 때 지도를 만든다.
+  final bool isVisible;
 
   /// 빙고판에서 넘어온 코스를 보는 동안 '빙고판으로' 버튼이 누르는 것.
   final VoidCallback? onReturnToRunningWeek;
@@ -189,6 +194,16 @@ class RunningScreenState extends State<RunningScreen> {
   /// ([RunFlowPresence]). 위젯을 떼면 네이티브 쪽이 mapView.finish()까지 정리한다.
   RunFlowPresence get _runFlow => Services.instance.runFlow;
 
+  /// 지도를 만들어도 되는지. 탭에 처음 들어올 때 켜지고 계속 켜져 있다.
+  /// 보이지도 않는 탭의 지도(플랫폼 뷰)를 앱이 켜질 때부터 띄워 두지 않으려는 것.
+  late bool _mapActivated = widget.isVisible;
+
+  @override
+  void didUpdateWidget(covariant RunningScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isVisible) _mapActivated = true;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -213,14 +228,16 @@ class RunningScreenState extends State<RunningScreen> {
   // 데이터
   // ---------------------------------------------------------------------------
 
-  Future<void> _loadCourses() async {
+  Future<void> _loadCourses({bool refresh = false}) async {
     setState(() {
       _isLoadingCourses = true;
       _coursesError = null;
     });
 
     try {
-      final courses = await Services.instance.course.loadCourses();
+      final courses = await Services.instance.course.loadCourses(
+        refresh: refresh,
+      );
       if (!mounted) return;
       setState(() {
         _courses = courses;
@@ -534,7 +551,7 @@ class RunningScreenState extends State<RunningScreen> {
     );
     if (!mounted) return;
     // 인증됐으면 완주 표시·완주자 수가 바뀐다.
-    unawaited(_loadCourses());
+    unawaited(_loadCourses(refresh: true));
     switch (exit) {
       case ExternalCertExit.stamps:
         widget.onShowStamps?.call();
@@ -870,100 +887,35 @@ class RunningScreenState extends State<RunningScreen> {
 
     // 완주 스탬프를 받았으면 목록의 완주자 수와 완주 여부가 달라진다. 보고 있던
     // 코스의 상세 시트도 같은 값을 보여주므로 다시 받는다.
-    await _loadCourses();
+    await _loadCourses(refresh: true);
     final selected = _selected;
     if (!mounted || selected == null) return;
     final fresh = _courses.where((c) => c.id == selected.id).firstOrNull;
     unawaited(_selectCourse(fresh ?? selected));
   }
 
-  static const _dialogButtonText = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w700,
-  );
-  static const _dialogButtonPadding = EdgeInsets.symmetric(horizontal: 8);
-
   /// 협력업체 길찾기 전에 묻는다. '아니오'나 바깥 탭이면 아무 일도 안 한다.
   Future<bool?> _confirmPartnerRoute(CoursePartner partner) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('길찾기'),
-        content: Text('${partner.name}까지\n카카오맵에서 길찾기를 실행할게요.'),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  style: OutlinedButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('아니오', maxLines: 1),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  style: FilledButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('예', maxLines: 1),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return showConfirmPopup(
+      context,
+      title: '길찾기',
+      message: '${partner.name}까지\n카카오맵에서 길찾기를 실행할게요.',
+      cancelLabel: '아니오',
+      confirmLabel: '예',
     );
   }
 
   /// 시작점이 멀 때 길찾기를 띄울지 묻는다. 바깥을 눌러 닫으면 null —
   /// 러닝도 길찾기도 시작하지 않는다.
   Future<bool?> _confirmRouteGuide(RunningCourse course, double meters) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('시작점까지 길찾기'),
-        content: Text(
+    return showConfirmPopup(
+      context,
+      title: '시작점까지 길찾기',
+      message:
           '${course.name} 시작점이 ${Formatters.awayDistance(meters)} 떨어져 있어요.\n'
           '카카오맵으로 길찾기를 시작할까요?',
-        ),
-        actions: [
-          // 버튼 공통 스타일이 가로를 꽉 채우므로(app_theme.dart의 minimumSize)
-          // 그대로 두면 상하로 쌓인다. Row+Expanded로 좌우 반반 배치.
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  // 다이얼로그 폭에선 기본 16px+좌우 24px 패딩이 '여기서 시작'을
-                  // 두 줄로 꺾는다. 글자와 패딩을 줄여 한 줄로.
-                  style: OutlinedButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('여기서 시작', maxLines: 1),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  style: FilledButton.styleFrom(
-                    textStyle: _dialogButtonText,
-                    padding: _dialogButtonPadding,
-                  ),
-                  child: const Text('길찾기', maxLines: 1),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      cancelLabel: '여기서 시작',
+      confirmLabel: '길찾기',
     );
   }
 
@@ -1008,7 +960,7 @@ class RunningScreenState extends State<RunningScreen> {
             // 다시 그리도록 여기서만 듣는다.
             child: ListenableBuilder(
               listenable: _runFlow,
-              builder: (context, _) => _runFlow.isOpen
+              builder: (context, _) => _runFlow.isOpen || !_mapActivated
                   ? const ColoredBox(color: AppColors.paper)
                   : ListenableBuilder(
                       listenable: _currentLocation,
